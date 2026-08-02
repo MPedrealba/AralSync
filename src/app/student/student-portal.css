@@ -1,0 +1,279 @@
+/* ==========================================================================
+   AralSync Student Portal — Scoped Design System
+   All classes are imported by the student layout only
+   ========================================================================== */
+
+/* ── CSS Variables ── */
+.student-portal {
+  --bg-canvas: #f3f4f6;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
+  --text-main: #1f2937;
+  --text-dark: #111827;
+  --text-muted: #6b7280;
+  --text-subtle: #9ca3af;
+  --border-color: #e5e7eb;
+  --border-subtle: #f3f4f6;
+  --sidebar-active-bg: #2e4038;
+  --sidebar-active-text: #ffffff;
+  --sidebar-text: #4b5563;
+  --primary-btn-bg: #2e4038;
+  --primary-btn-hover: #24332d;
+  --primary-btn-text: #ffffff;
+  --badge-developing-bg: #fef9c3;
+  --badge-developing-text: #854d0e;
+  --badge-approaching-bg: #dcfce7;
+  --badge-approaching-text: #166534;
+  --badge-approaching-border: #bbf7d0;
+  --badge-proficiency-bg: #dcfce7;
+  --badge-proficiency-text: #15803d;
+  --badge-beginning-bg: #fee2e2;
+  --badge-beginning-text: #991b1b;
+  --badge-risk-bg: #fef08a;
+  --badge-risk-text: #854d0e;
+  --badge-completed-bg: #2e4038;
+  --badge-completed-text: #ffffff;
+  --badge-inprogress-bg: #f97316;
+  --badge-inprogress-text: #ffffff;
+  --badge-notstarted-bg: #e5e7eb;
+  --badge-notstarted-text: #4b5563;
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── App Shell ── */
+.student-portal .app-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ── Sidebar ── */
+.student-portal .sidebar {
+  width: 260px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+.student-portal .sidebar-header {
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.student-portal .sidebar-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1.5px solid #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-portal .sidebar-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  line-height: 1.1;
+}
+
+.student-portal .sidebar-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.student-portal .sidebar-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0 1.25rem 1.25rem;
+}
+
+.student-portal .sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem;
+}
+
+.student-portal .sidebar-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin: 1.25rem 0.5rem 0.5rem;
+  text-transform: uppercase;
+}
+
+.student-portal .sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  color: var(--sidebar-text);
+  font-size: 0.92rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 0.25rem;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+  text-decoration: none;
+}
+
+.student-portal .sidebar-nav-item:hover {
+  background: #f3f4f6;
+  color: var(--text-dark);
+}
+
+.student-portal .sidebar-nav-item.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+}
+
+.student-portal .sidebar-footer {
+  border-top: 1px solid var(--border-color);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ── Main Content ── */
+.student-portal .main-content {
+  flex: 1;
+  padding: 2.25rem 2.5rem;
+  overflow-y: auto;
+  background-color: var(--bg-canvas);
+}
+
+.student-portal .page-header {
+  margin-bottom: 1.75rem;
+}
+
+.student-portal .page-title {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  letter-spacing: -0.02em;
+}
+
+.student-portal .page-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* ── Card ── */
+.student-portal .card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+.student-portal .card-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.student-portal .card-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  line-height: 1;
+}
+
+.student-portal .card-unit {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #4b5563;
+  margin-left: 0.2rem;
+}
+
+/* ── Badges ── */
+.student-portal .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.student-portal .badge-developing { background: var(--badge-developing-bg); color: var(--badge-developing-text); }
+.student-portal .badge-approaching { background: var(--badge-approaching-bg); color: var(--badge-approaching-text); border: 1px solid var(--badge-approaching-border); }
+.student-portal .badge-proficiency { background: var(--badge-proficiency-bg); color: var(--badge-proficiency-text); }
+.student-portal .badge-beginning,
+.student-portal .badge-frustration { background: var(--badge-beginning-bg); color: var(--badge-beginning-text); }
+.student-portal .badge-risk { background: var(--badge-risk-bg); color: var(--badge-risk-text); }
+.student-portal .badge-completed { background: var(--badge-completed-bg); color: var(--badge-completed-text); }
+.student-portal .badge-inprogress { background: var(--badge-inprogress-bg); color: var(--badge-inprogress-text); }
+.student-portal .badge-notstarted { background: var(--badge-notstarted-bg); color: var(--badge-notstarted-text); }
+
+/* ── Tag Chips ── */
+.student-portal .tag-chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: #374151;
+  text-transform: uppercase;
+}
+
+/* ── Buttons ── */
+.student-portal .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 1.15rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.student-portal .btn-primary { background: var(--primary-btn-bg); color: var(--primary-btn-text); }
+.student-portal .btn-primary:hover { background: var(--primary-btn-hover); }
+.student-portal .btn-outline { background: #ffffff; border: 1px solid #d1d5db; color: #374151; }
+.student-portal .btn-outline:hover { background: #f9fafb; border-color: #9ca3af; }
+
+/* ── Tables ── */
+.student-portal .table-container {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.student-portal .table { width: 100%; border-collapse: collapse; text-align: left; }
+.student-portal .table th { padding: 0.85rem 1.25rem; font-size: 0.72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); background: #ffffff; }
+.student-portal .table td { padding: 1rem 1.25rem; font-size: 0.88rem; color: var(--text-dark); border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+.student-portal .table tr:last-child td { border-bottom: none; }
+
+/* ── Progress ── */
+.student-portal .progress-track { width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
+.student-portal .progress-fill { height: 100%; border-radius: 9999px; background: #2e4038; }
+.student-portal .progress-fill-brown { background: #a16207; }
+.student-portal .progress-fill-red { background: #dc2626; }
+.student-portal .progress-fill-green { background: #16a34a; }
