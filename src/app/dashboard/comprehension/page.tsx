@@ -374,7 +374,7 @@ function NewCheckFlow() {
 
   /* ── STEP: RESULTS ── */
   const correctCount = answers.reduce(
-    (acc, ans, i) => acc + (ans === sampleQuestions[i].correctIndex ? 1 : 0),
+    (acc, ans, i) => (acc || 0) + (ans === sampleQuestions[i]?.correctIndex ? 1 : 0),
     0
   );
   const percentage = Math.round((correctCount / totalQuestions) * 100);
