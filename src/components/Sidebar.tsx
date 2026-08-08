@@ -12,7 +12,6 @@ import {
   BarChart3,
   User,
   LogOut,
-  Activity,
   TrendingUp,
   Target,
   Lightbulb,
@@ -65,7 +64,11 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
       {/* Brand Header */}
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <Activity className="h-6 w-6 text-blue-600" />
+        <img
+          src="/aral-logo.png"
+          alt="ARAL Program Logo"
+          className="h-9 w-auto"
+        />
         <span className="text-xl font-bold text-gray-900">AralSync</span>
       </div>
 
@@ -88,15 +91,15 @@ export default function Sidebar() {
                       href={item.href}
                       className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                         isActive
-                          ? "bg-blue-50 font-medium text-blue-600"
-                          : "font-normal text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          ? "bg-blue-50 font-semibold text-blue-600"
+                          : "font-normal text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
                       <item.icon
                         className={`h-[18px] w-[18px] flex-shrink-0 ${
                           isActive
                             ? "text-blue-600"
-                            : "text-gray-400 group-hover:text-gray-600"
+                            : "text-gray-400 group-hover:text-gray-500"
                         }`}
                       />
                       {item.name}

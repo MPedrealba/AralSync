@@ -23,13 +23,7 @@ export default function PrincipalHeader({ title }: PrincipalHeaderProps) {
           <Bell className="h-5 w-5" />
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
         </button>
-        <div className="h-8 w-px bg-gray-200" />
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
-            P
-          </div>
-          <span className="text-sm font-medium text-gray-700">Principal</span>
-        </div>
+
       </div>
     </header>
   );

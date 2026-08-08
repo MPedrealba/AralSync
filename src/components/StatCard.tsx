@@ -17,7 +17,7 @@ export default function StatCard({
   trend,
   trendUp = true,
   iconColor = "text-blue-600",
-  iconBg = "bg-blue-50",
+  iconBg = "bg-blue-100",
 }: StatCardProps) {
   return (
     <div className="group rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:border-gray-200">
@@ -39,7 +39,7 @@ export default function StatCard({
           )}
         </div>
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBg} transition-transform duration-200 group-hover:scale-110`}
+          className={`flex h-11 w-11 items-center justify-center rounded-lg ${iconBg} transition-transform duration-200 group-hover:scale-110`}
         >
           <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>

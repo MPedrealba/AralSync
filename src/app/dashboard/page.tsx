@@ -147,7 +147,7 @@ export default function DashboardPage() {
             value="120"
             subtext="Across 3 cohorts"
             icon={<Users className="h-5 w-5 text-blue-600" />}
-            iconBg="bg-blue-50"
+            iconBg="bg-blue-100"
           />
           <StatCard
             title="Flagged for Intervention"
@@ -155,21 +155,21 @@ export default function DashboardPage() {
             valueColor="text-red-600"
             subtext="+3 from last week"
             icon={<AlertTriangle className="h-5 w-5 text-red-600" />}
-            iconBg="bg-red-50"
+            iconBg="bg-red-100"
           />
           <StatCard
             title="OMR Sheets Scanned"
             value="45"
             subtext="Numeracy & Science"
             icon={<FileCheck className="h-5 w-5 text-emerald-600" />}
-            iconBg="bg-emerald-50"
+            iconBg="bg-emerald-100"
           />
           <StatCard
             title="Pending Reading Reviews"
             value="5"
             subtext="Oral reading fluency"
             icon={<Clock className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-50"
+            iconBg="bg-amber-100"
           />
         </div>
 

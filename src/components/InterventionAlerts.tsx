@@ -48,19 +48,19 @@ const alerts: Alert[] = [
 
 const riskConfig = {
   High: {
-    bg: "bg-red-50",
+    bg: "bg-red-100",
     text: "text-red-700",
     border: "border-red-200",
     dot: "bg-red-500",
   },
   Moderate: {
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    border: "border-amber-200",
-    dot: "bg-amber-500",
+    bg: "bg-yellow-100",
+    text: "text-yellow-700",
+    border: "border-yellow-200",
+    dot: "bg-yellow-500",
   },
   Low: {
-    bg: "bg-green-50",
+    bg: "bg-green-100",
     text: "text-green-700",
     border: "border-green-200",
     dot: "bg-green-500",

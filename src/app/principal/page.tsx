@@ -57,10 +57,10 @@ export default function PrincipalDashboardPage() {
 
         {/* 4 Stat Cards */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-          <StatCard title="Total Learners" value="36" sub="Enrolled in Aral" icon={<Users className="h-5 w-5 text-blue-600" />} iconBg="bg-blue-50" />
-          <StatCard title="At-Risk Learners" value="10" sub="7 high risk" valueColor="text-red-600" icon={<AlertTriangle className="h-5 w-5 text-red-600" />} iconBg="bg-red-50" />
-          <StatCard title="Improving Trends" value="20" sub="Learners showing progress" valueColor="text-emerald-600" icon={<TrendingUp className="h-5 w-5 text-emerald-600" />} iconBg="bg-emerald-50" />
-          <StatCard title="Needs Intervention" value="6" sub="Learners with declining scores" valueColor="text-red-600" icon={<TrendingDown className="h-5 w-5 text-red-600" />} iconBg="bg-red-50" />
+          <StatCard title="Total Learners" value="36" sub="Enrolled in Aral" icon={<Users className="h-5 w-5 text-blue-600" />} iconBg="bg-blue-100" />
+          <StatCard title="At-Risk Learners" value="10" sub="7 high risk" valueColor="text-red-600" icon={<AlertTriangle className="h-5 w-5 text-red-600" />} iconBg="bg-red-100" />
+          <StatCard title="Improving Trends" value="20" sub="Learners showing progress" valueColor="text-emerald-600" icon={<TrendingUp className="h-5 w-5 text-emerald-600" />} iconBg="bg-emerald-100" />
+          <StatCard title="Needs Intervention" value="6" sub="Learners with declining scores" valueColor="text-red-600" icon={<TrendingDown className="h-5 w-5 text-red-600" />} iconBg="bg-red-100" />
         </div>
 
         {/* Charts Row */}

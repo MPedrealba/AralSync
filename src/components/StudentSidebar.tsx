@@ -55,9 +55,11 @@ export default function StudentSidebar() {
     <aside className="sidebar">
       {/* Brand Header */}
       <div className="sidebar-header">
-        <div className="sidebar-brand-icon">
-          <BookOpen size={20} color="#1f2937" />
-        </div>
+        <img
+          src="/aral-logo.png"
+          alt="ARAL Program Logo"
+          style={{ height: 36, width: "auto" }}
+        />
         <div>
           <div className="sidebar-title">AralSync</div>
           <div className="sidebar-subtitle">Student Portal</div>
@@ -80,7 +82,7 @@ export default function StudentSidebar() {
                   href={item.href}
                   className={`sidebar-nav-item ${active ? "active" : ""}`}
                 >
-                  <IconComponent size={18} color={active ? "#ffffff" : "#6b7280"} />
+                  <IconComponent size={18} color={active ? "#2563eb" : "#6b7280"} />
                   <span>{item.label}</span>
                 </Link>
               );

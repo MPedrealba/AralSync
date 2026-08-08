@@ -102,7 +102,7 @@ export default function MasteryChart() {
             />
             <Bar
               dataKey="Reading"
-              fill="#2e5e3f"
+              fill="#16a34a"
               radius={[6, 6, 0, 0]}
               maxBarSize={32}
             />

@@ -62,7 +62,7 @@ export default function ReadingFluencyPage() {
           <div style={{ marginBottom: "1.25rem" }}>
             <div style={{ display: "flex", height: "10px", borderRadius: "9999px", overflow: "hidden", background: "#e5e7eb", marginBottom: "0.5rem" }}>
               <div style={{ width: "30%", background: "#e5e7eb" }}></div>
-              <div style={{ width: "40%", background: "#2e4038" }}></div>
+              <div style={{ width: "40%", background: "#2563eb" }}></div>
               <div style={{ width: "30%", background: "#e5e7eb" }}></div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#6b7280", fontWeight: 600 }}>

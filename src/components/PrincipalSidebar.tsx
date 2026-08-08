@@ -13,7 +13,6 @@ import {
   UserCog,
   User,
   LogOut,
-  GraduationCap,
 } from "lucide-react";
 
 const navSections = [
@@ -49,9 +48,11 @@ export default function PrincipalSidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
-          <GraduationCap className="h-5 w-5" />
-        </div>
+        <img
+          src="/aral-logo.png"
+          alt="ARAL Program Logo"
+          className="h-9 w-auto"
+        />
         <div>
           <h1 className="text-lg font-bold text-gray-900">AralSync</h1>
           <p className="text-[11px] leading-none text-gray-400">Principal Dashboard</p>
@@ -77,13 +78,13 @@ export default function PrincipalSidebar() {
                       href={item.href}
                       className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                         isActive
-                          ? "bg-blue-50 font-medium text-blue-600"
-                          : "font-normal text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          ? "bg-blue-50 font-semibold text-blue-600"
+                          : "font-normal text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
                       <item.icon
                         className={`h-[18px] w-[18px] flex-shrink-0 ${
-                          isActive ? "text-blue-600" : "text-gray-400 group-hover:text-gray-600"
+                          isActive ? "text-blue-600" : "text-gray-400 group-hover:text-gray-500"
                         }`}
                       />
                       {item.name}

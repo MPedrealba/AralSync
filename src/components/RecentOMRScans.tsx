@@ -38,17 +38,17 @@ const scans: ScanRow[] = [
 
 const statusConfig = {
   Processed: {
-    bg: "bg-green-50",
+    bg: "bg-green-100",
     text: "text-green-700",
     dot: "bg-green-500",
   },
   Pending: {
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    dot: "bg-amber-500",
+    bg: "bg-yellow-100",
+    text: "text-yellow-700",
+    dot: "bg-yellow-500",
   },
   Failed: {
-    bg: "bg-red-50",
+    bg: "bg-red-100",
     text: "text-red-700",
     dot: "bg-red-500",
   },

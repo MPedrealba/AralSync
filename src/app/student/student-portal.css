@@ -14,11 +14,11 @@
   --text-subtle: #9ca3af;
   --border-color: #e5e7eb;
   --border-subtle: #f3f4f6;
-  --sidebar-active-bg: #2e4038;
-  --sidebar-active-text: #ffffff;
+  --sidebar-active-bg: #eff6ff;
+  --sidebar-active-text: #2563eb;
   --sidebar-text: #4b5563;
-  --primary-btn-bg: #2e4038;
-  --primary-btn-hover: #24332d;
+  --primary-btn-bg: #2563eb;
+  --primary-btn-hover: #1d4ed8;
   --primary-btn-text: #ffffff;
   --badge-developing-bg: #fef9c3;
   --badge-developing-text: #854d0e;
@@ -29,12 +29,12 @@
   --badge-proficiency-text: #15803d;
   --badge-beginning-bg: #fee2e2;
   --badge-beginning-text: #991b1b;
-  --badge-risk-bg: #fef08a;
-  --badge-risk-text: #854d0e;
-  --badge-completed-bg: #2e4038;
-  --badge-completed-text: #ffffff;
-  --badge-inprogress-bg: #f97316;
-  --badge-inprogress-text: #ffffff;
+  --badge-risk-bg: #fee2e2;
+  --badge-risk-text: #b91c1c;
+  --badge-completed-bg: #dcfce7;
+  --badge-completed-text: #15803d;
+  --badge-inprogress-bg: #fef9c3;
+  --badge-inprogress-text: #a16207;
   --badge-notstarted-bg: #e5e7eb;
   --badge-notstarted-text: #4b5563;
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
@@ -273,7 +273,7 @@
 
 /* ── Progress ── */
 .student-portal .progress-track { width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
-.student-portal .progress-fill { height: 100%; border-radius: 9999px; background: #2e4038; }
+.student-portal .progress-fill { height: 100%; border-radius: 9999px; background: #2563eb; }
 .student-portal .progress-fill-brown { background: #a16207; }
 .student-portal .progress-fill-red { background: #dc2626; }
 .student-portal .progress-fill-green { background: #16a34a; }
