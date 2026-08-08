@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
-import { Users, AlertTriangle, TrendingUp, TrendingDown, UserCheck, Clock } from "lucide-react";
+import { Users, AlertTriangle, UserCheck, FileCheck } from "lucide-react";
 import {
   PieChart,
   Pie,
@@ -13,34 +14,53 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 
-/* ──── Data ──── */
-const readingDist = [
-  { name: "Independent", value: 23, color: "#22c55e" },
-  { name: "Instructional", value: 10, color: "#f59e0b" },
-  { name: "Frustration", value: 3, color: "#ef4444" },
-];
-
-const subjectAvg = [
-  { name: "Reading", avg: 68 },
-  { name: "Science", avg: 69 },
-  { name: "Math", avg: 60 },
-];
-
-const recentActivity = [
-  { text: "New learner Juan dela Cruz enrolled in Grade 7 – Rosal", time: "June 1, 4:00 PM", icon: "🟢" },
-  { text: "Grade 10 – Ilang-Ilang Math post-test results encoded", time: "August 2, 3:00 PM", icon: "🔵" },
-  { text: "Grade 8 – Sampaguita Science post-tests encoded", time: "July 23, 3:00 PM", icon: "🟡" },
-  { text: "Renz Sumile (Grade 9) status reviewed — active with intervention", time: "August 5, 1:00 PM", icon: "🟡" },
-  { text: "Post-test completed for Grade 8 – Sampaguita section (Reading)", time: "July 26, 4:00 PM", icon: "🟢" },
-  { text: "Grade – Rosal Science and Math post-tests administered", time: "August 16, 4:00 PM", icon: "🔵" },
-];
-
-const COLORS = ["#22c55e", "#f59e0b", "#ef4444"];
-
 export default function PrincipalDashboardPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/principal/dashboard");
+        const json = await res.json();
+        if (json.success) {
+          setData(json.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch principal dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <>
+        <PrincipalHeader title="Principal Dashboard" />
+        <main className="flex h-[80vh] items-center justify-center bg-gray-50">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+        </main>
+      </>
+    );
+  }
+
+  if (!data) {
+    return (
+      <>
+        <PrincipalHeader title="Principal Dashboard" />
+        <main className="p-8 text-red-500 bg-gray-50 h-screen">
+          Failed to load dashboard data.
+        </main>
+      </>
+    );
+  }
+
+  const { overview, riskDistribution, recentActivity, subjectAvg } = data;
+
   return (
     <>
       <PrincipalHeader title="Principal Dashboard" />
@@ -51,34 +71,61 @@ export default function PrincipalDashboardPage() {
             Principal Dashboard
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Welcome back! Here&apos;s your school&apos;s latest overview.
+            Welcome back! Here&apos;s your school&apos;s live database overview.
           </p>
         </div>
 
         {/* 4 Stat Cards */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-          <StatCard title="Total Learners" value="36" sub="Enrolled in Aral" icon={<Users className="h-5 w-5 text-blue-600" />} iconBg="bg-blue-100" />
-          <StatCard title="At-Risk Learners" value="10" sub="7 high risk" valueColor="text-red-600" icon={<AlertTriangle className="h-5 w-5 text-red-600" />} iconBg="bg-red-100" />
-          <StatCard title="Improving Trends" value="20" sub="Learners showing progress" valueColor="text-emerald-600" icon={<TrendingUp className="h-5 w-5 text-emerald-600" />} iconBg="bg-emerald-100" />
-          <StatCard title="Needs Intervention" value="6" sub="Learners with declining scores" valueColor="text-red-600" icon={<TrendingDown className="h-5 w-5 text-red-600" />} iconBg="bg-red-100" />
+          <StatCard 
+            title="Total Enrolled" 
+            value={overview.totalStudents.toString()} 
+            sub="Registered Learners" 
+            icon={<Users className="h-5 w-5 text-blue-600" />} 
+            iconBg="bg-blue-100" 
+          />
+          <StatCard 
+            title="High Risk Learners" 
+            value={overview.highRiskCount.toString()} 
+            sub="Require immediate attention" 
+            valueColor="text-red-600" 
+            icon={<AlertTriangle className="h-5 w-5 text-red-600" />} 
+            iconBg="bg-red-100" 
+          />
+          <StatCard 
+            title="Active Interventions" 
+            value={overview.activeInterventions.toString()} 
+            sub="Currently In Progress" 
+            valueColor="text-emerald-600" 
+            icon={<UserCheck className="h-5 w-5 text-emerald-600" />} 
+            iconBg="bg-emerald-100" 
+          />
+          <StatCard 
+            title="Assessments Completed" 
+            value={overview.assessmentsCompleted.toString()} 
+            sub="Total diagnostic scans" 
+            valueColor="text-amber-600" 
+            icon={<FileCheck className="h-5 w-5 text-amber-600" />} 
+            iconBg="bg-amber-100" 
+          />
         </div>
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Reading Level Distribution — Donut */}
+          {/* Risk Level Distribution — Donut */}
           <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
             <h3 className="text-base font-semibold text-gray-900">
-              Reading Level Distribution
+              Risk Level Distribution
             </h3>
             <p className="mt-0.5 text-sm text-gray-400">
-              Latest reading assessment per learner
+              Breakdown of total learner population
             </p>
             <div className="mt-4 flex items-center justify-center gap-8">
               <div className="h-48 w-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={readingDist}
+                      data={riskDistribution}
                       cx="50%"
                       cy="50%"
                       innerRadius={50}
@@ -87,7 +134,7 @@ export default function PrincipalDashboardPage() {
                       dataKey="value"
                       strokeWidth={0}
                     >
-                      {readingDist.map((entry, i) => (
+                      {riskDistribution.map((entry: any, i: number) => (
                         <Cell key={i} fill={entry.color} />
                       ))}
                     </Pie>
@@ -99,7 +146,7 @@ export default function PrincipalDashboardPage() {
                 </ResponsiveContainer>
               </div>
               <div className="space-y-3">
-                {readingDist.map((item) => (
+                {riskDistribution.map((item: any) => (
                   <div key={item.name} className="flex items-center gap-2 text-sm">
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="text-gray-700">{item.name}</span>
@@ -112,10 +159,10 @@ export default function PrincipalDashboardPage() {
           {/* Subject Averages — Bar */}
           <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
             <h3 className="text-base font-semibold text-gray-900">
-              Subject Averages
+              School-wide Subject Averages
             </h3>
             <p className="mt-0.5 text-sm text-gray-400">
-              Overall performance across core subjects
+              Overall performance across core competencies
             </p>
             <div className="mt-4 h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -126,8 +173,8 @@ export default function PrincipalDashboardPage() {
                   <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
                   <Bar dataKey="avg" name="Average" radius={[4, 4, 0, 0]} maxBarSize={50}>
                     <Cell fill="#2563eb" />
-                    <Cell fill="#22c55e" />
                     <Cell fill="#f59e0b" />
+                    <Cell fill="#ef4444" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -138,22 +185,26 @@ export default function PrincipalDashboardPage() {
         {/* Recent Activity */}
         <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
           <h3 className="text-base font-semibold text-gray-900">
-            Recent Activity
+            Live Recent Activity
           </h3>
           <p className="mt-0.5 mb-4 text-sm text-gray-400">
-            Latest system updates and actions
+            Latest system updates, scans, and interventions
           </p>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {recentActivity.map((a, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3.5">
-                <span className="mt-0.5 text-sm">{a.icon}</span>
-                <div>
-                  <p className="text-sm text-gray-700">{a.text}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">{a.time}</p>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-gray-500">No recent activity found.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {recentActivity.map((a: any, i: number) => (
+                <div key={i} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3.5">
+                  <span className="mt-0.5 text-sm">{a.icon}</span>
+                  <div>
+                    <p className="text-sm text-gray-700">{a.text}</p>
+                    <p className="mt-0.5 text-xs text-gray-400">{a.time}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
     </>
