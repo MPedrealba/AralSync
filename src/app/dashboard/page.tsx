@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import {
   Users,
@@ -20,67 +21,6 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-
-/* ━━━ CHART DATA ━━━ */
-const chartData = [
-  { name: "Week 1", Numeracy: 55, Reading: 62, Science: 58 },
-  { name: "Week 2", Numeracy: 60, Reading: 65, Science: 64 },
-  { name: "Week 3", Numeracy: 68, Reading: 70, Science: 69 },
-  { name: "Week 4", Numeracy: 74, Reading: 76, Science: 75 },
-];
-
-/* ━━━ INTERVENTION DATA ━━━ */
-const interventionAlerts = [
-  {
-    name: "Juan dela Cruz",
-    lrn: "102938",
-    badge: "High Risk (Numeracy)",
-    badgeStyle: "bg-red-50 text-red-700 border border-red-200",
-    action: "Assign Module",
-  },
-  {
-    name: "Ana Reyes",
-    lrn: "102940",
-    badge: "High Risk (Reading)",
-    badgeStyle: "bg-red-50 text-red-700 border border-red-200",
-    action: "Assign Phonics",
-  },
-  {
-    name: "Carlos Mendoza",
-    lrn: "102945",
-    badge: "Moderate Risk",
-    badgeStyle: "bg-amber-50 text-amber-700 border border-amber-200",
-    action: "Review Pauses",
-  },
-];
-
-/* ━━━ OMR TABLE DATA ━━━ */
-const omrScans = [
-  {
-    date: "July 29, 2026",
-    title: "Q1 Foundational Numeracy",
-    subject: "Numeracy",
-    cohort: "Grade 7 - Rosal",
-    average: "68.4%",
-    status: "Processed",
-  },
-  {
-    date: "July 28, 2026",
-    title: "Reading Diagnostic Pre-Test",
-    subject: "Reading",
-    cohort: "Grade 7 - Ilang-Ilang",
-    average: "71.2%",
-    status: "Processed",
-  },
-  {
-    date: "July 25, 2026",
-    title: "Basic Science Competencies",
-    subject: "Science",
-    cohort: "Grade 8 - Sampaguita",
-    average: "64.0%",
-    status: "Processed",
-  },
-];
 
 /* ━━━ CUSTOM CHART TOOLTIP ━━━ */
 const CustomTooltip = ({
@@ -111,8 +51,80 @@ const CustomTooltip = ({
   return null;
 };
 
+/* ━━━ OMR TABLE DATA (Fallback static for demo purposes) ━━━ */
+const omrScansStatic = [
+  {
+    date: "July 29, 2026",
+    title: "Q1 Foundational Numeracy",
+    subject: "Numeracy",
+    cohort: "Grade 7 - Rosal",
+    average: "68.4%",
+    status: "Processed",
+  },
+  {
+    date: "July 28, 2026",
+    title: "Reading Diagnostic Pre-Test",
+    subject: "Reading",
+    cohort: "Grade 7 - Ilang-Ilang",
+    average: "71.2%",
+    status: "Processed",
+  },
+  {
+    date: "July 25, 2026",
+    title: "Basic Science Competencies",
+    subject: "Science",
+    cohort: "Grade 8 - Sampaguita",
+    average: "64.0%",
+    status: "Processed",
+  },
+];
+
 /* ━━━ MAIN PAGE ━━━ */
 export default function DashboardPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/teacher/dashboard");
+        const json = await res.json();
+        if (json.success) {
+          setData(json.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch teacher dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <>
+        <Header title="Dashboard" />
+        <main className="flex h-[80vh] items-center justify-center bg-gray-50">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+        </main>
+      </>
+    );
+  }
+
+  if (!data) {
+    return (
+      <>
+        <Header title="Dashboard" />
+        <main className="p-8 text-red-500 bg-gray-50 h-screen">
+          Failed to load dashboard data.
+        </main>
+      </>
+    );
+  }
+
+  const { overview, alerts, chartData } = data;
+
   return (
     <>
       <Header title="Dashboard" />
@@ -122,7 +134,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back, Teacher Miguel!
+              Welcome back, Teacher!
             </h1>
             <p className="mt-1 text-sm text-gray-500">
               Here is your ARAL Program learning recovery overview for Grade 7 &amp; 8 cohorts.
@@ -144,30 +156,30 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
           <StatCard
             title="Total Learners"
-            value="120"
-            subtext="Across 3 cohorts"
+            value={overview.totalLearners.toString()}
+            subtext="Across your cohorts"
             icon={<Users className="h-5 w-5 text-blue-600" />}
             iconBg="bg-blue-100"
           />
           <StatCard
             title="Flagged for Intervention"
-            value="18"
+            value={overview.highRiskCount.toString()}
             valueColor="text-red-600"
-            subtext="+3 from last week"
+            subtext="High risk learners"
             icon={<AlertTriangle className="h-5 w-5 text-red-600" />}
             iconBg="bg-red-100"
           />
           <StatCard
             title="OMR Sheets Scanned"
-            value="45"
-            subtext="Numeracy & Science"
+            value={overview.recentScans.toString()}
+            subtext="In the last 7 days"
             icon={<FileCheck className="h-5 w-5 text-emerald-600" />}
             iconBg="bg-emerald-100"
           />
           <StatCard
             title="Pending Reading Reviews"
-            value="5"
-            subtext="Oral reading fluency"
+            value={overview.pendingReviews.toString()}
+            subtext="Require evaluation"
             icon={<Clock className="h-5 w-5 text-amber-600" />}
             iconBg="bg-amber-100"
           />
@@ -182,7 +194,7 @@ export default function DashboardPage() {
                 Mastery Progress by Subject
               </h3>
               <p className="mt-0.5 text-sm text-gray-400">
-                Weekly class average comparison
+                Weekly class average comparison (Week 4 reflects live DB data)
               </p>
             </div>
             <div className="h-72">
@@ -254,32 +266,36 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex-1 space-y-4">
-              {interventionAlerts.map((alert, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 transition-colors hover:bg-gray-50"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">
-                        {alert.name}
-                      </p>
-                      <p className="mt-0.5 text-xs text-gray-400">
-                        LRN: {alert.lrn}
-                      </p>
+              {alerts.length === 0 ? (
+                <p className="text-sm text-gray-500">No high risk alerts at this time.</p>
+              ) : (
+                alerts.map((alert: any, i: number) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 transition-colors hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {alert.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                          LRN: {alert.lrn}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${alert.badgeStyle}`}
+                      >
+                        {alert.badge}
+                      </span>
                     </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${alert.badgeStyle}`}
-                    >
-                      {alert.badge}
-                    </span>
+                    <button className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                      {alert.action}
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
                   </div>
-                  <button className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
-                    {alert.action}
-                    <ExternalLink className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -319,7 +335,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {omrScans.map((scan, i) => (
+                {omrScansStatic.map((scan, i) => (
                   <tr
                     key={i}
                     className="transition-colors hover:bg-gray-50/60"

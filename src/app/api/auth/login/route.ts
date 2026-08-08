@@ -1,72 +1,79 @@
-import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { SignJWT } from "jose";
+import connectDB from "../../../../../database/db";
+import User from "../../../../../models/User";
 
-/* ── Mongoose user schema (mirrors seedUsers.js) ── */
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  fullName: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ["student", "teacher", "principal"],
-    required: true,
-  },
-}, { timestamps: true });
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
 
-function getUserModel() {
-  return mongoose.models.User || mongoose.model("User", userSchema);
-}
-
-/* ── Ensure single connection ── */
-async function connectDB() {
-  if (mongoose.connection.readyState >= 1) return;
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
-  if (!uri) throw new Error("Missing MONGODB_URI in .env");
-  await mongoose.connect(uri);
-}
-
-/* ── POST /api/auth/login ── */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const { username, password } = await req.json();
 
     if (!username || !password) {
       return NextResponse.json(
-        { error: "Username and password are required." },
+        { error: "Username and password are required" },
         { status: 400 }
       );
     }
 
+    // Connect to MongoDB Atlas
     await connectDB();
-    const User = getUserModel();
 
+    // Search for the user by username
     const user = await User.findOne({ username });
     if (!user) {
       return NextResponse.json(
-        { error: "Invalid username or password." },
+        { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
+    // Verify the password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return NextResponse.json(
-        { error: "Invalid username or password." },
+        { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    return NextResponse.json({
-      message: "Login successful",
-      role: user.role,
-      fullName: user.fullName,
+    // Create JWT payload
+    const payload = {
+      id: user._id.toString(),
       username: user.username,
+      role: user.role,
+      name: user.name,
+    };
+
+    // Sign the JWT token using jose
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const token = await new SignJWT(payload)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("7d")
+      .sign(secret);
+
+    // Create a 200 JSON response
+    const response = NextResponse.json(
+      { success: true, role: user.role, name: user.name },
+      { status: 200 }
+    );
+
+    // Set HTTP-Only secure cookie named auth_token
+    response.cookies.set({
+      name: "auth_token",
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
     });
-  } catch (err: unknown) {
-    console.error("Login API error:", err);
+
+    return response;
+  } catch (error: any) {
+    console.error("Login API Error:", error);
     return NextResponse.json(
-      { error: "Internal server error." },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
