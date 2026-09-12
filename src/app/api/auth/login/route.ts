@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import connectDB from "../../../../../database/db";
 import User from "../../../../../models/User";
+import { logAudit } from "@/lib/audit";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
 
@@ -38,12 +39,21 @@ export async function POST(req: Request) {
       );
     }
 
+    // Disabled accounts cannot sign in.
+    if (user.active === false) {
+      return NextResponse.json(
+        { error: "This account has been disabled. Contact the ARAL Coordinator." },
+        { status: 403 }
+      );
+    }
+
     // Create JWT payload
     const payload = {
       id: user._id.toString(),
       username: user.username,
       role: user.role,
       name: user.name,
+      specialization: user.specialization || 'all-subjects',
     };
 
     // Sign the JWT token using jose
@@ -55,7 +65,7 @@ export async function POST(req: Request) {
 
     // Create a 200 JSON response
     const response = NextResponse.json(
-      { success: true, role: user.role, name: user.name },
+      { success: true, role: user.role, name: user.name, specialization: user.specialization || 'all-subjects' },
       { status: 200 }
     );
 
@@ -67,6 +77,13 @@ export async function POST(req: Request) {
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
+    });
+
+    await logAudit({
+      actorId: user._id.toString(),
+      actorName: user.name || user.username,
+      role: user.role,
+      action: 'login',
     });
 
     return response;

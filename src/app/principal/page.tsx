@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import StatCard from "@/components/StatCard";
 import { Users, AlertTriangle, UserCheck, FileCheck } from "lucide-react";
 import {
   PieChart,
@@ -76,37 +77,37 @@ export default function PrincipalDashboardPage() {
         </div>
 
         {/* 4 Stat Cards */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-          <StatCard 
-            title="Total Enrolled" 
-            value={overview.totalStudents.toString()} 
-            sub="Registered Learners" 
-            icon={<Users className="h-5 w-5 text-blue-600" />} 
-            iconBg="bg-blue-100" 
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Total Enrolled"
+            value={overview.totalStudents.toString()}
+            icon={Users}
+            color="blue"
+            subtext="Registered Learners"
           />
-          <StatCard 
-            title="High Risk Learners" 
-            value={overview.highRiskCount.toString()} 
-            sub="Require immediate attention" 
-            valueColor="text-red-600" 
-            icon={<AlertTriangle className="h-5 w-5 text-red-600" />} 
-            iconBg="bg-red-100" 
+          <StatCard
+            title="High Risk Learners"
+            value={overview.highRiskCount.toString()}
+            icon={AlertTriangle}
+            color="red"
+            valueColor="text-red-600"
+            subtext="Require immediate attention"
           />
-          <StatCard 
-            title="Active Interventions" 
-            value={overview.activeInterventions.toString()} 
-            sub="Currently In Progress" 
-            valueColor="text-emerald-600" 
-            icon={<UserCheck className="h-5 w-5 text-emerald-600" />} 
-            iconBg="bg-emerald-100" 
+          <StatCard
+            title="Active Interventions"
+            value={overview.activeInterventions.toString()}
+            icon={UserCheck}
+            color="emerald"
+            valueColor="text-emerald-600"
+            subtext="Currently In Progress"
           />
-          <StatCard 
-            title="Assessments Completed" 
-            value={overview.assessmentsCompleted.toString()} 
-            sub="Total diagnostic scans" 
-            valueColor="text-amber-600" 
-            icon={<FileCheck className="h-5 w-5 text-amber-600" />} 
-            iconBg="bg-amber-100" 
+          <StatCard
+            title="Assessments Completed"
+            value={overview.assessmentsCompleted.toString()}
+            icon={FileCheck}
+            color="amber"
+            valueColor="text-amber-600"
+            subtext="Total diagnostic scans"
           />
         </div>
 
@@ -172,7 +173,7 @@ export default function PrincipalDashboardPage() {
                   <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} domain={[0, 100]} />
                   <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
                   <Bar dataKey="avg" name="Average" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                    <Cell fill="#2563eb" />
+                    <Cell fill="#1e3a8a" />
                     <Cell fill="#f59e0b" />
                     <Cell fill="#ef4444" />
                   </Bar>
@@ -211,20 +212,3 @@ export default function PrincipalDashboardPage() {
   );
 }
 
-function StatCard({ title, value, sub, valueColor = "text-gray-900", icon, iconBg }: {
-  title: string; value: string; sub: string; valueColor?: string;
-  icon: React.ReactNode; iconBg: string;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className={`mt-2 text-3xl font-bold tracking-tight ${valueColor}`}>{value}</p>
-          <p className="mt-1 text-xs text-gray-400">{sub}</p>
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${iconBg}`}>{icon}</div>
-      </div>
-    </div>
-  );
-}

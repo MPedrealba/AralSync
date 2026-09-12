@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import EditLearnerModal from "@/components/EditLearnerModal";
+import ImportLearnersModal from "@/components/ImportLearnersModal";
 import {
   Search,
   Plus,
@@ -12,11 +13,14 @@ import {
   Pencil,
   Trash2,
   ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
 
 interface Learner {
   id: string;
+  studentId: string;
   name: string;
+  lrn: string;
   gradeLevel: string;
   section: string;
   riskLevel: string;
@@ -24,20 +28,16 @@ interface Learner {
   guardian: string;
   contact: string;
   address: string;
+  subjects: Record<string, number | null>;
 }
 
-const mockLearners: Learner[] = [
-  { id: "LRN-2024-002", name: "Juan dela Cruz", gradeLevel: "Grade 7", section: "Rosal", riskLevel: "Moderate", status: "Active", guardian: "Pedro dela Cruz", contact: "09181234567", address: "Quezon City" },
-  { id: "LRN-2024-003", name: "Ana Reyes", gradeLevel: "Grade 10", section: "Ilang-Ilang", riskLevel: "High", status: "Active", guardian: "Maria Reyes", contact: "09187654321", address: "Manila" },
-  { id: "LRN-2024-004", name: "Carlos Mendoza", gradeLevel: "Grade 8", section: "Sampaguita", riskLevel: "At Risk", status: "Active", guardian: "Luis Mendoza", contact: "09189876543", address: "Caloocan" },
-  { id: "LRN-2024-005", name: "Luz Garcia", gradeLevel: "Grade 9", section: "Rosal", riskLevel: "Low", status: "Completed", guardian: "Rosa Garcia", contact: "09181112233", address: "Makati" },
-  { id: "LRN-2024-006", name: "Jose Ramos", gradeLevel: "Grade 7", section: "Ilang-Ilang", riskLevel: "Moderate", status: "Active", guardian: "Elena Ramos", contact: "09184445566", address: "Pasig" },
-  { id: "LRN-2024-007", name: "Elena Torres", gradeLevel: "Grade 8", section: "Rosal", riskLevel: "At Risk", status: "Active", guardian: "Mario Torres", contact: "09187778899", address: "Taguig" },
-  { id: "LRN-2024-008", name: "Sofia Bautista", gradeLevel: "Grade 9", section: "Sampaguita", riskLevel: "High", status: "Active", guardian: "Ana Bautista", contact: "09182223344", address: "Mandaluyong" },
-  { id: "LRN-2024-009", name: "Roberto Aquino", gradeLevel: "Grade 9", section: "Rosal", riskLevel: "Low", status: "Completed", guardian: "Juan Aquino", contact: "09185556677", address: "Marikina" },
-  { id: "LRN-2024-010", name: "Miguel Flores", gradeLevel: "Grade 8", section: "Sampaguita", riskLevel: "At Risk", status: "Active", guardian: "Rosa Flores", contact: "09188889900", address: "San Juan" },
-  { id: "LRN-2024-011", name: "Renz Sumile", gradeLevel: "Grade 9", section: "Rosal", riskLevel: "Moderate", status: "Active", guardian: "Mark Sumile", contact: "09183334455", address: "Quezon City" },
-];
+/* Map real risk values to the compact labels used by the UI/filter. */
+const riskDisplay: Record<string, string> = {
+  "High Risk": "High",
+  "Moderate Risk": "Moderate",
+  "Low Risk": "Low",
+  "At Risk": "At Risk",
+};
 
 const riskConfig: Record<string, { bg: string; text: string }> = {
   High: { bg: "bg-red-100", text: "text-red-700" },
@@ -118,6 +118,9 @@ function ActionDropdown({
 }
 
 export default function LearnersPage() {
+  const [learners, setLearners] = useState<Learner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
@@ -126,14 +129,84 @@ export default function LearnersPage() {
     open: boolean;
     learner: Learner | null;
   }>({ open: false, learner: null });
+  const [importOpen, setImportOpen] = useState(false);
 
-  const filtered = mockLearners.filter((l) => {
+  const loadLearners = useCallback(async () => {
+    try {
+      const res = await fetch("/api/teacher/learners");
+      const json = await res.json();
+      if (json.success) {
+        setLearners(
+          json.data.map((r: any) => ({
+            id: r.id,
+            studentId: r.studentId,
+            name: r.name,
+            lrn: r.lrn,
+            gradeLevel: `Grade ${r.gradeLevel}`,
+            section: r.section,
+            riskLevel: r.riskLevel,
+            status: "Active",
+            guardian: r.guardian,
+            contact: r.contact,
+            address: r.address,
+            subjects: r.subjects,
+          }))
+        );
+      } else {
+        setError(json.error || "Failed to load learners.");
+      }
+    } catch (e) {
+      setError("Failed to load learners.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLearners();
+  }, [loadLearners]);
+
+  /** Persist learner edits via PATCH, then refresh the list (FR2 "manage"). */
+  const handleSave = async (updated: Learner) => {
+    if (!editModal.learner) return;
+    const gradeMatch = (updated.gradeLevel || "").match(/\d+/);
+    const payload: Record<string, unknown> = {
+      name: updated.name,
+      section: updated.section,
+      guardian: updated.guardian,
+      contact: updated.contact,
+      address: updated.address,
+      riskLevel: updated.riskLevel,
+    };
+    if (gradeMatch) payload.gradeLevel = Number(gradeMatch[0]);
+    try {
+      const res = await fetch(`/api/teacher/learners/${editModal.learner.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.error || "Failed to update learner.");
+        return;
+      }
+      setEditModal({ open: false, learner: null });
+      loadLearners();
+    } catch (e) {
+      alert("Failed to update learner.");
+    }
+  };
+
+  const filtered = learners.filter((l) => {
     const matchSearch =
       l.name.toLowerCase().includes(search.toLowerCase()) ||
-      l.id.toLowerCase().includes(search.toLowerCase());
+      (l.lrn || "").toLowerCase().includes(search.toLowerCase()) ||
+      (l.guardian || "").toLowerCase().includes(search.toLowerCase());
     const matchGrade = gradeFilter ? l.gradeLevel === gradeFilter : true;
     const matchSection = sectionFilter ? l.section === sectionFilter : true;
-    const matchRisk = riskFilter ? l.riskLevel === riskFilter : true;
+    const matchRisk = riskFilter
+      ? (riskDisplay[l.riskLevel] ?? l.riskLevel) === riskFilter
+      : true;
     return matchSearch && matchGrade && matchSection && matchRisk;
   });
 
@@ -151,10 +224,19 @@ export default function LearnersPage() {
               Manage and track your students across sections.
             </p>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98]">
-            <Plus className="h-4 w-4" />
-            Add Learner
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setImportOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-50 active:scale-[0.98]"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Import from Excel
+            </button>
+            <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98]">
+              <Plus className="h-4 w-4" />
+              Add Learner
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -191,6 +273,24 @@ export default function LearnersPage() {
           </div>
         </div>
 
+        {/* Loading / Error states */}
+        {loading && (
+          <div className="flex h-48 items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+          </div>
+        )}
+        {!loading && error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm font-medium text-red-600">
+            {error}
+            <button
+              onClick={() => window.location.reload()}
+              className="ml-3 rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="overflow-x-auto">
@@ -218,22 +318,34 @@ export default function LearnersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((learner) => {
-                  const risk = riskConfig[learner.riskLevel] ?? {
-                    bg: "bg-gray-100",
-                    text: "text-gray-600",
-                  };
-                  const status = statusConfig[learner.status] ?? {
-                    bg: "bg-gray-100",
-                    text: "text-gray-600",
-                  };
-                  return (
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-5 py-10 text-center text-sm text-gray-400"
+                    >
+                      No learners found.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((learner) => {
+                    const riskLabel = riskDisplay[learner.riskLevel] ?? learner.riskLevel;
+                    const risk = riskConfig[riskLabel] ?? {
+                      bg: "bg-gray-100",
+                      text: "text-gray-600",
+                    };
+                    const statusLabel = learner.status || "Active";
+                    const status = statusConfig[statusLabel] ?? {
+                      bg: "bg-gray-100",
+                      text: "text-gray-600",
+                    };
+                    return (
                     <tr
                       key={learner.id}
                       className="transition-colors hover:bg-gray-50/60"
                     >
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-500">
-                        {learner.id}
+                        {learner.lrn}
                       </td>
                       <td className="px-5 py-3.5 text-sm font-medium text-gray-800">
                         <Link
@@ -250,14 +362,14 @@ export default function LearnersPage() {
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${risk.bg} ${risk.text}`}
                         >
-                          {learner.riskLevel}
+                          {riskLabel}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${status.bg} ${status.text}`}
                         >
-                          {learner.status}
+                          {statusLabel}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
@@ -270,8 +382,9 @@ export default function LearnersPage() {
                         />
                       </td>
                     </tr>
-                  );
-                })}
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -283,10 +396,14 @@ export default function LearnersPage() {
         isOpen={editModal.open}
         learner={editModal.learner}
         onClose={() => setEditModal({ open: false, learner: null })}
-        onSave={(updated) => {
-          console.log("Saved:", updated);
-          setEditModal({ open: false, learner: null });
-        }}
+        onSave={handleSave}
+      />
+
+      {/* Import Modal */}
+      <ImportLearnersModal
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={loadLearners}
       />
     </>
   );

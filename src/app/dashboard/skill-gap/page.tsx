@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import {
   BarChart,
@@ -11,46 +11,13 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  Cell,
 } from "recharts";
 
-/* ──── Chart data ──── */
-const competencyData = [
-  { name: "Numeracy", below60: 35, between60_75: 30, above75: 35 },
-  { name: "Science", below60: 20, between60_75: 45, above75: 35 },
-  { name: "Reading", below60: 25, between60_75: 30, above75: 45 },
-];
-
-/* ──── Skill gap details ──── */
-const skillGaps = [
-  {
-    subject: "Numeracy",
-    competencies: [
-      { name: "Fractions & Decimals", mastery: 42, level: "Critical" },
-      { name: "Word Problems", mastery: 55, level: "Below" },
-      { name: "Basic Operations", mastery: 78, level: "On Track" },
-      { name: "Measurement", mastery: 61, level: "Below" },
-    ],
-  },
-  {
-    subject: "Reading",
-    competencies: [
-      { name: "Decoding & Phonics", mastery: 48, level: "Critical" },
-      { name: "Vocabulary", mastery: 65, level: "Below" },
-      { name: "Comprehension", mastery: 72, level: "Below" },
-      { name: "Fluency", mastery: 58, level: "Below" },
-    ],
-  },
-  {
-    subject: "Science",
-    competencies: [
-      { name: "Living Things", mastery: 70, level: "Below" },
-      { name: "Earth & Space", mastery: 55, level: "Below" },
-      { name: "Matter & Energy", mastery: 45, level: "Critical" },
-      { name: "Scientific Method", mastery: 80, level: "On Track" },
-    ],
-  },
-];
+interface SkillGapEntry {
+  name: string;
+  mastery: number;
+  level: string;
+}
 
 const levelConfig: Record<string, { bg: string; text: string; bar: string }> = {
   Critical: { bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500" },
@@ -90,6 +57,33 @@ const CustomTooltip = ({
 export default function SkillGapPage() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
+  const [data, setData] = useState<{
+    competencyData: Array<{ name: string; below60: number; between60_75: number; above75: number }>;
+    skillGaps: Array<{ subject: string; competencies: SkillGapEntry[] }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (gradeFilter) params.set("grade", gradeFilter);
+        if (sectionFilter) params.set("section", sectionFilter);
+        const res = await fetch(`/api/teacher/skill-gap?${params.toString()}`);
+        const json = await res.json();
+        if (json.success) setData(json.data);
+      } catch (e) {
+        console.error("Failed to fetch skill gaps:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [gradeFilter, sectionFilter]);
+
+  const competencyData = data?.competencyData ?? [];
+  const skillGaps = data?.skillGaps ?? [];
 
   return (
     <>
@@ -102,8 +96,8 @@ export default function SkillGapPage() {
               Skill Gap Analytics
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Competencies where class mastery falls below 75% — and weak
-              decoding patterns from reading sessions.
+              Competencies where class mastery falls below 75% — computed live
+              from assessment data.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -116,6 +110,7 @@ export default function SkillGapPage() {
               <option>Grade 7</option>
               <option>Grade 8</option>
               <option>Grade 9</option>
+              <option>Grade 10</option>
             </select>
             <select
               value={sectionFilter}
@@ -154,71 +149,83 @@ export default function SkillGapPage() {
             </span>
           </div>
 
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={competencyData}
-                margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
-                barCategoryGap="25%"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 13, fill: "#374151" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12, fill: "#9ca3af" }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 100]}
-                  tickFormatter={(v: number) => `${v}%`}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f9fafb" }} />
-                <Bar dataKey="below60" name="< 60%" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                <Bar dataKey="between60_75" name="60-75%" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                <Bar dataKey="above75" name="> 75%" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={50} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {loading ? (
+            <div className="flex h-80 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+            </div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={competencyData}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
+                  barCategoryGap="25%"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 13, fill: "#374151" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "#9ca3af" }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={[0, 100]}
+                    tickFormatter={(v: number) => `${v}%`}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f9fafb" }} />
+                  <Bar dataKey="below60" name="< 60%" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="between60_75" name="60-75%" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="above75" name="> 75%" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         {/* Competency Breakdown */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {skillGaps.map((group) => (
-            <div
-              key={group.subject}
-              className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm"
-            >
-              <h3 className="mb-4 text-sm font-semibold text-gray-900">
-                {group.subject} Competencies
-              </h3>
-              <div className="space-y-3">
-                {group.competencies.map((c) => {
-                  const cfg = levelConfig[c.level] ?? levelConfig["Below"];
-                  return (
-                    <div key={c.name}>
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-sm text-gray-700">{c.name}</span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cfg.bg} ${cfg.text}`}
-                        >
-                          {c.mastery}%
-                        </span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                        <div
-                          className={`h-full rounded-full ${cfg.bar} transition-all duration-500`}
-                          style={{ width: `${c.mastery}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          {skillGaps.length === 0 && !loading ? (
+            <div className="rounded-xl border border-gray-100 bg-white p-6 text-sm text-gray-400 shadow-sm lg:col-span-3">
+              No competency data yet.
             </div>
-          ))}
+          ) : (
+            skillGaps.map((group) => (
+              <div
+                key={group.subject}
+                className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm"
+              >
+                <h3 className="mb-4 text-sm font-semibold text-gray-900">
+                  {group.subject} Competencies
+                </h3>
+                <div className="space-y-3">
+                  {group.competencies.map((c) => {
+                    const cfg = levelConfig[c.level] ?? levelConfig["Below"];
+                    return (
+                      <div key={c.name}>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-sm text-gray-700">{c.name}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cfg.bg} ${cfg.text}`}
+                          >
+                            {c.mastery}%
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className={`h-full rounded-full ${cfg.bar} transition-all duration-500`}
+                            style={{ width: `${c.mastery}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </main>
     </>

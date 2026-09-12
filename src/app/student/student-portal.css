@@ -14,11 +14,11 @@
   --text-subtle: #9ca3af;
   --border-color: #e5e7eb;
   --border-subtle: #f3f4f6;
-  --sidebar-active-bg: #eff6ff;
-  --sidebar-active-text: #2563eb;
+  --sidebar-active-bg: #eef2fc;
+  --sidebar-active-text: #1e3a8a;
   --sidebar-text: #4b5563;
-  --primary-btn-bg: #2563eb;
-  --primary-btn-hover: #1d4ed8;
+  --primary-btn-bg: #1e3a8a;
+  --primary-btn-hover: #172e7a;
   --primary-btn-text: #ffffff;
   --badge-developing-bg: #fef9c3;
   --badge-developing-text: #854d0e;
@@ -63,17 +63,49 @@
 }
 
 .student-portal .sidebar-header {
-  padding: 1.5rem 1.25rem;
+  padding: 1.25rem 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  background: linear-gradient(135deg, #1a3590 0%, #172e7a 55%, #112264 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.student-portal .sidebar-header::after {
+  content: "";
+  position: absolute;
+  top: -2.5rem;
+  right: -2rem;
+  width: 7rem;
+  height: 7rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  filter: blur(1.5rem);
+}
+
+/* Gold accent bar — matches the ARAL logo's gold ring */
+.student-portal .sidebar-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #f5b041, #e6a817, #c8860d);
+}
+
+.student-portal .sidebar-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .student-portal .sidebar-brand-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  border: 1.5px solid #374151;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -82,13 +114,17 @@
 .student-portal .sidebar-title {
   font-size: 1.15rem;
   font-weight: 700;
-  color: var(--text-dark);
+  color: #ffffff;
   line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .student-portal .sidebar-subtitle {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(219, 234, 254, 0.85);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .student-portal .sidebar-divider {
@@ -126,6 +162,7 @@
   transition: background 0.15s ease, color 0.15s ease;
   user-select: none;
   text-decoration: none;
+  position: relative;
 }
 
 .student-portal .sidebar-nav-item:hover {
@@ -134,8 +171,21 @@
 }
 
 .student-portal .sidebar-nav-item.active {
-  background: var(--sidebar-active-bg);
-  color: var(--sidebar-active-text);
+  background: rgba(30, 58, 138, 0.08);
+  color: #1a3590;
+  font-weight: 600;
+}
+
+.student-portal .sidebar-nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #1e3a8a;
 }
 
 .student-portal .sidebar-footer {
@@ -174,10 +224,11 @@
 /* ── Card ── */
 .student-portal .card {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  border-radius: 12px;
   padding: 1.25rem 1.5rem;
   box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
 
 .student-portal .card-title {
@@ -245,14 +296,14 @@
   padding: 0.45rem 1.15rem;
   font-size: 0.85rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   border: none;
   transition: all 0.15s ease;
 }
 
-.student-portal .btn-primary { background: var(--primary-btn-bg); color: var(--primary-btn-text); }
-.student-portal .btn-primary:hover { background: var(--primary-btn-hover); }
+.student-portal .btn-primary { background: var(--primary-btn-bg); color: var(--primary-btn-text); box-shadow: 0 1px 2px rgba(30, 58, 138, 0.3); }
+.student-portal .btn-primary:hover { background: var(--primary-btn-hover); box-shadow: 0 4px 8px rgba(30, 58, 138, 0.25); transform: translateY(-1px); }
 .student-portal .btn-outline { background: #ffffff; border: 1px solid #d1d5db; color: #374151; }
 .student-portal .btn-outline:hover { background: #f9fafb; border-color: #9ca3af; }
 
@@ -260,20 +311,22 @@
 .student-portal .table-container {
   width: 100%;
   background: #ffffff;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
 }
 
 .student-portal .table { width: 100%; border-collapse: collapse; text-align: left; }
-.student-portal .table th { padding: 0.85rem 1.25rem; font-size: 0.72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); background: #ffffff; }
+.student-portal .table th { padding: 0.85rem 1.25rem; font-size: 0.7rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); background: #f9fafb; }
 .student-portal .table td { padding: 1rem 1.25rem; font-size: 0.88rem; color: var(--text-dark); border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+.student-portal .table tbody tr { transition: background 0.15s ease; }
+.student-portal .table tbody tr:hover { background: #f9fafb; }
 .student-portal .table tr:last-child td { border-bottom: none; }
 
 /* ── Progress ── */
 .student-portal .progress-track { width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
-.student-portal .progress-fill { height: 100%; border-radius: 9999px; background: #2563eb; }
+.student-portal .progress-fill { height: 100%; border-radius: 9999px; background: #1e3a8a; }
 .student-portal .progress-fill-brown { background: #a16207; }
 .student-portal .progress-fill-red { background: #dc2626; }
 .student-portal .progress-fill-green { background: #16a34a; }

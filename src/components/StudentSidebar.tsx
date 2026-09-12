@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen,
@@ -45,10 +45,20 @@ const navItems = [
 
 export default function StudentSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const isActive = (href: string) => {
     if (href === "/student") return pathname === "/student";
     return pathname.startsWith(href);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore — still navigate to login */
+    }
+    router.push("/login");
   };
 
   return (
@@ -58,7 +68,7 @@ export default function StudentSidebar() {
         <img
           src="/aral-logo.png"
           alt="ARAL Program Logo"
-          style={{ height: 36, width: "auto" }}
+          className="w-12 h-12 rounded-full object-contain"
         />
         <div>
           <div className="sidebar-title">AralSync</div>
@@ -82,7 +92,7 @@ export default function StudentSidebar() {
                   href={item.href}
                   className={`sidebar-nav-item ${active ? "active" : ""}`}
                 >
-                  <IconComponent size={18} color={active ? "#2563eb" : "#6b7280"} />
+                  <IconComponent size={18} color={active ? "#1e3a8a" : "#6b7280"} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -97,10 +107,15 @@ export default function StudentSidebar() {
           <User size={18} color="#6b7280" />
           <span>My Profile</span>
         </Link>
-        <Link href="/login" className="sidebar-nav-item" style={{ color: "#ef4444" }}>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="sidebar-nav-item w-full text-left"
+          style={{ color: "#ef4444" }}
+        >
           <LogOut size={18} color="#ef4444" />
           <span style={{ fontWeight: 600 }}>Logout</span>
-        </Link>
+        </button>
       </div>
     </aside>
   );

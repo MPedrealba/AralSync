@@ -128,10 +128,9 @@ export default function EditLearnerModal({
                 className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
               >
                 <option value="">Select</option>
-                <option value="High">High</option>
-                <option value="At Risk">At Risk</option>
-                <option value="Moderate">Moderate</option>
-                <option value="Low">Low</option>
+                <option value="Low Risk">Low Risk</option>
+                <option value="Moderate Risk">Moderate Risk</option>
+                <option value="High Risk">High Risk</option>
               </select>
             </div>
             <div>

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AralSync — System Flow</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #f5f7fa; margin: 0; padding: 0; }
+  header { background: #1e3a8a; color: white; padding: 24px 32px; }
+  header h1 { margin: 0; font-size: 24px; }
+  header p { margin: 6px 0 0; opacity: 0.85; font-size: 14px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  section { background: white; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 24px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  h2 { color: #1e3a8a; font-size: 18px; margin: 0 0 4px; }
+  .desc { color: #64748b; font-size: 13px; margin: 0 0 16px; }
+  .mermaid { display: flex; justify-content: center; }
+  .mermaid svg { max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AralSync — System Flow Diagrams</h1>
+  <p>Full-stack reading &amp; assessment system • MERN + Python AI microservice</p>
+</header>
+<main>
+
+<section>
+  <h2>1. High-Level Architecture</h2>
+  <p class="desc">Client (React) → Auth → API routes → Python AI services &amp; MongoDB</p>
+  <div class="mermaid">
+flowchart TB
+    subgraph Client["Client - Next.js React"]
+        Login["/login"]
+        T_Dash["Teacher Dashboard&#10;/dashboard/*"]
+        S_Dash["Student Portal&#10;/student/*"]
+        P_Dash["Principal Dashboard&#10;/principal/*"]
+    end
+    subgraph Auth["Auth Layer"]
+        JWT["JWT in HttpOnly Cookie"]
+        AuthAPI["POST /api/auth/login&#10;GET /api/auth/me&#10;POST /api/auth/logout"]
+    end
+    subgraph API["Next.js API Routes - Node.js"]
+        T_API["Teacher APIs&#10;assessments, learners,&#10;OMR, reading, interventions"]
+        S_API["Student APIs&#10;assessments, interventions,&#10;reading"]
+        P_API["Principal APIs&#10;dashboard, reports,&#10;analytics, audit-log"]
+    end
+    subgraph AI["Python AI Microservice :8000"]
+        OMR_CV["OpenCV OMR Scanner&#10;POST /omr/detect"]
+        Reading_Feat["Librosa Reading Features&#10;POST /reading/analyze"]
+        KMeans["K-Means Clustering&#10;POST /cluster/analyze"]
+    end
+    subgraph External["External APIs"]
+        Groq["Groq Whisper API&#10;Speech-to-Text"]
+    end
+    subgraph DB[("MongoDB")]
+        Users["Users"]
+        Assessments["Assessments"]
+        LearnerRec["LearnerRecords"]
+        Questions["Questions Bank"]
+        AnswerKeys["AnswerKeys"]
+        Interventions["Interventions"]
+        ReadingPass["ReadingPassages"]
+        CustomExams["CustomExams"]
+        AuditLog["AuditLogs"]
+    end
+    Login --> AuthAPI --> JWT
+    JWT --> T_Dash
+    JWT --> S_Dash
+    JWT --> P_Dash
+    T_Dash --> T_API
+    S_Dash --> S_API
+    P_Dash --> P_API
+    T_API --> DB
+    S_API --> DB
+    P_API --> DB
+    T_API --> OMR_CV
+    T_API --> Reading_Feat
+    T_API --> KMeans
+    S_API --> Reading_Feat
+    T_API --> Groq
+    S_API --> Groq
+  </div>
+</section>
+
+<section>
+  <h2>2. Authentication Flow</h2>
+  <p class="desc">Login → bcrypt verify → JWT → HttpOnly cookie → role-based redirect</p>
+  <div class="mermaid">
+sequenceDiagram
+    actor User
+    participant Page as Login Page
+    participant API as /api/auth/login
+    participant DB as MongoDB
+    participant Cookie as HttpOnly Cookie
+    User->>Page: Enter username + password
+    Page->>API: POST { username, password }
+    API->>DB: Find User by username
+    DB-->>API: User document
+    API->>API: bcrypt.compare(password, hash)
+    alt Match
+        API->>API: Sign JWT { id, role, name }
+        API->>Cookie: Set-Cookie token=jwt; HttpOnly
+        API-->>Page: { user: { id, name, role } }
+        Page->>Page: Redirect based on role
+    else No match
+        API-->>Page: 401 Invalid credentials
+    end
+    Note over Page,Cookie: All subsequent requests carry JWT cookie
+    Page->>API: GET /api/auth/me (with cookie)
+    API->>API: Verify JWT and return user profile
+  </div>
+</section>
+
+<section>
+  <h2>3. Teacher Workflow</h2>
+  <p class="desc">Assessments, Reading Fluency, Analytics, Learners, and Actions modules</p>
+  <div class="mermaid">
+flowchart LR
+    subgraph Assessments["Assessments"]
+        Gen["Generate 50-item Exam&#10;POST /questionnaire/generate"]
+        Upload["Upload Custom Exam&#10;POST /exams"]
+        Print["Print Questionnaire&#10;+ Bubble Sheet"]
+        Scan["OMR Scan&#10;POST /omr"]
+        Grade["Grade Written Items&#10;PATCH /assessments/:id/written"]
+    end
+    subgraph Reading["Reading Fluency"]
+        Record["Record Audio&#10;MediaRecorder"]
+        Whisper["Transcribe&#10;Groq Whisper"]
+        Analyze["Analyze&#10;POST /reading/analyze"]
+        PhilIRI["Phil-IRI Scoring&#10;Independent / Instructional /&#10;Frustration / Non-Reader"]
+    end
+    subgraph Analytics["Analytics"]
+        SkillGap["Skill Gap Analysis"]
+        Recovery["Learning Recovery"]
+        Progress["Progress Monitoring"]
+        Comp["Comprehension Check"]
+    end
+    subgraph Learners["Learners"]
+        List["View Learners"]
+        Import["Import from Excel&#10;.xlsx bulk upload"]
+        Edit["Edit Learner"]
+    end
+    subgraph Actions["Actions"]
+        Recommend["Assign Recommendations"]
+        Intervene["Create Interventions"]
+        Approve["Approve / Flag Assessments"]
+    end
+    Gen --> Print --> Scan --> Grade
+    Upload --> Print
+    Record --> Whisper --> Analyze --> PhilIRI
+    SkillGap --> Approve
+    Recovery --> Approve
+    Progress --> Approve
+    Import --> List --> Edit
+  </div>
+</section>
+
+<section>
+  <h2>4. OMR Scanning Pipeline</h2>
+  <p class="desc">Upload scan → OpenCV detect → score vs AnswerKey → hybrid grading</p>
+  <div class="mermaid">
+flowchart TB
+    Upload["Teacher uploads&#10;scanned bubble sheet image"]
+    API["POST /api/teacher/omr"]
+    Python["POST localhost:8000/omr/detect"]
+    OpenCV["OpenCV Pipeline:&#10;1. Fiducial detection&#10;2. Perspective warp&#10;3. Bubble grid extraction&#10;4. Disk-mask fill scoring"]
+    Fallback["JS Simulation Fallback&#10;if Python service is down"]
+    API --> Python
+    Python --> OpenCV
+    Python -.->|service down| Fallback
+    OpenCV --> Answers["Detected Answers&#10;A, B, _, D, ..."]
+    Fallback --> Answers
+    Answers --> Key["Load AnswerKey&#10;by subject"]
+    Key --> Score["Score MC items&#10;+ flag written items"]
+    Score --> Partial{Has written&#10;items?}
+    Partial -->|No| Complete["gradingStatus complete&#10;Auto-scored"]
+    Partial -->|Yes| Pending["gradingStatus partial&#10;MC scored, written pending"]
+    Pending --> TeacherGrade["Teacher grades written&#10;via scoring modal"]
+    TeacherGrade --> PATCH["PATCH /assessments/:id/written"]
+    PATCH --> Final["Final score:&#10;mcCorrect + writtenScore / totalItems"]
+  </div>
+</section>
+
+<section>
+  <h2>5. Reading Fluency Pipeline (Phil-IRI)</h2>
+  <p class="desc">Record → Whisper STT → Librosa features → WER → Phil-IRI classification</p>
+  <div class="mermaid">
+flowchart LR
+    Read["Student reads&#10;passage aloud"]
+    Rec["Record audio&#10;MediaRecorder / mic"]
+    subgraph TeacherSide["Teacher Path"]
+        T_Upload["Upload audio file"]
+        T_Analyze["POST /api/teacher/reading/analyze"]
+    end
+    subgraph StudentSide["Student Path"]
+        S_Analyze["POST /api/student/reading/analyze"]
+    end
+    Whisper["Groq Whisper STT&#10;raw transcript"]
+    Features["Python Librosa Features&#10;POST /reading/analyze&#10;WPM, pause ratio,&#10;hesitations, pacing"]
+    WER["Word Error Rate&#10;Levenshtein distance"]
+    PhilIRI["Phil-IRI Classification"]
+    Store["Save to LearnerRecord&#10;+ Assessment"]
+    Read --> Rec
+    Rec --> T_Analyze
+    Rec --> S_Analyze
+    T_Analyze --> Whisper
+    S_Analyze --> Whisper
+    Whisper --> Features
+    Features --> WER
+    WER --> PhilIRI
+    PhilIRI --> Ind["Independent&#10;96%+ accuracy, fluent"]
+    PhilIRI --> Ins["Instructional&#10;91-95% accuracy"]
+    PhilIRI --> Fru["Frustration&#10;90% or less accuracy"]
+    PhilIRI --> NR["Non-Reader&#10;below 80%"]
+    Ind --> Store
+    Ins --> Store
+    Fru --> Store
+    NR --> Store
+  </div>
+</section>
+
+<section>
+  <h2>6. Student Portal Flow</h2>
+  <p class="desc">Student home → OMR / Reading / Comprehension / Interventions / Progress</p>
+  <div class="mermaid">
+flowchart TB
+    Login["Login as Student"]
+    Home["Student Home&#10;/student"]
+    OMR["OMR Assessments&#10;/student/omr-assessments"]
+    ReadFlu["Reading Fluency&#10;/student/reading-fluency"]
+    Comp["Comprehension&#10;/student/comprehension"]
+    Interv["Interventions&#10;/student/interventions"]
+    Prog["My Progress&#10;/student/progress"]
+    Login --> Home
+    Home --> OMR
+    Home --> ReadFlu
+    Home --> Comp
+    Home --> Interv
+    Home --> Prog
+    OMR -->|View assigned exams| Results["See OMR results&#10;auto-graded"]
+    ReadFlu -->|Record self| SelfGrade["Self-assessed&#10;Phil-IRI result"]
+    Comp -->|Take quiz| CompScore["Comprehension score"]
+    Interv -->|Mark as Done| Complete["PATCH intervention&#10;pending teacher review"]
+    Prog -->|Timeline view| Trends["Progress trends&#10;over time"]
+  </div>
+</section>
+
+<section>
+  <h2>7. Principal Dashboard Flow</h2>
+  <p class="desc">Monitoring panels + data views with filters and export</p>
+  <div class="mermaid">
+flowchart TB
+    Login["Login as Principal"]
+    Home["Principal Home&#10;/principal"]
+    subgraph Monitor["Monitoring"]
+        AtRisk["At-Risk Learners"]
+        ReadLvl["Reading Levels&#10;Phil-IRI distribution"]
+        Subj["Subject Analysis&#10;+ K-Means Groups"]
+        Trends["Progress Trends&#10;BOSY / MOSY / EOSY"]
+    end
+    subgraph Data["Data Views"]
+        Records["Learner Records&#10;searchable"]
+        Reports["Reports&#10;exportable"]
+        Users["User Management&#10;CRUD"]
+        Audit["Audit Log&#10;activity trail"]
+    end
+    Login --> Home
+    Home --> Monitor
+    Home --> Data
+    AtRisk -->|Filter by grade/section| RiskList["High / Medium / Low risk&#10;+ intervention count"]
+    ReadLvl --> Donut["Donut chart&#10;+ stacked bar by grade"]
+    Subj --> Clusters["High Performing /&#10;On Track / Needs Support"]
+    Trends --> TimeSeries["Line charts&#10;time-filtered"]
+    Audit --> LogTable["Role + action filters&#10;latest 200 entries"]
+  </div>
+</section>
+
+<section>
+  <h2>8. Data Model Relationships</h2>
+  <p class="desc">Entity-relationship between the 10 Mongoose models</p>
+  <div class="mermaid">
+erDiagram
+    User ||--o{ Assessment : "creates / takes"
+    User ||--o{ LearnerRecord : "has"
+    User ||--o{ Intervention : "assigned / creates"
+    User ||--o{ AuditLog : "performs"
+    Assessment }o--|| AnswerKey : "graded against"
+    Assessment }o--o| CustomExam : "from optional"
+    AnswerKey }o--o{ Question : "references"
+    AnswerKey }o--o| ReadingPassage : "for reading exam"
+    LearnerRecord ||--o{ Assessment : "contains scores"
+    LearnerRecord ||--o{ Intervention : "linked to"
+    Question }o--|| User : "created by seed"
+  </div>
+</section>
+
+<section>
+  <h2>9. Intervention Lifecycle</h2>
+  <p class="desc">State machine: Created → Active → Completed → Reviewed → Approved/Flagged</p>
+  <div class="mermaid">
+stateDiagram-v2
+    [*] --> Created : Teacher creates
+    Created --> Active : Auto on creation
+    Active --> StudentCompleted : Student marks done
+    Active --> TeacherCompleted : Teacher completes
+    StudentCompleted --> Reviewed : Teacher reviews
+    Reviewed --> Approved : Teacher approves
+    Reviewed --> Flagged : Teacher flags
+    Approved --> [*]
+    Flagged --> Active : Reassign
+    TeacherCompleted --> [*]
+  </div>
+</section>
+
+<section>
+  <h2>10. Complete Request Flow (Typical OMR Exam)</h2>
+  <p class="desc">Full sequence from exam generation through scanning, hybrid grading, and data updates</p>
+  <div class="mermaid">
+sequenceDiagram
+    actor T as Teacher
+    participant UI as Teacher UI
+    participant API as Next.js API
+    participant DB as MongoDB
+    participant PY as Python Service
+    T->>UI: Click Generate 50-item Exam
+    UI->>API: POST /questionnaire/generate
+    API->>DB: Query Questions from bank
+    DB-->>API: 51-63 questions per combo
+    API->>API: Difficulty-balanced sampling
+    API->>DB: Save AnswerKey
+    API-->>UI: Generated questionnaire + answer key
+    T->>UI: Print Questionnaire + Bubble Sheet
+    T->>T: Students answer on paper
+    T->>UI: Upload scanned image
+    UI->>API: POST /api/teacher/omr
+    API->>PY: POST /omr/detect
+    PY->>PY: OpenCV detect, warp, grid, score
+    PY-->>API: Detected answers array
+    API->>DB: Find AnswerKey by subject
+    API->>API: Compare answers vs key
+    API->>DB: Save Assessment
+    alt Has written items
+        API-->>UI: written items need grading
+        T->>UI: Open scoring modal, enter scores
+        UI->>API: PATCH /assessments/:id/written
+        API->>API: Recompute final score
+        API->>DB: Update Assessment status complete
+    end
+    API->>DB: Update LearnerRecord mastery and risk
+    API->>DB: Create AuditLog entry
+    API-->>UI: Updated results
+  </div>
+</section>
+
+</main>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

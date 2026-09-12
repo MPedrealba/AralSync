@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python AI service
+python-service/.venv/
+python-service/ffmpeg/
+python-service/**/__pycache__/
+python-service/*.log
+
+# local Claude / tooling config (machine-specific proxy credentials)
+.claude/
+
+# ad-hoc scripts with locally-scoped API keys
+swarm.py
+
+# capstone research paper (private academic material)
+context/

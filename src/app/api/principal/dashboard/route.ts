@@ -1,26 +1,14 @@
-import { NextResponse, NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
+import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_development';
-
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get('auth_token')?.value;
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    if (payload.role !== 'principal') {
-      return NextResponse.json({ error: 'Forbidden: Principals only' }, { status: 403 });
-    }
+    await requireAuth(req, ['principal']);
 
     await connectDB();
 
@@ -33,7 +21,7 @@ export async function GET(req: NextRequest) {
     // 2. Risk Distribution (for Pie Chart)
     const lowRisk = await LearnerRecord.countDocuments({ riskLevel: 'Low Risk' });
     const modRisk = await LearnerRecord.countDocuments({ riskLevel: 'Moderate Risk' });
-    
+
     const riskDistribution = [
       { name: "Low Risk", value: lowRisk, color: "#22c55e" },
       { name: "Moderate Risk", value: modRisk, color: "#f59e0b" },
@@ -102,22 +90,20 @@ export async function GET(req: NextRequest) {
       { name: "Math", avg: omrAvg[0] ? Math.round(omrAvg[0].avg) : 0 },
     ];
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        overview: {
-          totalStudents,
-          activeInterventions,
-          assessmentsCompleted,
-          highRiskCount
-        },
-        riskDistribution,
-        recentActivity: topRecentActivity,
-        subjectAvg
-      }
+    return ok({
+      overview: {
+        totalStudents,
+        activeInterventions,
+        assessmentsCompleted,
+        highRiskCount
+      },
+      riskDistribution,
+      recentActivity: topRecentActivity,
+      subjectAvg
     });
 
   } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
     console.error('Principal Dashboard API Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
+import StatCard from "@/components/StatCard";
+import OMRScanner from "@/components/OMRScanner";
 import {
   Users,
   AlertTriangle,
@@ -51,38 +54,11 @@ const CustomTooltip = ({
   return null;
 };
 
-/* ━━━ OMR TABLE DATA (Fallback static for demo purposes) ━━━ */
-const omrScansStatic = [
-  {
-    date: "July 29, 2026",
-    title: "Q1 Foundational Numeracy",
-    subject: "Numeracy",
-    cohort: "Grade 7 - Rosal",
-    average: "68.4%",
-    status: "Processed",
-  },
-  {
-    date: "July 28, 2026",
-    title: "Reading Diagnostic Pre-Test",
-    subject: "Reading",
-    cohort: "Grade 7 - Ilang-Ilang",
-    average: "71.2%",
-    status: "Processed",
-  },
-  {
-    date: "July 25, 2026",
-    title: "Basic Science Competencies",
-    subject: "Science",
-    cohort: "Grade 8 - Sampaguita",
-    average: "64.0%",
-    status: "Processed",
-  },
-];
-
 /* ━━━ MAIN PAGE ━━━ */
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showOMR, setShowOMR] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -116,14 +92,30 @@ export default function DashboardPage() {
     return (
       <>
         <Header title="Dashboard" />
-        <main className="p-8 text-red-500 bg-gray-50 h-screen">
-          Failed to load dashboard data.
+        <main className="h-screen bg-gray-50 p-8">
+          <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm font-medium text-red-600">
+            Failed to load dashboard data.
+          </div>
         </main>
       </>
     );
   }
 
-  const { overview, alerts, chartData } = data;
+  const { overview, alerts, chartData, recentScans = [] } =
+    data as {
+      overview: any;
+      alerts: any[];
+      chartData: any[];
+      recentScans: Array<{
+        date: string;
+        title: string;
+        subject: string;
+        cohort: string;
+        average: string;
+        status: string;
+      }>;
+    };
+  const recentScansTable = recentScans;
 
   return (
     <>
@@ -141,61 +133,72 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]">
+            <button
+              onClick={() => setShowOMR(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]"
+            >
               <Scan className="h-4 w-4" />
               New OMR Scan
             </button>
-            <button className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 active:scale-[0.98]">
+            <Link
+              href="/dashboard/reading-fluency"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
+            >
               <Mic className="h-4 w-4" />
               Upload Audio
-            </button>
+            </Link>
           </div>
         </div>
 
         {/* ── B. Quick Stat Cards ── */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             title="Total Learners"
             value={overview.totalLearners.toString()}
+            icon={Users}
+            color="blue"
             subtext="Across your cohorts"
-            icon={<Users className="h-5 w-5 text-blue-600" />}
-            iconBg="bg-blue-100"
           />
           <StatCard
             title="Flagged for Intervention"
             value={overview.highRiskCount.toString()}
+            icon={AlertTriangle}
+            color="red"
             valueColor="text-red-600"
             subtext="High risk learners"
-            icon={<AlertTriangle className="h-5 w-5 text-red-600" />}
-            iconBg="bg-red-100"
           />
           <StatCard
             title="OMR Sheets Scanned"
             value={overview.recentScans.toString()}
+            icon={FileCheck}
+            color="emerald"
             subtext="In the last 7 days"
-            icon={<FileCheck className="h-5 w-5 text-emerald-600" />}
-            iconBg="bg-emerald-100"
           />
           <StatCard
             title="Pending Reading Reviews"
             value={overview.pendingReviews.toString()}
+            icon={Clock}
+            color="amber"
             subtext="Require evaluation"
-            icon={<Clock className="h-5 w-5 text-amber-600" />}
-            iconBg="bg-amber-100"
           />
         </div>
 
         {/* ── C. Middle Section: Chart + Alerts ── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Chart Card */}
-          <div className="col-span-1 rounded-xl border border-gray-100 bg-white p-6 shadow-sm lg:col-span-2">
-            <div className="mb-6">
-              <h3 className="text-base font-semibold text-gray-900">
-                Mastery Progress by Subject
-              </h3>
-              <p className="mt-0.5 text-sm text-gray-400">
-                Weekly class average comparison (Week 4 reflects live DB data)
-              </p>
+          <div className="col-span-1 rounded-xl border border-gray-100/80 bg-white p-6 shadow-card lg:col-span-2">
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">
+                  Mastery Progress by Subject
+                </h3>
+                <p className="mt-0.5 text-sm text-gray-400">
+                  Live weekly class averages computed from real assessment data
+                </p>
+              </div>
+              <span className="hidden rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 sm:inline-flex">
+                This Week
+              </span>
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -206,7 +209,7 @@ export default function DashboardPage() {
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="#f3f4f6"
+                    stroke="#eef2f7"
                     vertical={false}
                   />
                   <XAxis
@@ -233,13 +236,13 @@ export default function DashboardPage() {
                   />
                   <Bar
                     dataKey="Numeracy"
-                    fill="#2563eb"
+                    fill="#1e3a8a"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />
                   <Bar
                     dataKey="Reading"
-                    fill="#16a34a"
+                    fill="#7c3aed"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />
@@ -255,26 +258,36 @@ export default function DashboardPage() {
           </div>
 
           {/* Intervention Alerts Card */}
-          <div className="col-span-1 flex flex-col rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="col-span-1 flex flex-col rounded-xl border border-gray-100/80 bg-white p-6 shadow-card">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-50">
+                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                </span>
                 Priority Intervention Alerts
               </h3>
-              <button className="text-sm font-medium text-blue-600 hover:text-blue-700">
+              <Link
+                href="/dashboard/interventions"
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
                 View All
-              </button>
+              </Link>
             </div>
 
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-3">
               {alerts.length === 0 ? (
-                <p className="text-sm text-gray-500">No high risk alerts at this time.</p>
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-700">
+                  <span className="mr-1.5">🎉</span>No high risk alerts at this time.
+                </div>
               ) : (
                 alerts.map((alert: any, i: number) => (
                   <div
                     key={i}
-                    className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 transition-colors hover:bg-gray-50"
+                    className="group relative overflow-hidden rounded-lg border border-gray-100 bg-gradient-to-r from-red-50/80 to-gray-50/60 p-4 transition-colors hover:bg-red-50/60"
                   >
-                    <div className="flex items-start justify-between">
+                    {/* Left accent */}
+                    <span className="absolute inset-y-0 left-0 w-1 bg-red-400" />
+                    <div className="flex items-start justify-between gap-3 pl-2">
                       <div>
                         <p className="text-sm font-semibold text-gray-800">
                           {alert.name}
@@ -289,10 +302,13 @@ export default function DashboardPage() {
                         {alert.badge}
                       </span>
                     </div>
-                    <button className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                    <Link
+                      href={alert.learnerId ? `/dashboard/learners/${alert.learnerId}` : "#"}
+                      className="mt-3 inline-flex items-center gap-1 pl-2 text-xs font-medium text-blue-600 group-hover:text-blue-700"
+                    >
                       {alert.action}
                       <ExternalLink className="h-3 w-3" />
-                    </button>
+                    </Link>
                   </div>
                 ))
               )}
@@ -301,7 +317,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── D. Recent OMR Diagnostic Scans ── */}
-        <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+        <div className="rounded-xl border border-gray-100/80 bg-white shadow-card">
           <div className="border-b border-gray-100 px-6 py-4">
             <h3 className="text-base font-semibold text-gray-900">
               Recent OMR Diagnostic Scans
@@ -335,7 +351,17 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {omrScansStatic.map((scan, i) => (
+                {recentScansTable.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-6 py-10 text-center text-sm text-gray-400"
+                    >
+                      No OMR scans recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recentScansTable.map((scan, i) => (
                   <tr
                     key={i}
                     className="transition-colors hover:bg-gray-50/60"
@@ -364,54 +390,25 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
+                      <Link
+                        href="/dashboard/omr-assessments"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
+                      >
                         View Analytics
                         <ExternalLink className="h-3.5 w-3.5" />
-                      </button>
+                      </Link>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </main>
-    </>
-  );
-}
 
-/* ━━━ STAT CARD COMPONENT ━━━ */
-function StatCard({
-  title,
-  value,
-  valueColor = "text-gray-900",
-  subtext,
-  icon,
-  iconBg,
-}: {
-  title: string;
-  value: string;
-  valueColor?: string;
-  subtext: string;
-  icon: React.ReactNode;
-  iconBg: string;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className={`mt-2 text-3xl font-bold tracking-tight ${valueColor}`}>
-            {value}
-          </p>
-          <p className="mt-1 text-xs text-gray-400">{subtext}</p>
-        </div>
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-lg ${iconBg}`}
-        >
-          {icon}
-        </div>
-      </div>
-    </div>
+      {/* OMR Scanner Modal */}
+      <OMRScanner isOpen={showOMR} onClose={() => setShowOMR(false)} />
+    </>
   );
 }

@@ -1,27 +1,14 @@
-import { NextResponse, NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
+import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_development';
-
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get('auth_token')?.value;
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    const userId = payload.id;
-
-    if (!userId || payload.role !== 'student') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { id: userId, name } = await requireAuth(req, ['student']);
 
     await connectDB();
 
@@ -55,17 +42,15 @@ export async function GET(req: NextRequest) {
       interventionsTotal,
     };
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        learnerRecord,
-        metrics,
-        recentAssessments,
-        assignedInterventions,
-        user: { name: payload.name },
-      },
+    return ok({
+      learnerRecord,
+      metrics,
+      recentAssessments,
+      assignedInterventions,
+      user: { name },
     });
   } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
     console.error('Student Dashboard API Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

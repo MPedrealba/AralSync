@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import {
   Search,
-  ChevronDown,
   CheckCircle2,
   XCircle,
   ClipboardPaste,
   BookOpen,
   ChevronRight,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 
 /* ━━━ TYPES ━━━ */
@@ -23,16 +24,21 @@ interface Question {
   correctIndex: number;
 }
 
-interface HistoryEntry {
-  name: string;
-  grade: string;
-  section: string;
-  date: string;
+interface CompRow {
+  id: string;
+  title: string;
+  studentName: string;
+  studentId: string;
+  gradeSection: string;
   score: number;
-  total: number;
+  totalItems: number;
+  masteryLevel: string;
+  passageTitle: string | null;
+  subskills: { name: string; status: string; score: number }[];
+  date: string;
 }
 
-/* ━━━ MOCK DATA ━━━ */
+/* ━━━ MOCK DATA (for New Check flow) ━━━ */
 const samplePassage = `Plants make their own food through a process called photosynthesis. They use sunlight, water from the soil, and carbon dioxide from the air. Inside the leaves, a green substance called chlorophyll captures the sunlight. This energy is then used to combine water and carbon dioxide to produce glucose, which is food for the plant.
 
 During this process, plants also release oxygen into the air. This oxygen is what humans and animals breathe. Without photosynthesis, there would be very little oxygen on Earth.
@@ -54,50 +60,16 @@ const sampleQuestions: Question[] = [
   {
     id: 2,
     question: "What do plants release during photosynthesis?",
-    options: [
-      "Carbon dioxide",
-      "Oxygen",
-      "Nitrogen",
-      "Water vapor",
-    ],
+    options: ["Carbon dioxide", "Oxygen", "Nitrogen", "Water vapor"],
     correctIndex: 1,
   },
 ];
 
-const mockHistory: HistoryEntry[] = [
-  {
-    name: "Juan dela Cruz",
-    grade: "Grade 7",
-    section: "Rosal",
-    date: "Jul 5, 2026",
-    score: 2,
-    total: 3,
-  },
-  {
-    name: "Ana Reyes",
-    grade: "Grade 7",
-    section: "Rosal",
-    date: "Jul 4, 2026",
-    score: 3,
-    total: 3,
-  },
-  {
-    name: "Carlos Mendoza",
-    grade: "Grade 8",
-    section: "Sampaguita",
-    date: "Jul 3, 2026",
-    score: 1,
-    total: 3,
-  },
-  {
-    name: "Luz Garcia",
-    grade: "Grade 9",
-    section: "Rosal",
-    date: "Jul 2, 2026",
-    score: 2,
-    total: 3,
-  },
-];
+const fmtShort = (d: string) => {
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
 
 /* ━━━ MAIN COMPONENT ━━━ */
 export default function ComprehensionCheckPage() {
@@ -157,7 +129,6 @@ function NewCheckFlow() {
 
   const totalQuestions = sampleQuestions.length;
 
-  /* ── Handle submit answer ── */
   const handleSubmitAnswer = () => {
     if (selectedOption === null) return;
     const newAnswers = [...answers];
@@ -172,7 +143,6 @@ function NewCheckFlow() {
     }
   };
 
-  /* ── Reset flow ── */
   const handleReset = () => {
     setStep("setup");
     setCurrentQ(0);
@@ -193,7 +163,6 @@ function NewCheckFlow() {
         </p>
 
         <div className="space-y-4">
-          {/* Learner */}
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
               Learner
@@ -210,7 +179,6 @@ function NewCheckFlow() {
             </select>
           </div>
 
-          {/* Grade */}
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
               Grade
@@ -223,7 +191,6 @@ function NewCheckFlow() {
             </select>
           </div>
 
-          {/* Section */}
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
               Section
@@ -235,7 +202,6 @@ function NewCheckFlow() {
             </select>
           </div>
 
-          {/* Reading Passage */}
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
               Reading Passage
@@ -254,7 +220,6 @@ function NewCheckFlow() {
           </div>
         </div>
 
-        {/* Actions */}
         <div className="mt-6 flex items-center gap-3">
           <button
             onClick={() => setStep("reading")}
@@ -311,30 +276,21 @@ function NewCheckFlow() {
     const q = sampleQuestions[currentQ];
     return (
       <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
-        {/* Progress */}
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-medium text-gray-400">
             Question {currentQ + 1} of {totalQuestions}
           </span>
-          <span className="text-xs text-gray-400">
-            {learner}
-          </span>
+          <span className="text-xs text-gray-400">{learner}</span>
         </div>
         <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
           <div
             className="h-full rounded-full bg-blue-600 transition-all duration-300"
-            style={{
-              width: `${((currentQ + 1) / totalQuestions) * 100}%`,
-            }}
+            style={{ width: `${((currentQ + 1) / totalQuestions) * 100}%` }}
           />
         </div>
 
-        {/* Question */}
-        <h3 className="mb-5 text-base font-semibold text-gray-900">
-          {q.question}
-        </h3>
+        <h3 className="mb-5 text-base font-semibold text-gray-900">{q.question}</h3>
 
-        {/* Options */}
         <div className="space-y-2.5">
           {q.options.map((option, oi) => (
             <button
@@ -360,7 +316,6 @@ function NewCheckFlow() {
           ))}
         </div>
 
-        {/* Submit */}
         <button
           onClick={handleSubmitAnswer}
           disabled={selectedOption === null}
@@ -381,22 +336,13 @@ function NewCheckFlow() {
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
-      {/* Score Circle */}
       <div className="flex flex-col items-center py-4">
         <CheckCircle2 className="mb-3 h-10 w-10 text-emerald-500" />
         <h3 className="text-lg font-bold text-gray-900">Check Complete!</h3>
 
-        {/* Circular Score */}
         <div className="relative my-6 flex h-32 w-32 items-center justify-center">
           <svg className="absolute inset-0 h-full w-full -rotate-90">
-            <circle
-              cx="64"
-              cy="64"
-              r="56"
-              fill="none"
-              stroke="#f3f4f6"
-              strokeWidth="8"
-            />
+            <circle cx="64" cy="64" r="56" fill="none" stroke="#f3f4f6" strokeWidth="8" />
             <circle
               cx="64"
               cy="64"
@@ -408,13 +354,10 @@ function NewCheckFlow() {
               strokeDasharray={`${(percentage / 100) * 352} 352`}
             />
           </svg>
-          <span className="text-3xl font-bold text-gray-900">
-            {percentage}%
-          </span>
+          <span className="text-3xl font-bold text-gray-900">{percentage}%</span>
         </div>
       </div>
 
-      {/* Answers Review */}
       <div className="space-y-3 border-t border-gray-100 pt-5">
         {sampleQuestions.map((q, i) => {
           const userAnswer = answers[i];
@@ -434,9 +377,7 @@ function NewCheckFlow() {
                 <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
               )}
               <div>
-                <p className="text-sm font-medium text-gray-800">
-                  {q.question}
-                </p>
+                <p className="text-sm font-medium text-gray-800">{q.question}</p>
                 {!isCorrect && (
                   <p className="mt-1 text-xs text-gray-500">
                     Correct answer:{" "}
@@ -451,7 +392,6 @@ function NewCheckFlow() {
         })}
       </div>
 
-      {/* Actions */}
       <div className="mt-6 flex items-center gap-3">
         <button
           onClick={handleReset}
@@ -471,9 +411,48 @@ function NewCheckFlow() {
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TAB 2: RESULTS HISTORY
+   TAB 2: RESULTS HISTORY (wired to API)
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function ResultsHistoryTab() {
+  const [results, setResults] = useState<CompRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/teacher/assessments?type=COMPREHENSION");
+      const json = await res.json();
+      if (json.success) setResults(json.data);
+      else setError(json.error || "Failed to load results.");
+    } catch {
+      setError("Failed to load results.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = results.filter((r) =>
+    search
+      ? r.studentName.toLowerCase().includes(search.toLowerCase()) ||
+        (r.passageTitle || "").toLowerCase().includes(search.toLowerCase())
+      : true
+  );
+
+  const masteryColor = (level: string) => {
+    switch (level) {
+      case "Proficient": return "bg-emerald-100 text-emerald-700";
+      case "Approaching": return "bg-blue-100 text-blue-700";
+      case "Developing": return "bg-amber-100 text-amber-700";
+      default: return "bg-red-100 text-red-700";
+    }
+  };
+
   return (
     <div>
       {/* Filters */}
@@ -482,64 +461,110 @@ function ResultsHistoryTab() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name..."
+            placeholder="Search by name or passage..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
           />
         </div>
-        <select className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-600 outline-none focus:border-blue-500">
-          <option>Grade Level</option>
-          <option>Grade 7</option>
-          <option>Grade 8</option>
-          <option>Grade 9</option>
-        </select>
-        <select className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-600 outline-none focus:border-blue-500">
-          <option>Section</option>
-          <option>Rosal</option>
-          <option>Sampaguita</option>
-          <option>Ilang-Ilang</option>
-        </select>
       </div>
 
-      {/* History Cards */}
-      <div className="space-y-3">
-        {mockHistory.map((entry, i) => {
-          const pct = Math.round((entry.score / entry.total) * 100);
-          return (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md cursor-pointer"
-            >
-              <div className="flex items-center gap-4">
-                {/* Avatar */}
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
-                  {entry.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {entry.name}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {entry.grade} - {entry.section} • {entry.date}
-                  </p>
-                </div>
-              </div>
+      {loading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-3 py-12 text-sm text-red-600">
+          <AlertCircle className="h-5 w-5" />
+          <p>{error}</p>
+          <button
+            onClick={load}
+            className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+          >
+            Retry
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-gray-100 bg-white py-12 text-center text-sm text-gray-400">
+          No comprehension checks recorded yet.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((entry) => {
+            const pct = entry.totalItems
+              ? Math.round((entry.score / entry.totalItems) * 100)
+              : 0;
+            const isExpanded = expanded === entry.id;
+            return (
+              <div key={entry.id}>
+                <button
+                  onClick={() => setExpanded(isExpanded ? null : entry.id)}
+                  className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                      {entry.studentName.split(" ").map((n) => n[0]).join("")}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {entry.studentName}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {entry.gradeSection} • {fmtShort(entry.date)}
+                        {entry.passageTitle ? ` • ${entry.passageTitle}` : ""}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-lg font-bold text-gray-900">{pct}%</p>
-                  <p className="text-xs text-gray-400">
-                    {entry.score}/{entry.total} correct
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-300" />
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900">{pct}%</p>
+                      <p className="text-xs text-gray-400">
+                        {entry.score}/{entry.totalItems} correct
+                      </p>
+                    </div>
+                    <ChevronRight
+                      className={`h-4 w-4 text-gray-300 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                    />
+                  </div>
+                </button>
+
+                {/* Expanded subskills */}
+                {isExpanded && entry.subskills.length > 0 && (
+                  <div className="mx-4 mb-3 rounded-b-xl border border-t-0 border-gray-100 bg-gray-50 p-5">
+                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                      Subskills Breakdown
+                    </h4>
+                    <div className="space-y-2.5">
+                      {entry.subskills.map((s, i) => (
+                        <div key={i}>
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-sm text-gray-700">{s.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-gray-500">{s.score}%</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${masteryColor(s.status)}`}>
+                                {s.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                s.score >= 75 ? "bg-emerald-500" : s.score >= 60 ? "bg-amber-500" : "bg-red-500"
+                              }`}
+                              style={{ width: `${s.score}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,124 +1,116 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { ArrowLeft, Phone, MapPin, User, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck, FileCheck2 } from "lucide-react";
 
-/* ──── Mock data ──── */
-const learnerData: Record<
-  string,
-  {
-    id: string;
-    name: string;
-    grade: string;
-    section: string;
-    guardian: string;
-    contact: string;
-    address: string;
-    performanceLevel: string;
-    clusterGroup: string;
-    riskClassification: string;
-    riskColor: string;
-    omrAssessments: {
-      date: string;
-      score: string;
-      mastery: string;
-    }[];
-    readingAssessments: {
-      date: string;
-      accuracy: string;
-      fluency: number;
-      wordsErr: string;
-      pauses: number;
-    }[];
-  }
-> = {
-  "LRN-2024-002": {
-    id: "LRN-2024-002",
-    name: "Juan dela Cruz",
-    grade: "Grade 7",
-    section: "Rosal",
-    guardian: "Pedro dela Cruz",
-    contact: "09181234567",
-    address: "Quezon City",
-    performanceLevel: "Approaching",
-    clusterGroup: "Cluster B",
-    riskClassification: "Moderate",
-    riskColor: "yellow",
-    omrAssessments: [
-      { date: "7/3/2026", score: "35/50", mastery: "Approaching" },
-      { date: "6/20/2026", score: "28/50", mastery: "Developing" },
-    ],
-    readingAssessments: [
-      {
-        date: "7/3/2026",
-        accuracy: "78.2%",
-        fluency: 72,
-        wordsErr: "21.8%",
-        pauses: 7,
-      },
-      {
-        date: "6/18/2026",
-        accuracy: "71.5%",
-        fluency: 65,
-        wordsErr: "28.5%",
-        pauses: 12,
-      },
-    ],
-  },
+interface OMRRow {
+  id: string;
+  date: string;
+  title: string;
+  subject: string;
+  score: number;
+  mastery: string;
+}
+
+interface ReadingRow {
+  id: string;
+  date: string;
+  accuracy: string;
+  fluency: number;
+  wordsErr: string;
+  pauses: number;
+  title: string;
+}
+
+const riskStyles: Record<string, { bg: string; text: string }> = {
+  "High Risk": { bg: "bg-red-50", text: "text-red-700" },
+  "Moderate Risk": { bg: "bg-yellow-50", text: "text-yellow-700" },
+  "Low Risk": { bg: "bg-green-50", text: "text-green-700" },
 };
 
-/* Fallback learner for any ID not found */
-const defaultLearner = {
-  id: "LRN-2024-003",
-  name: "Ana Reyes",
-  grade: "Grade 10",
-  section: "Ilang-Ilang",
-  guardian: "Maria Reyes",
-  contact: "09187654321",
-  address: "Manila",
-  performanceLevel: "Developing",
-  clusterGroup: "Cluster A",
-  riskClassification: "High",
-  riskColor: "red",
-  omrAssessments: [
-    { date: "7/5/2026", score: "22/50", mastery: "Beginning" },
-  ],
-  readingAssessments: [
-    {
-      date: "7/5/2026",
-      accuracy: "62.1%",
-      fluency: 48,
-      wordsErr: "37.9%",
-      pauses: 18,
-    },
-  ],
-};
-
-const riskColors: Record<string, { bg: string; text: string; ring: string }> = {
-  red: {
-    bg: "bg-red-50",
-    text: "text-red-700",
-    ring: "ring-red-200",
-  },
-  yellow: {
-    bg: "bg-yellow-50",
-    text: "text-yellow-700",
-    ring: "ring-yellow-200",
-  },
-  green: {
-    bg: "bg-green-50",
-    text: "text-green-700",
-    ring: "ring-green-200",
-  },
+const fmtDate = (d: string) => {
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 export default function LearnerViewPage() {
   const params = useParams();
   const learnerId = params.id as string;
-  const learner = learnerData[learnerId] ?? defaultLearner;
-  const riskStyle = riskColors[learner.riskColor] ?? riskColors.yellow;
+
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchLearner = async () => {
+      try {
+        const res = await fetch(`/api/teacher/learners/${learnerId}`);
+        const json = await res.json();
+        if (json.success) {
+          setData(json.data);
+        } else {
+          setError(json.error || "Learner not found.");
+        }
+      } catch (e) {
+        setError("Failed to load learner profile.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLearner();
+  }, [learnerId]);
+
+  if (loading) {
+    return (
+      <>
+        <Header title="Learners" />
+        <main className="flex h-[70vh] items-center justify-center bg-gray-50">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+        </main>
+      </>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <>
+        <Header title="Learners" />
+        <main className="p-8 text-center text-sm font-medium text-red-500 bg-gray-50 h-[70vh]">
+          {error || "Learner not found."}
+          <div className="mt-4">
+            <Link
+              href="/dashboard/learners"
+              className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Learners
+            </Link>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  const l = data.learner;
+  const riskStyle =
+    riskStyles[data.riskClassification] ?? {
+      bg: "bg-gray-50",
+      text: "text-gray-600",
+    };
+  const latestOmr = data.omrAssessments[0];
+  const initials = l.name
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2);
 
   return (
     <>
@@ -140,24 +132,19 @@ export default function LearnerViewPage() {
 
         {/* Profile Card */}
         <div className="mb-6 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-          {/* Green Banner */}
           <div className="h-20 bg-gradient-to-r from-blue-600 to-blue-500" />
 
           <div className="px-6 pb-6">
             {/* Avatar + Name */}
             <div className="-mt-8 flex items-end gap-5">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-xl font-bold text-white shadow-md">
-                {learner.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)}
+                {initials}
               </div>
               <div className="pb-1">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {learner.name}
-                </h2>
-                <p className="text-sm text-gray-400">{learner.id}</p>
+                <h2 className="text-xl font-bold text-gray-900">{l.name}</h2>
+                <p className="text-sm text-gray-400">
+                  LRN: {l.lrn} · Grade {l.gradeLevel} - {l.section}
+                </p>
               </div>
             </div>
 
@@ -165,11 +152,11 @@ export default function LearnerViewPage() {
             <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4 sm:grid-cols-4">
               <InfoItem
                 label="Grade & Section"
-                value={`${learner.grade} - ${learner.section}`}
+                value={`Grade ${l.gradeLevel} - ${l.section}`}
               />
-              <InfoItem label="Guardian" value={learner.guardian} />
-              <InfoItem label="Contact" value={learner.contact} />
-              <InfoItem label="Address" value={learner.address} />
+              <InfoItem label="Guardian" value={l.guardian || "—"} />
+              <InfoItem label="Contact" value={l.contact || "—"} />
+              <InfoItem label="Address" value={l.address || "—"} />
             </div>
           </div>
         </div>
@@ -178,28 +165,28 @@ export default function LearnerViewPage() {
         <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
           <MetricCard
             title="Performance Level"
-            value={learner.performanceLevel}
-            icon={
-              <ShieldCheck className="h-5 w-5 text-blue-600" />
-            }
+            value={data.performanceLevel}
+            icon={<ShieldCheck className="h-5 w-5 text-blue-600" />}
           />
           <MetricCard
-            title="Cluster Group"
-            value={learner.clusterGroup}
-            icon={<User className="h-5 w-5 text-blue-600" />}
+            title="Latest OMR Score"
+            value={latestOmr ? `${latestOmr.score}%` : "—"}
+            icon={<FileCheck2 className="h-5 w-5 text-emerald-600" />}
           />
-          <MetricCard
-            title="Risk Classification"
-            value={learner.riskClassification}
-            icon={
-              <span
-                className={`inline-flex rounded-full px-3 py-0.5 text-xs font-bold ${riskStyle.bg} ${riskStyle.text}`}
-              >
-                {learner.riskClassification}
-              </span>
-            }
-            hideValue
-          />
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Risk Classification
+              </p>
+              <div className="mt-2">
+                <span
+                  className={`inline-flex rounded-full px-3 py-0.5 text-xs font-bold ${riskStyle.bg} ${riskStyle.text}`}
+                >
+                  {data.riskClassification}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 2 Assessment Tables */}
@@ -222,6 +209,9 @@ export default function LearnerViewPage() {
                       Date
                     </th>
                     <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">
+                      Assessment
+                    </th>
+                    <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">
                       Score
                     </th>
                     <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">
@@ -230,22 +220,33 @@ export default function LearnerViewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {learner.omrAssessments.map((a, i) => (
-                    <tr
-                      key={i}
-                      className="transition-colors hover:bg-gray-50/60"
-                    >
-                      <td className="px-5 py-3 text-sm text-gray-500">
-                        {a.date}
-                      </td>
-                      <td className="px-5 py-3 text-sm font-medium text-gray-800">
-                        {a.score}
-                      </td>
-                      <td className="px-5 py-3 text-sm text-gray-600">
-                        {a.mastery}
+                  {data.omrAssessments.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="px-5 py-8 text-center text-sm text-gray-400"
+                      >
+                        No OMR assessments yet.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    data.omrAssessments.map((a: OMRRow) => (
+                      <tr key={a.id} className="hover:bg-gray-50/60">
+                        <td className="px-5 py-3 text-sm text-gray-500">
+                          {fmtDate(a.date)}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-600">
+                          {a.title}
+                        </td>
+                        <td className="px-5 py-3 text-sm font-semibold text-gray-800">
+                          {a.score}%
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-600">
+                          {a.mastery}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -283,28 +284,36 @@ export default function LearnerViewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {learner.readingAssessments.map((a, i) => (
-                    <tr
-                      key={i}
-                      className="transition-colors hover:bg-gray-50/60"
-                    >
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {a.date}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                        {a.accuracy}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {a.fluency}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {a.wordsErr}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {a.pauses}
+                  {data.readingAssessments.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-gray-400"
+                      >
+                        No reading assessments yet.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    data.readingAssessments.map((a: ReadingRow) => (
+                      <tr key={a.id} className="hover:bg-gray-50/60">
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {fmtDate(a.date)}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800">
+                          {a.accuracy}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {a.fluency} wpm
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {a.wordsErr}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {a.pauses}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -331,12 +340,10 @@ function MetricCard({
   title,
   value,
   icon,
-  hideValue,
 }: {
   title: string;
   value: string;
   icon: React.ReactNode;
-  hideValue?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
@@ -344,12 +351,9 @@ function MetricCard({
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {title}
         </p>
-        {!hideValue && (
-          <p className="mt-2 text-lg font-bold text-gray-900">{value}</p>
-        )}
-        {hideValue && <div className="mt-2">{icon}</div>}
+        <p className="mt-2 text-lg font-bold text-gray-900">{value}</p>
       </div>
-      {!hideValue && <div>{icon}</div>}
+      <div>{icon}</div>
     </div>
   );
 }

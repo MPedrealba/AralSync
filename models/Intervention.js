@@ -6,7 +6,8 @@ const InterventionSchema = new mongoose.Schema({
   category: { type: String },
   type: { type: String, enum: ['Video', 'Activity', 'Module'] },
   status: { type: String, enum: ['Not Started', 'In Progress', 'Completed'] },
-  assignedDate: { type: Date, default: Date.now }
+  assignedDate: { type: Date, default: Date.now },
+  reviewed: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.models.Intervention || mongoose.model('Intervention', InterventionSchema);

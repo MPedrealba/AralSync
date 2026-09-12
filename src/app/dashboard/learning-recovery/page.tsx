@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import {
   AlertTriangle,
@@ -9,63 +9,15 @@ import {
   Printer,
 } from "lucide-react";
 
-/* ──── Mock flagged students ──── */
-const flaggedStudents = [
-  {
-    name: "Ana Reyes",
-    risk: "High",
-    grade: "Grade 10 — Ilang-Ilang",
-    lrn: "LRN-2024-003",
-    reasons: ["Frustration level in reading", "OMR: PreBasic"],
-    deficiencies: "Fractions and Word Problems",
-    intervention: 'Phonics reinforcement & repeated reading | DepEd LEARN Program',
-  },
-  {
-    name: "Carlos Mendoza",
-    risk: "High",
-    grade: "Grade 8 — Sampaguita",
-    lrn: "LRN-2024-004",
-    reasons: ["OMR scores below 40%", "Reading accuracy < 60%"],
-    deficiencies: "Basic Operations and Decoding",
-    intervention: 'Intensive numeracy drills & one-on-one reading sessions',
-  },
-  {
-    name: "Elena Torres",
-    risk: "High",
-    grade: "Grade 8 — Rosal",
-    lrn: "LRN-2024-007",
-    reasons: ["Frustration level in reading", "Low comprehension scores"],
-    deficiencies: "Vocabulary and Reading Comprehension",
-    intervention: 'Vocabulary building activities & guided reading | ARAL Program',
-  },
-  {
-    name: "Sofia Bautista",
-    risk: "At Risk",
-    grade: "Grade 9 — Sampaguita",
-    lrn: "LRN-2024-008",
-    reasons: ["OMR: Developing", "Moderate reading pauses"],
-    deficiencies: "Measurement and Earth Science",
-    intervention: 'Supplementary modules & peer tutoring sessions',
-  },
-  {
-    name: "Jose Ramos",
-    risk: "At Risk",
-    grade: "Grade 7 — Ilang-Ilang",
-    lrn: "LRN-2024-006",
-    reasons: ["Below average fluency", "OMR: Approaching"],
-    deficiencies: "Number Sense and Phonics",
-    intervention: 'Flash card drills & phonics-based reading program',
-  },
-  {
-    name: "Miguel Flores",
-    risk: "At Risk",
-    grade: "Grade 8 — Sampaguita",
-    lrn: "LRN-2024-010",
-    reasons: ["OMR scores declining", "Frequent reading hesitations"],
-    deficiencies: "Fractions and Decoding",
-    intervention: 'Math manipulatives & repeated reading practice',
-  },
-];
+interface Flagged {
+  name: string;
+  risk: string;
+  grade: string;
+  lrn: string;
+  reasons: string[];
+  deficiencies: string;
+  intervention: string;
+}
 
 const riskConfig: Record<string, { bg: string; text: string; border: string }> = {
   High: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200" },
@@ -75,6 +27,33 @@ const riskConfig: Record<string, { bg: string; text: string; border: string }> =
 export default function LearningRecoveryPage() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
+  const [data, setData] = useState<{
+    stats: { flagged: number; readingFrustration: number; lowOmr: number };
+    flaggedStudents: Flagged[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (gradeFilter) params.set("grade", gradeFilter);
+        if (sectionFilter) params.set("section", sectionFilter);
+        const res = await fetch(`/api/teacher/learning-recovery?${params.toString()}`);
+        const json = await res.json();
+        if (json.success) setData(json.data);
+      } catch (e) {
+        console.error("Failed to fetch learning recovery data:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [gradeFilter, sectionFilter]);
+
+  const stats = data?.stats ?? { flagged: 0, readingFrustration: 0, lowOmr: 0 };
+  const flaggedStudents = data?.flaggedStudents ?? [];
 
   return (
     <>
@@ -92,7 +71,10 @@ export default function LearningRecoveryPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
               <Printer className="h-4 w-4" />
               Print List
             </button>
@@ -128,7 +110,9 @@ export default function LearningRecoveryPage() {
                 <p className="text-sm font-medium text-gray-500">
                   Flagged Students
                 </p>
-                <p className="mt-2 text-3xl font-bold text-gray-900">6</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {stats.flagged}
+                </p>
               </div>
               <AlertTriangle className="h-5 w-5 text-red-500" />
             </div>
@@ -139,7 +123,9 @@ export default function LearningRecoveryPage() {
                 <p className="text-sm font-medium text-gray-500">
                   Reading Frustration
                 </p>
-                <p className="mt-2 text-3xl font-bold text-gray-900">14</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {stats.readingFrustration}
+                </p>
               </div>
               <BookOpen className="h-5 w-5 text-amber-500" />
             </div>
@@ -150,7 +136,9 @@ export default function LearningRecoveryPage() {
                 <p className="text-sm font-medium text-gray-500">
                   Low OMR (&lt;60%)
                 </p>
-                <p className="mt-2 text-3xl font-bold text-gray-900">10</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {stats.lowOmr}
+                </p>
               </div>
               <FileText className="h-5 w-5 text-blue-500" />
             </div>
@@ -169,56 +157,63 @@ export default function LearningRecoveryPage() {
             </p>
           </div>
 
-          <div className="divide-y divide-gray-100">
-            {flaggedStudents.map((student, i) => {
-              const riskStyle = riskConfig[student.risk] ?? riskConfig["At Risk"];
-              return (
-                <div
-                  key={i}
-                  className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  {/* Left: Student info */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2.5">
-                      <h4 className="text-sm font-semibold text-gray-900">
-                        {student.name}
-                      </h4>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskStyle.bg} ${riskStyle.text} ${riskStyle.border}`}
-                      >
-                        {student.risk}
-                      </span>
+          {loading ? (
+            <div className="flex h-48 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+            </div>
+          ) : flaggedStudents.length === 0 ? (
+            <p className="px-6 py-10 text-center text-sm text-gray-400">
+              No flagged students for the current filters.
+            </p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {flaggedStudents.map((student, i) => {
+                const riskStyle = riskConfig[student.risk] ?? riskConfig["At Risk"];
+                return (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    {/* Left: Student info */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2.5">
+                        <h4 className="text-sm font-semibold text-gray-900">
+                          {student.name}
+                        </h4>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskStyle.bg} ${riskStyle.text} ${riskStyle.border}`}
+                        >
+                          {student.risk}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {student.grade} · ID: {student.lrn}
+                      </p>
+                      <ul className="mt-2 space-y-0.5">
+                        {student.reasons.map((r, j) => (
+                          <li key={j} className="text-xs text-gray-500">
+                            •{r}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-xs text-gray-500">
+                        <span className="font-medium text-gray-700">Deficiencies:</span>{" "}
+                        {student.deficiencies}
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {student.grade} · ID: {student.lrn}
-                    </p>
-                    <ul className="mt-2 space-y-0.5">
-                      {student.reasons.map((r, j) => (
-                        <li key={j} className="text-xs text-gray-500">
-                          •{r}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-2 text-xs text-gray-500">
-                      <span className="font-medium text-gray-700">Deficiencies:</span>{" "}
-                      {student.deficiencies}
-                    </p>
-                  </div>
 
-                  {/* Right: Suggested intervention */}
-                  <div className="sm:w-72 sm:text-right">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      📋 Suggested Intervention
-                    </p>
-                    <p className="text-xs text-gray-600">{student.intervention}</p>
-                    <button className="mt-3 rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]">
-                      Assign
-                    </button>
+                    {/* Right: Suggested intervention */}
+                    <div className="sm:w-72 sm:text-right">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        📋 Suggested Intervention
+                      </p>
+                      <p className="text-xs text-gray-600">{student.intervention}</p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </main>
     </>

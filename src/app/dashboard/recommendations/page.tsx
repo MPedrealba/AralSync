@@ -1,106 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
-import { Play, FileText, Puzzle, BookOpen } from "lucide-react";
+import { Play, FileText, Puzzle, BookOpen, CheckCircle2 } from "lucide-react";
 
-/* ──── Tab types ──── */
 const tabs = ["Videos", "Quizzes", "Activities", "Modules"] as const;
 type Tab = (typeof tabs)[number];
 
-/* ──── Mock recommendation data ──── */
-const videoItems = [
-  {
-    id: 1,
-    title: "Phonics Foundation: Blends & Digraphs",
-    description:
-      "An animated video series covering consonant blends and diagraphs for early readers.",
-    thumbnail: "CB",
-    duration: "Video",
-  },
-  {
-    id: 2,
-    title: "Number Sense: Place Value Basics",
-    description:
-      "Visual explainer on place value using real-life objects and real-world examples.",
-    thumbnail: "PV",
-    duration: "Video",
-  },
-  {
-    id: 3,
-    title: "Reading Fluency: Repeated Reading Technique",
-    description:
-      "Demonstrates the repeated reading strategy to improve speed and comprehension.",
-    thumbnail: "RF",
-    duration: "Video",
-  },
-];
-
-const quizItems = [
-  {
-    id: 1,
-    title: "Basic Numeracy Skills Check",
-    description: "10-question quiz covering addition, subtraction, and number patterns.",
-    items: "10 questions",
-  },
-  {
-    id: 2,
-    title: "Reading Comprehension Quiz",
-    description: "Short passages with inference and detail questions for Grade 7-8.",
-    items: "8 questions",
-  },
-  {
-    id: 3,
-    title: "Science Vocabulary Match",
-    description: "Match science terms to their definitions across key topics.",
-    items: "15 questions",
-  },
-];
-
-const activityItems = [
-  {
-    id: 1,
-    title: "Word Bingo",
-    description: "Interactive word recognition game using high-frequency Dolch words.",
-    type: "Game",
-  },
-  {
-    id: 2,
-    title: "Math Puzzle Sheets",
-    description: "Printable worksheets with cross-number puzzles and logic problems.",
-    type: "Worksheet",
-  },
-  {
-    id: 3,
-    title: "Story Sequencing Cards",
-    description: "Cut-and-arrange activity for building narrative comprehension skills.",
-    type: "Hands-on",
-  },
-];
-
-const moduleItems = [
-  {
-    id: 1,
-    title: "ARAL Numeracy Module 1",
-    description: "DepEd-aligned module covering basic operations and number sense.",
-    lessons: "5 lessons",
-  },
-  {
-    id: 2,
-    title: "ARAL Reading Module 1",
-    description: "Structured literacy module with phonics, fluency, and comprehension.",
-    lessons: "6 lessons",
-  },
-  {
-    id: 3,
-    title: "Science Remediation Pack",
-    description: "Self-paced module on living things, matter, and scientific processes.",
-    lessons: "4 lessons",
-  },
-];
+interface RecItem {
+  id: string;
+  title: string;
+  description: string;
+  subject: string;
+  kind: string;
+  meta: { items?: number; lessons?: number; duration?: string; level?: string };
+}
 
 export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Videos");
+  const [data, setData] = useState<{
+    videos: RecItem[];
+    quizzes: RecItem[];
+    activities: RecItem[];
+    modules: RecItem[];
+  } | null>(null);
+  const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [recRes, stuRes] = await Promise.all([
+          fetch("/api/teacher/recommendations"),
+          fetch("/api/teacher/learners"),
+        ]);
+        const recJson = await recRes.json();
+        const stuJson = await stuRes.json();
+        if (recJson.success) setData(recJson.data);
+        if (stuJson.success) {
+          setStudents(
+            stuJson.data.map((s: any) => ({ id: s.studentId, name: s.name }))
+          );
+        }
+      } catch (e) {
+        console.error("Failed to load recommendations:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const assign = async (item: RecItem) => {
+    if (!selectedStudent) {
+      setMessage("Please select a learner to assign to.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/teacher/recommendations/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendationId: item.id, studentId: selectedStudent }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMessage(`Assigned "${item.title}" successfully.`);
+      } else {
+        setMessage(json.error || "Assignment failed.");
+      }
+    } catch (e) {
+      setMessage("Assignment failed.");
+    }
+  };
+
+  const itemsByTab: Record<Tab, RecItem[]> = {
+    Videos: data?.videos ?? [],
+    Quizzes: data?.quizzes ?? [],
+    Activities: data?.activities ?? [],
+    Modules: data?.modules ?? [],
+  };
 
   return (
     <>
@@ -116,12 +96,40 @@ export default function RecommendationsPage() {
           </p>
         </div>
 
+        {/* Learner picker */}
+        <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-medium text-gray-700">
+            Assign to learner:
+          </p>
+          <select
+            value={selectedStudent}
+            onChange={(e) => setSelectedStudent(e.target.value)}
+            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 sm:min-w-[240px]"
+          >
+            <option value="">Select a learner…</option>
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {message && (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" />
+              {message}
+            </span>
+          )}
+        </div>
+
         {/* Tabs */}
         <div className="flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm w-fit">
           {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                setMessage("");
+              }}
               className={`rounded-lg px-5 py-2 text-sm font-medium transition-all ${
                 activeTab === tab
                   ? "bg-blue-600 text-white shadow-sm"
@@ -133,109 +141,50 @@ export default function RecommendationsPage() {
           ))}
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "Videos" && (
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+          </div>
+        ) : itemsByTab[activeTab].length === 0 ? (
+          <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-400">
+            No {activeTab.toLowerCase()} in the library yet.
+          </div>
+        ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {videoItems.map((v) => (
+            {itemsByTab[activeTab].map((item) => (
               <div
-                key={v.id}
-                className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md"
+                key={item.id}
+                className="flex flex-col rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
               >
-                {/* Thumbnail */}
-                <div className="relative flex h-40 items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/80 shadow-md backdrop-blur-sm">
-                    <Play className="h-6 w-6 text-blue-600 ml-0.5" />
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+                    {activeTab === "Videos" && <Play className="h-5 w-5 text-blue-600" />}
+                    {activeTab === "Quizzes" && <FileText className="h-5 w-5 text-purple-600" />}
+                    {activeTab === "Activities" && <Puzzle className="h-5 w-5 text-amber-600" />}
+                    {activeTab === "Modules" && <BookOpen className="h-5 w-5 text-emerald-600" />}
                   </div>
-                  <span className="absolute right-3 top-3 rounded-md bg-white/80 px-2 py-0.5 text-[11px] font-medium text-gray-600 backdrop-blur-sm">
-                    {v.duration}
+                  <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                    {item.subject}
                   </span>
                 </div>
-                <div className="p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    {v.title}
-                  </h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
-                    {v.description}
-                  </p>
-                  <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]">
-                    Assign to Learner
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === "Quizzes" && (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {quizItems.map((q) => (
-              <div
-                key={q.id}
-                className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
-                  <FileText className="h-5 w-5 text-purple-600" />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">
-                  {q.title}
-                </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
-                  {q.description}
+                <h3 className="text-sm font-semibold text-gray-900">{item.title}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-gray-500">
+                  {item.description}
                 </p>
-                <p className="mt-2 text-xs text-gray-400">{q.items}</p>
-                <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]">
-                  Assign to Learner
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === "Activities" && (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {activityItems.map((a) => (
-              <div
-                key={a.id}
-                className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
-                  <Puzzle className="h-5 w-5 text-amber-600" />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">
-                  {a.title}
-                </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
-                  {a.description}
+                <p className="mt-2 text-xs text-gray-400">
+                  {activeTab === "Videos" && (item.meta.duration || "Video")}
+                  {activeTab === "Quizzes" && item.meta.items
+                    ? `${item.meta.items} questions`
+                    : ""}
+                  {activeTab === "Modules" && item.meta.lessons
+                    ? `${item.meta.lessons} lessons`
+                    : ""}
+                  {activeTab === "Activities" && (item.meta.duration || "Hands-on")}
                 </p>
-                <span className="mt-2 inline-block rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                  {a.type}
-                </span>
-                <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]">
-                  Assign to Learner
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === "Modules" && (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {moduleItems.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50">
-                  <BookOpen className="h-5 w-5 text-emerald-600" />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">
-                  {m.title}
-                </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
-                  {m.description}
-                </p>
-                <p className="mt-2 text-xs text-gray-400">{m.lessons}</p>
-                <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]">
+                <button
+                  onClick={() => assign(item)}
+                  className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]"
+                >
                   Assign to Learner
                 </button>
               </div>
