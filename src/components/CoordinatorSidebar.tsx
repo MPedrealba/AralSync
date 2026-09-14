@@ -62,7 +62,7 @@ export default function CoordinatorSidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-gray-200/80 bg-white">
       {/* Brand */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#1a3590] via-[#172e7a] to-[#112264] px-5 py-5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#be123c] via-[#9f1239] to-[#881337] px-5 py-5">
         <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-xl" />
         <div className="relative flex items-center gap-2.5">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
@@ -74,7 +74,7 @@ export default function CoordinatorSidebar() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-white">AralSync</h1>
-            <p className="text-[10px] font-medium uppercase tracking-widest text-[#b8c9f5]">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-[#fecdd3]">
               ARAL Coordinator
             </p>
           </div>
@@ -102,18 +102,18 @@ export default function CoordinatorSidebar() {
                       href={item.href}
                       className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                         isActive
-                          ? "bg-[#1e3a8a]/10 font-semibold text-[#1a3590]"
+                          ? "bg-[#e11d48]/10 font-semibold text-[#be123c]"
                           : "font-normal text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
                       <span
-                        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#1e3a8a] transition-all duration-150 ${
+                        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#e11d48] transition-all duration-150 ${
                           isActive ? "opacity-100" : "opacity-0"
                         }`}
                       />
                       <item.icon
                         className={`h-[18px] w-[18px] flex-shrink-0 ${
-                          isActive ? "text-[#1e3a8a]" : "text-gray-400 group-hover:text-gray-500"
+                          isActive ? "text-[#e11d48]" : "text-gray-400 group-hover:text-gray-500"
                         }`}
                       />
                       {item.name}

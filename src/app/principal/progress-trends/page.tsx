@@ -111,7 +111,7 @@ export default function ProgressTrendsPage() {
                 <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} domain={[0, 100]} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-                <Line type="monotone" dataKey="Reading" stroke="#1e3a8a" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Reading" stroke="#e11d48" strokeWidth={2} dot={{ r: 3 }} />
                 <Line type="monotone" dataKey="Science" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
                 <Line type="monotone" dataKey="Math" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
@@ -134,7 +134,7 @@ export default function ProgressTrendsPage() {
                   <Tooltip contentStyle={tooltipStyle} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                   <Bar dataKey="pretest" name="Pre-test" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="posttest" name="Post-test" fill="#1e3a8a" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="posttest" name="Post-test" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

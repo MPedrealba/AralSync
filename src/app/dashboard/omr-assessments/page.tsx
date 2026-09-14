@@ -2,13 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
-import OMRScanner from "@/components/OMRScanner";
 import {
   Upload,
-  Camera,
   Search,
   Plus,
-  ChevronDown,
   FileText,
   ScanLine,
   X,
@@ -18,10 +15,11 @@ import {
   Wand2,
   BookOpen,
   PenLine,
+  Trash2,
 } from "lucide-react";
 
 /* ──── Tab names ──── */
-const tabs = ["New Scan", "Results/History", "Generate Questionnaire", "Answer Keys"] as const;
+const tabs = ["Results/History", "Generate Questionnaire", "Answer Keys"] as const;
 type Tab = (typeof tabs)[number];
 
 /* ──── Types ──── */
@@ -50,6 +48,7 @@ interface AnswerKeyRow {
   title: string;
   subject: string;
   items: number;
+  answers?: (string | null)[];
   created: string;
 }
 
@@ -67,7 +66,7 @@ const fmtShort = (d: string) => {
 };
 
 export default function OMRAssessmentsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("New Scan");
+  const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
 
   return (
     <>
@@ -77,8 +76,8 @@ export default function OMRAssessmentsPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">OMR Assessments</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Scan, score, and manage your OMR-based assessments for learning
-            recovery tracking.
+            Review results, generate questionnaires, and manage answer keys for
+            OMR screenings. Scanning lives on the dedicated OMR Scan page.
           </p>
         </div>
 
@@ -100,180 +99,10 @@ export default function OMRAssessmentsPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === "New Scan" && <NewScanTab />}
         {activeTab === "Results/History" && <ResultsTab />}
         {activeTab === "Generate Questionnaire" && <GenerateTab />}
         {activeTab === "Answer Keys" && <AnswerKeysTab />}
       </main>
-    </>
-  );
-}
-
-/* ━━━ TAB 1: NEW SCAN ━━━ */
-function NewScanTab() {
-  const [showOMR, setShowOMR] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
-  };
-
-  const handleRemoveFile = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setSelectedFile(null);
-    setPreviewUrl(null);
-  };
-
-  return (
-    <>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Upload Area — 3/5 */}
-        <div className="lg:col-span-3">
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h3 className="mb-1 text-base font-semibold text-gray-900">
-              Upload or Capture OMR Sheet
-            </h3>
-            <p className="mb-5 text-sm text-gray-400">
-              Upload a scanned OMR sheet image or take a photo directly.
-            </p>
-
-            {!previewUrl ? (
-              <>
-                <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-16 transition-colors hover:border-blue-500/40 hover:bg-blue-50/20 cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
-                    <Upload className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700">
-                    Click to upload or drag and drop
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    PNG, JPG or PDF (max 10MB)
-                  </p>
-                </label>
-
-                <div className="mt-5 flex items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                    <Upload className="h-4 w-4" />
-                    Browse Files
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                  <button className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                    <Camera className="h-4 w-4" />
-                    Use Camera
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-4 rounded-xl border border-blue-200 bg-slate-50 p-6">
-                <img
-                  src={previewUrl}
-                  alt="OMR Sheet Preview"
-                  className="max-h-56 w-auto rounded-lg border border-blue-200 bg-slate-50 object-contain shadow-sm"
-                />
-                <p className="text-sm font-medium text-gray-700 truncate max-w-full">
-                  {selectedFile?.name}
-                </p>
-                <button
-                  onClick={handleRemoveFile}
-                  className="inline-flex items-center gap-1.5 text-red-600 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                  Remove / Retake
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Assessment Details — 2/5 */}
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h3 className="mb-5 text-base font-semibold text-gray-900">
-              Assessment Details
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Assessment Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Diagnostic Test 1"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Subject
-                </label>
-                <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                  <option>Select subject</option>
-                  <option>Numeracy</option>
-                  <option>Reading</option>
-                  <option>Science</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Grade Level
-                </label>
-                <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                  <option>Select grade</option>
-                  <option>Grade 7</option>
-                  <option>Grade 8</option>
-                  <option>Grade 9</option>
-                  <option>Grade 10</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Section
-                </label>
-                <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                  <option>Select section</option>
-                  <option>Rosal</option>
-                  <option>Sampaguita</option>
-                  <option>Ilang-Ilang</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowOMR(true)}
-              disabled={!selectedFile}
-              className="mt-6 w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Start Scanning
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* OMR Scanner Modal */}
-      <OMRScanner isOpen={showOMR} onClose={() => setShowOMR(false)} />
     </>
   );
 }
@@ -583,11 +412,29 @@ function AnswerKeysTab() {
   const [keys, setKeys] = useState<AnswerKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Manual "Add Answer Key" modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newSubject, setNewSubject] = useState("Math");
-  const [newItems, setNewItems] = useState(50);
+  const [newItems, setNewItems] = useState(20);
+  const [answersText, setAnswersText] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState<{ ok: boolean; text: string; blockedId?: string } | null>(null);
+
+  // "Scan Key Sheet" modal
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanFile, setScanFile] = useState<File | null>(null);
+  const [scanPreview, setScanPreview] = useState<string | null>(null);
+  const [scanTitle, setScanTitle] = useState("");
+  const [scanSubject, setScanSubject] = useState("Math");
+  const [scanItems, setScanItems] = useState(20);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [detected, setDetected] = useState<{ item: number; letter: string | null }[] | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -606,30 +453,165 @@ function AnswerKeysTab() {
 
   useEffect(() => { load(); }, []);
 
+  /** Parse pasted/typed letters — "A B C D", "AB,CD", "ABCD" → array of A-D chars. */
+  const parseLetters = (raw: string, items: number): (string | null)[] => {
+    const chars = raw.toUpperCase().replace(/[^A-D]/g, "").split("");
+    return [...chars, ...Array(Math.max(0, items - chars.length)).fill(null)].slice(0, items);
+  };
+
+  const saveKey = async ({
+    title,
+    subject,
+    answers,
+  }: {
+    title: string;
+    subject: string;
+    answers: (string | null)[];
+  }): Promise<boolean> => {
+    const res = await fetch("/api/teacher/answer-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, subject, items: answers.length, answers }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      setKeys((prev) => [json.data, ...prev]);
+      return true;
+    }
+    return false;
+  };
+
+  /* ── Manual create: paste/type the real answer letters ── */
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
+    setSaveError("");
+    const letters = parseLetters(answersText, newItems);
+    const provided = letters.filter(Boolean).length;
+    if (provided < newItems) {
+      setSaveError(`Provide a letter for every item — found ${provided} of ${newItems}.`);
+      return;
+    }
     setSaving(true);
     try {
-      const res = await fetch("/api/teacher/answer-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          subject: newSubject,
-          items: newItems,
-          answers: Array.from({ length: newItems }, () => "A"), // placeholder
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setKeys((prev) => [json.data, ...prev]);
+      const okSave = await saveKey({ title: newTitle.trim(), subject: newSubject, answers: letters });
+      if (okSave) {
         setShowAddModal(false);
         setNewTitle("");
+        setAnswersText("");
         setNewSubject("Math");
-        setNewItems(50);
+        setNewItems(20);
+      } else setSaveError("Failed to save the answer key.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── Scan a pre-bubbled key sheet → review & fix the detected grid ── */
+  const handleScanFile = (f: File | null) => {
+    setScanFile(f);
+    if (scanPreview) URL.revokeObjectURL(scanPreview);
+    setScanPreview(f ? URL.createObjectURL(f) : null);
+    setDetected(null);
+    setScanError("");
+  };
+
+  const handleDetect = async () => {
+    if (!scanFile) {
+      setScanError("Upload a scanned key sheet image first.");
+      return;
+    }
+    setScanning(true);
+    setScanError("");
+    setDetected(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", scanFile);
+      fd.append("items", String(scanItems));
+      fd.append("title", scanTitle);
+      fd.append("subject", scanSubject);
+      const res = await fetch("/api/teacher/answer-keys/scan", { method: "POST", body: fd });
+      const json = await res.json();
+      if (json.success) {
+        setDetected(json.data.detected);
+        setScanTitle(json.data.title || scanTitle);
+      } else {
+        setScanError(
+          json.error || "Detection failed. Make sure the Python OMR service (port 8000) is running."
+        );
       }
     } catch {
-      // silent
+      setScanError("Failed to reach the OMR service.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const updateLetter = (item: number, value: string) => {
+    const v = value.toUpperCase().replace(/[^A-D]/g, "").slice(0, 1);
+    setDetected((prev) =>
+      prev ? prev.map((d) => (d.item === item ? { ...d, letter: v || null } : d)) : prev
+    );
+  };
+
+  /* ── Delete a key — blocked when referenced; pass force=true to override ── */
+  const handleDelete = async (id: string, force = false) => {
+    setDeletingId(id);
+    setDeleteMsg(null);
+    try {
+      const url = `/api/teacher/answer-keys/${id}${force ? "?force=true" : ""}`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = await res.json();
+      if (json.success) {
+        setKeys((prev) => prev.filter((k) => k.id !== id));
+        const detached = json.data?.detached ?? 0;
+        setDeleteMsg({
+          ok: true,
+          text: `Answer key deleted${
+            detached > 0 ? ` — ${detached} linked assessment(s) unlinked` : ""
+          }.`,
+        });
+      } else if (res.status === 409 && json.blocked) {
+        setDeleteMsg({
+          ok: false,
+          text: json.error || "Cannot delete — this key was used on existing assessments.",
+          blockedId: id,
+        });
+      } else {
+        setDeleteMsg({ ok: false, text: json.error || "Failed to delete the answer key." });
+      }
+    } catch {
+      setDeleteMsg({ ok: false, text: "Failed to delete the answer key." });
+    } finally {
+      setDeletingId(null);
+      setConfirmId(null);
+    }
+  };
+
+  const handleSaveScan = async () => {
+    if (!detected) return;
+    setSaveError("");
+    const answers = detected.map((d) => d.letter);
+    const blanks = answers.filter((a) => !a).length;
+    if (blanks > 0) {
+      setSaveError(`Complete all letters before saving — ${blanks} item(s) still blank.`);
+      return;
+    }
+    setSaving(true);
+    try {
+      const okSave = await saveKey({
+        title: scanTitle.trim() || "Scanned Answer Key",
+        subject: scanSubject,
+        answers,
+      });
+      if (okSave) {
+        setShowScanModal(false);
+        setScanFile(null);
+        setScanPreview(null);
+        setDetected(null);
+        setScanTitle("");
+        setScanSubject("Math");
+        setScanItems(20);
+      } else setSaveError("Failed to save the scanned answer key.");
     } finally {
       setSaving(false);
     }
@@ -639,20 +621,51 @@ function AnswerKeysTab() {
     <>
       <div>
         {/* Header */}
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-gray-500">
-              Manage your answer keys for scoring OMR sheets.
+              Manage your answer keys for scoring OMR sheets — read them from a
+              scanned key sheet or type/paste the letters.
             </p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            Add Answer Key
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowScanModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98]"
+            >
+              <ScanLine className="h-4 w-4" />
+              Scan Key Sheet
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-blue-200 hover:text-blue-600 active:scale-[0.98]"
+            >
+              <PenLine className="h-4 w-4" />
+              Add Answer Key
+            </button>
+          </div>
         </div>
+
+        {deleteMsg && (
+          <div
+            className={`mb-4 rounded-xl border p-4 text-sm font-medium ${
+              deleteMsg.ok
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-red-200 bg-red-50 text-red-600"
+            }`}
+          >
+            {deleteMsg.text}
+            {deleteMsg.blockedId && (
+              <button
+                onClick={() => handleDelete(deleteMsg.blockedId!, true)}
+                disabled={!!deletingId}
+                className="ml-3 inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingId === deleteMsg.blockedId ? "Deleting…" : "Force Delete"}
+              </button>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex h-48 items-center justify-center rounded-xl border border-gray-100 bg-white">
@@ -671,7 +684,8 @@ function AnswerKeysTab() {
           </div>
         ) : keys.length === 0 ? (
           <div className="rounded-xl border border-gray-100 bg-white py-12 text-center text-sm text-gray-400">
-            No answer keys yet. Click &quot;Add Answer Key&quot; to create one.
+            No answer keys yet. Scan a pre-bubbled key sheet or click &quot;Add
+            Answer Key&quot; to type the letters.
           </div>
         ) : (
           <div className="space-y-3">
@@ -689,7 +703,52 @@ function AnswerKeysTab() {
                     <p className="text-xs text-gray-400">
                       {ak.items} items • {ak.subject} • Created {fmtShort(ak.created)}
                     </p>
+                    {ak.answers && ak.answers.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                        {ak.answers.slice(0, 10).map((a, i) => (
+                          <span
+                            key={i}
+                            className="flex h-5 min-w-5 items-center justify-center rounded border border-gray-200 bg-gray-50 px-1 text-[10px] font-bold text-gray-600"
+                          >
+                            {i + 1}{a ?? "—"}
+                          </span>
+                        ))}
+                        {ak.answers.length > 10 && (
+                          <span className="text-[10px] text-gray-400">
+                            +{ak.answers.length - 10} more
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
+                </div>
+                <div className="flex shrink-0 items-center">
+                  {confirmId === ak.id ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDelete(ak.id)}
+                        disabled={deletingId === ak.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingId === ak.id ? "Deleting…" : "Delete"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(ak.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                      title="Delete answer key"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -697,13 +756,15 @@ function AnswerKeysTab() {
         )}
       </div>
 
-      {/* Add Answer Key Modal */}
+      {/* Manual Add Answer Key Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
           <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-gray-900">Add Answer Key</h2>
-            <p className="mt-1 text-sm text-gray-400">Create a new answer key for OMR scoring.</p>
+            <p className="mt-1 text-sm text-gray-400">
+              Type or paste the answer letters — one per item.
+            </p>
 
             <div className="mt-5 space-y-4">
               <div>
@@ -716,34 +777,53 @@ function AnswerKeysTab() {
                   className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                 />
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</label>
-                <select
-                  value={newSubject}
-                  onChange={(e) => setNewSubject(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                >
-                  <option value="Math">Numeracy</option>
-                  <option value="Reading">Reading</option>
-                  <option value="Science">Science</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</label>
+                  <select
+                    value={newSubject}
+                    onChange={(e) => setNewSubject(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                  >
+                    <option value="Math">Numeracy</option>
+                    <option value="Reading">Reading</option>
+                    <option value="Science">Science</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Number of Items</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={newItems}
+                    onChange={(e) => setNewItems(parseInt(e.target.value) || 20)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                  />
+                </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Number of Items</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={newItems}
-                  onChange={(e) => setNewItems(parseInt(e.target.value) || 50)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Answers</label>
+                <textarea
+                  value={answersText}
+                  onChange={(e) => setAnswersText(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. A B C D A B C D A B …"
+                  className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-mono text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                 />
+                <p className="mt-1 text-xs text-gray-400">
+                  Letters {newItems}, one per item. Separators (spaces, commas,
+                  newlines) are ignored — only A–D is kept.
+                </p>
               </div>
+              {saveError && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{saveError}</p>
+              )}
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setSaveError(""); }}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
               >
                 Cancel
@@ -756,6 +836,172 @@ function AnswerKeysTab() {
                 {saving ? "Saving…" : "Create"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scan Key Sheet Modal */}
+      {showScanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowScanModal(false)} />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900">Scan Key Sheet</h2>
+            <p className="mt-1 text-sm text-gray-400">
+              Upload the scanned sheet where the correct answers are pre-bubbled.
+              Detect the bubbles, review the grid, and save it as an answer key.
+            </p>
+
+            {/* Step 1 — details + upload */}
+            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Title (optional)</label>
+                  <input
+                    type="text"
+                    value={scanTitle}
+                    onChange={(e) => setScanTitle(e.target.value)}
+                    placeholder="e.g. Diagnostic Test 1 — Key"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</label>
+                    <select
+                      value={scanSubject}
+                      onChange={(e) => setScanSubject(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                    >
+                      <option value="Math">Numeracy</option>
+                      <option value="Reading">Reading</option>
+                      <option value="Science">Science</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Items</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={scanItems}
+                      onChange={(e) => setScanItems(parseInt(e.target.value) || 20)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                    />
+                  </div>
+                </div>
+                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-10 transition-colors hover:border-blue-500/40 hover:bg-blue-50/20">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => handleScanFile(e.target.files?.[0] ?? null)}
+                  />
+                  <Upload className="mb-2 h-6 w-6 text-blue-600" />
+                  <p className="text-sm font-medium text-gray-700">
+                    {scanFile ? scanFile.name : "Click to upload the key sheet"}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">PNG, JPG or JPEG</p>
+                </label>
+              </div>
+
+              {/* Preview + detect actions */}
+              <div>
+                {scanPreview ? (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-blue-200 bg-slate-50 p-4">
+                    <img
+                      src={scanPreview}
+                      alt="Key sheet preview"
+                      className="max-h-44 w-auto rounded-lg border border-blue-200 bg-slate-50 object-contain shadow-sm"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleDetect}
+                        disabled={scanning || !scanFile}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {scanning ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ScanLine className="h-4 w-4" />
+                        )}
+                        {scanning ? "Detecting…" : "Detect Letters"}
+                      </button>
+                      <button
+                        onClick={() => handleScanFile(null)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                      >
+                        <X className="h-4 w-4" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex h-full min-h-32 items-center justify-center rounded-xl border border-gray-100 bg-gray-50/60 px-4 text-center text-xs text-gray-400">
+                    The scanned image preview will appear here. Detection reads
+                    the pre-bubbled correct answers via the OMR service.
+                  </div>
+                )}
+                {scanning && (
+                  <p className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Reading bubbles from the key sheet…
+                  </p>
+                )}
+                {scanError && (
+                  <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                    {scanError}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Step 2 — review detected grid */}
+            {detected && (
+              <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Review Detected Answers
+                  </h3>
+                  <span className="text-xs text-gray-400">
+                    Fix any misreads before saving.
+                  </span>
+                </div>
+                <div className="grid max-h-72 grid-cols-5 gap-2 overflow-y-auto pr-1 sm:grid-cols-6 md:grid-cols-8">
+                  {detected.map((d) => (
+                    <label key={d.item} className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] font-semibold text-gray-400">{d.item}</span>
+                      <input
+                        value={d.letter ?? ""}
+                        onChange={(e) => updateLetter(d.item, e.target.value)}
+                        maxLength={1}
+                        placeholder="—"
+                        className="h-9 w-9 rounded-lg border border-gray-200 bg-white text-center font-mono text-sm font-bold uppercase text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
+                  <button
+                    onClick={() => setDetected(null)}
+                    disabled={saving}
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                  >
+                    Re-scan
+                  </button>
+                  <button
+                    onClick={handleSaveScan}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {saving ? "Saving…" : "Save as Answer Key"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {saveError && detected && (
+              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{saveError}</p>
+            )}
           </div>
         </div>
       )}

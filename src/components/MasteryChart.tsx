@@ -114,7 +114,7 @@ export default function MasteryChart() {
             />
             <Bar
               dataKey="Science"
-              fill="#1e3a8a"
+              fill="#e11d48"
               radius={[6, 6, 0, 0]}
               maxBarSize={32}
             />

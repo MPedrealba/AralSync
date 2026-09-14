@@ -236,7 +236,7 @@ export default function DashboardPage() {
                   />
                   <Bar
                     dataKey="Numeracy"
-                    fill="#1e3a8a"
+                    fill="#e11d48"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />

@@ -18,21 +18,21 @@
 }
 
 /* ── ARAL Brand Palette ──
-   Re-maps the Tailwind blue scale to the ARAL Program's signature deep
-   navy (outer ring of the logo). Gold accents (#f59e0b family) stay
-   reserved for highlights, warnings, and the amber stat palette. */
+   Re-maps the Tailwind blue scale to the ARAL Program's signature
+   crimson red (the "A" letter in the ARAL logo). Gold accents
+   (#f5b041 family) stay reserved for highlights and the sidebar bar. */
 @theme {
-  --color-blue-50: #eef2fc;
-  --color-blue-100: #dce4f8;
-  --color-blue-200: #b8c9f0;
-  --color-blue-300: #7f95d4;
-  --color-blue-400: #4a66b8;
-  --color-blue-500: #2b4a9e;
-  --color-blue-600: #1e3a8a;
-  --color-blue-700: #172e7a;
-  --color-blue-800: #12245f;
-  --color-blue-900: #0f1f5c;
-  --color-blue-950: #0a1640;
+  --color-blue-50: #fff1f2;
+  --color-blue-100: #ffe4e6;
+  --color-blue-200: #fecdd3;
+  --color-blue-300: #fda4af;
+  --color-blue-400: #fb7185;
+  --color-blue-500: #f43f5e;
+  --color-blue-600: #e11d48;
+  --color-blue-700: #be123c;
+  --color-blue-800: #9f1239;
+  --color-blue-900: #881337;
+  --color-blue-950: #4c0519;
 }
 
 * {
@@ -52,14 +52,14 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Selection & focus polish — ARAL Navy */
+/* Selection & focus polish — ARAL Red */
 ::selection {
-  background: rgb(30 58 138 / 0.15);
-  color: #1e3a8a;
+  background: rgb(225 29 72 / 0.15);
+  color: #e11d48;
 }
 
 :focus-visible {
-  outline: 2px solid rgb(30 58 138 / 0.6);
+  outline: 2px solid rgb(225 29 72 / 0.6);
   outline-offset: 2px;
 }
 

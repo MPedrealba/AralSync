@@ -173,7 +173,7 @@ export default function PrincipalDashboardPage() {
                   <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} domain={[0, 100]} />
                   <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
                   <Bar dataKey="avg" name="Average" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                    <Cell fill="#1e3a8a" />
+                    <Cell fill="#e11d48" />
                     <Cell fill="#f59e0b" />
                     <Cell fill="#ef4444" />
                   </Bar>

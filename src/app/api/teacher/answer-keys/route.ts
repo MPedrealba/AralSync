@@ -14,6 +14,7 @@ export async function GET(req: Request) {
       title: k.title,
       subject: k.subject || "—",
       items: k.items ?? k.answers?.length ?? 0,
+      answers: k.answers ?? [],
       modes: k.modes ?? [],
       writtenItems: k.writtenItems ?? [],
       created: k.created,

@@ -6,7 +6,7 @@ import Assessment from '../../../../../models/Assessment';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import User from '../../../../../models/User';
 
-const COLOR = { Math: '#f59e0b', Reading: '#1e3a8a', Science: '#22c55e' } as const;
+const COLOR = { Math: '#f59e0b', Reading: '#e11d48', Science: '#22c55e' } as const;
 const SUBJECTS = ['Math', 'Reading', 'Science'] as const;
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
@@ -221,7 +221,7 @@ export async function GET(req: NextRequest) {
     let learnerGroups: any[] = [];
     const colors: Record<string, string> = {
       'High Performing': '#16a34a',
-      'On Track': '#1e3a8a',
+      'On Track': '#e11d48',
       'Needs Support': '#ef4444',
     };
 

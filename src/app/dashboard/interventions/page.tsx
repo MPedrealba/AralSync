@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
-import { BookOpen, Calculator, FlaskConical } from "lucide-react";
+import { BookOpen, Calculator, FlaskConical, Wand2 } from "lucide-react";
 
 interface Intervention {
   id: string;
@@ -12,6 +12,7 @@ interface Intervention {
   category: string;
   type: string;
   typeIcon: string;
+  weakness: string;
   description: string;
   created: string;
   status: string;
@@ -43,6 +44,8 @@ export default function InterventionsPage() {
   const [learnerFilter, setLearnerFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [assignMsg, setAssignMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -93,6 +96,42 @@ export default function InterventionsPage() {
     }
   };
 
+  /** Run auto-assignment: assign interventions for every learner's weakest competency. */
+  const runAutoAssign = async () => {
+    setAssigning(true);
+    setAssignMsg(null);
+    try {
+      const res = await fetch("/api/teacher/interventions/auto-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const json = await res.json();
+      if (json.success) {
+        const s = json.data.summary;
+        setAssignMsg({
+          ok: true,
+          text: `Assigned ${s.assigned} intervention${
+            s.assigned === 1 ? "" : "s"
+          } based on learner weaknesses${
+            s.skippedActive
+              ? ` · ${s.skippedActive} already covered`
+              : ""
+          }${s.noMaterial ? ` · ${s.noMaterial} had no matching material` : ""}.`,
+        });
+        load();
+      } else {
+        setAssignMsg({
+          ok: false,
+          text: json.error || "Auto-assignment failed.",
+        });
+      }
+    } catch (e) {
+      setAssignMsg({ ok: false, text: "Auto-assignment failed." });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const learners = Array.from(new Set(interventions.map((i) => i.learner)));
   const grades = Array.from(new Set(interventions.map((i) => i.gradeSection)));
 
@@ -116,6 +155,14 @@ export default function InterventionsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={runAutoAssign}
+              disabled={assigning}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Wand2 className="h-4 w-4" />
+              {assigning ? "Assigning..." : "Run Auto-Assign"}
+            </button>
             <select
               value={learnerFilter}
               onChange={(e) => setLearnerFilter(e.target.value)}
@@ -149,6 +196,18 @@ export default function InterventionsPage() {
             </select>
           </div>
         </div>
+
+        {assignMsg && (
+          <div
+            className={`rounded-xl border p-4 text-sm font-medium ${
+              assignMsg.ok
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-red-200 bg-red-50 text-red-600"
+            }`}
+          >
+            {assignMsg.text}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-medium text-red-600">
@@ -213,6 +272,12 @@ export default function InterventionsPage() {
                     <p className="mt-0.5 text-xs font-medium text-blue-600">
                       {item.learner}
                     </p>
+
+                    {item.weakness && (
+                      <span className="mt-2 inline-flex w-fit rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                        Targets: {item.weakness}
+                      </span>
+                    )}
 
                     <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
                       <TypeIcon className="h-3.5 w-3.5" />

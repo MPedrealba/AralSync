@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
         category: i.category || '',
         type: i.type || '',
         typeIcon: iconFor(i),
+        weakness: i.weakness || '',
         description: `${i.category || 'Learning'} material assigned to support ${i.studentId?.name || 'the learner'}.`,
         created,
         status: i.status || 'Not Started',

@@ -271,7 +271,7 @@ export default function ReadingFluencyPage() {
 
         {/* Recorder */}
         <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginTop: "1.5rem", flexWrap: "wrap" }}>
-          <div style={{ width: "74px", height: "74px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#ef4444" : "#1e3a8a", color: "#fff", boxShadow: isRecording ? "0 0 0 6px rgba(239,68,68,0.15)" : "0 0 0 6px rgba(30,58,138,0.12)" }}
+          <div style={{ width: "74px", height: "74px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#ef4444" : "#e11d48", color: "#fff", boxShadow: isRecording ? "0 0 0 6px rgba(239,68,68,0.15)" : "0 0 0 6px rgba(225,29,72,0.12)" }}
             onClick={isRecording ? stopRecording : startRecording}>
             {isRecording ? <Square size={26} /> : <Mic size={26} />}
           </div>

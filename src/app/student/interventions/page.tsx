@@ -48,6 +48,36 @@ export default function InterventionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [markingDone, setMarkingDone] = useState(false);
+  const [starting, setStarting] = useState(false);
+
+  /** Auto-track: clicking "Start" moves the intervention to In Progress. */
+  const handleStart = async (item: Intervention) => {
+    if (item.status !== "Not Started") {
+      setSelected(item);
+      return;
+    }
+    setStarting(true);
+    try {
+      const res = await fetch(`/api/student/interventions/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "In Progress" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setInterventions((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, status: "In Progress" } : i
+          )
+        );
+      }
+    } catch {
+      /* silent — still open the detail view */
+    } finally {
+      setStarting(false);
+      setSelected(item);
+    }
+  };
 
   const handleMarkDone = async (id: string) => {
     setMarkingDone(true);
@@ -134,7 +164,7 @@ export default function InterventionsPage() {
               <div style={{ position: "absolute", bottom: "12px", left: "16px", background: "rgba(0, 0, 0, 0.7)", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.78rem", color: "#ffffff", fontWeight: 600 }}>
                 {s.title} · {s.type} Material
               </div>
-              <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "3px", background: "#1e3a8a" }}></div>
+              <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "3px", background: "#e11d48" }}></div>
             </div>
             <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderTop: "none", borderRadius: "0 0 10px 10px", padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", color: "#4b5563" }}>
               <FileText size={16} color="#6366f1" />
@@ -241,11 +271,12 @@ export default function InterventionsPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem" }}>
                         <span className={`badge ${statusBadge[it.status] || "badge-notstarted"}`}>{it.status}</span>
                         <button
-                          onClick={() => setSelected(it)}
+                          onClick={() => handleStart(it)}
+                          disabled={starting}
                           className={it.status === "Completed" ? "btn btn-outline" : "btn btn-primary"}
                           style={{ padding: "0.25rem 0.85rem", fontSize: "0.78rem" }}
                         >
-                          {it.status === "Completed" ? "View" : it.status === "In Progress" ? "Continue" : "Start"}
+                          {it.status === "Completed" ? "View" : starting ? "…" : it.status === "In Progress" ? "Continue" : "Start"}
                         </button>
                       </div>
                     </div>

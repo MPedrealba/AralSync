@@ -38,7 +38,7 @@ export default function StatCard({
   valueColor = "text-gray-900",
 }: StatCardProps) {
   const palettes: Record<string, { tile: string; bar: string }> = {
-    blue: { tile: "bg-[#eef2fc]", bar: "bg-[#1e3a8a]" },
+    blue: { tile: "bg-[#fff1f2]", bar: "bg-[#e11d48]" },
     emerald: { tile: "bg-emerald-50", bar: "bg-emerald-500" },
     amber: { tile: "bg-amber-50", bar: "bg-amber-500" },
     red: { tile: "bg-red-50", bar: "bg-red-500" },
@@ -79,7 +79,7 @@ export default function StatCard({
             iconBg ?? palette.tile
           } ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-110`}
         >
-          <Icon className={`h-5 w-5 ${iconColor ?? color === "blue" ? "text-[#1e3a8a]" : color === "emerald" ? "text-emerald-600" : color === "amber" ? "text-amber-600" : color === "red" ? "text-red-600" : "text-violet-600"}`} />
+          <Icon className={`h-5 w-5 ${iconColor ?? color === "blue" ? "text-[#e11d48]" : color === "emerald" ? "text-emerald-600" : color === "amber" ? "text-amber-600" : color === "red" ? "text-red-600" : "text-violet-600"}`} />
         </div>
       </div>
     </div>

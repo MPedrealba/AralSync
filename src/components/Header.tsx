@@ -20,7 +20,7 @@ export default function Header({ title }: HeaderProps) {
           <input
             type="text"
             placeholder="Search learners, assessments..."
-            className="h-9 w-64 rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm text-gray-600 shadow-card outline-none placeholder:text-gray-400 focus:border-[#1e3a8a] focus:bg-white focus:ring-2 focus:ring-[#1e3a8a]/15"
+            className="h-9 w-64 rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm text-gray-600 shadow-card outline-none placeholder:text-gray-400 focus:border-[#e11d48] focus:bg-white focus:ring-2 focus:ring-[#e11d48]/15"
           />
         </div>
 

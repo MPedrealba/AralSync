@@ -92,7 +92,7 @@ export default function StudentSidebar() {
                   href={item.href}
                   className={`sidebar-nav-item ${active ? "active" : ""}`}
                 >
-                  <IconComponent size={18} color={active ? "#1e3a8a" : "#6b7280"} />
+                  <IconComponent size={18} color={active ? "#e11d48" : "#6b7280"} />
                   <span>{item.label}</span>
                 </Link>
               );

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   ScanLine,
+  Camera,
   Mic,
   BookOpen,
   BookMarked,
@@ -37,6 +38,7 @@ const allNavSections = [
     label: "ASSESSMENTS",
     items: [
       { name: "OMR Assessments", href: "/dashboard/omr-assessments", icon: ScanLine },
+      { name: "OMR Scan", href: "/dashboard/omr-scan?scan=1", icon: Camera },
       { name: "Reading Fluency", href: "/dashboard/reading-fluency", icon: Mic },
       { name: "Comprehension Check", href: "/dashboard/comprehension", icon: BookOpen },
     ],
@@ -106,7 +108,7 @@ export default function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-gray-200/80 bg-white">
       {/* Brand Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#1a3590] via-[#172e7a] to-[#112264] px-5 py-5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#be123c] via-[#9f1239] to-[#881337] px-5 py-5">
         <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-xl" />
         <div className="relative flex items-center gap-2.5">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
@@ -118,7 +120,7 @@ export default function Sidebar() {
           </div>
           <span className="text-xl font-bold tracking-tight text-white">
             AralSync
-            <span className="block text-[10px] font-medium uppercase tracking-widest text-[#b8c9f5]">
+            <span className="block text-[10px] font-medium uppercase tracking-widest text-[#fecdd3]">
               {portalLabel} Portal
             </span>
           </span>
@@ -139,26 +141,26 @@ export default function Sidebar() {
                 const isActive =
                   item.href === "/dashboard"
                     ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
+                    : pathname.startsWith(item.href.split("?")[0]);
                 return (
                   <li key={item.name}>
                     <Link
                       href={item.href}
                       className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                         isActive
-                          ? "bg-[#1e3a8a]/10 font-semibold text-[#1a3590]"
+                          ? "bg-[#e11d48]/10 font-semibold text-[#be123c]"
                           : "font-normal text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
                       <span
-                        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#1e3a8a] transition-all duration-150 ${
+                        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#e11d48] transition-all duration-150 ${
                           isActive ? "opacity-100" : "opacity-0"
                         }`}
                       />
                       <item.icon
                         className={`h-[18px] w-[18px] flex-shrink-0 ${
                           isActive
-                            ? "text-[#1e3a8a]"
+                            ? "text-[#e11d48]"
                             : "text-gray-400 group-hover:text-gray-500"
                         }`}
                       />

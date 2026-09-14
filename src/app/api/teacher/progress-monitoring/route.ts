@@ -25,19 +25,87 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    let learnerId = searchParams.get('learner');
+    const learnerId = searchParams.get('learner');
 
+    // ── OVERALL VIEW (no learner selected) ──
+    // Aggregate intervention progress across every learner: overall totals,
+    // per-material rollout, and a per-learner breakdown.
     if (!learnerId) {
-      const first = await LearnerRecord.findOne().select('studentId');
-      learnerId = first?.studentId?.toString();
-    }
+      const records = await LearnerRecord.find().populate('studentId', 'name');
+      const studentIds = records.map((r: any) => r.studentId?._id).filter(Boolean);
+      const allInterventions = await Intervention.find({
+        studentId: { $in: studentIds },
+      });
 
-    if (!learnerId) {
+      const recordByStudent = new Map(
+        records.map((r: any) => [r.studentId?._id?.toString(), r])
+      );
+
+      const summary = { total: allInterventions.length, completed: 0, inProgress: 0, notStarted: 0 };
+      allInterventions.forEach((i: any) => {
+        if (i.status === 'Completed') summary.completed += 1;
+        else if (i.status === 'In Progress') summary.inProgress += 1;
+        else summary.notStarted += 1;
+      });
+
+      // Per-material rollout (grouped by intervention title).
+      const byMaterialMap = new Map<string, any>();
+      allInterventions.forEach((i: any) => {
+        const title = i.title || 'Untitled Intervention';
+        const key = `${title}|${i.category || ''}`;
+        const slot = byMaterialMap.get(key) || {
+          title,
+          category: i.category || '',
+          notStarted: 0,
+          inProgress: 0,
+          completed: 0,
+          total: 0,
+        };
+        if (i.status === 'Completed') slot.completed += 1;
+        else if (i.status === 'In Progress') slot.inProgress += 1;
+        else slot.notStarted += 1;
+        slot.total += 1;
+        byMaterialMap.set(key, slot);
+      });
+      const byMaterial = Array.from(byMaterialMap.values());
+
+      // Per-learner breakdown.
+      const learnerMap = new Map<string, { id: string; name: string; gradeSection: string; notStarted: number; inProgress: number; completed: number; total: number }>();
+      allInterventions.forEach((i: any) => {
+        const sid = i.studentId?.toString();
+        if (!sid) return;
+        const slot = learnerMap.get(sid) || {
+          id: sid,
+          name: recordByStudent.get(sid)?.studentId?.name || 'Student',
+          gradeSection: (() => {
+            const rec = recordByStudent.get(sid);
+            return rec ? `Grade ${rec.gradeLevel} - ${rec.section}` : '';
+          })(),
+          notStarted: 0,
+          inProgress: 0,
+          completed: 0,
+          total: 0,
+        };
+        if (i.status === 'Completed') slot.completed += 1;
+        else if (i.status === 'In Progress') slot.inProgress += 1;
+        else slot.notStarted += 1;
+        slot.total += 1;
+        learnerMap.set(sid, slot);
+      });
+      const byLearner = Array.from(learnerMap.values()).sort(
+        (a, b) => b.total - a.total
+      );
+
       return ok({
-        learner: null,
-        interventions: { done: 0, total: 0, percent: 0 },
-        timeline: [],
-        improvementPct: 0,
+        overview: true,
+        overall: {
+          summary,
+          percentComplete: summary.total
+            ? Math.round((summary.completed / summary.total) * 100)
+            : 0,
+          byMaterial,
+          byLearner,
+        },
       });
     }
 
@@ -74,6 +142,24 @@ export async function GET(req: NextRequest) {
       total,
       percent: total ? Math.round((done / total) * 100) : 0,
     };
+
+    // Per-student dashboard numbers — mirrors the overall aggregate but scoped
+    // to this one learner (stat cards + per-material breakdown).
+    const summary = { total, completed: done, inProgress: 0, notStarted: 0 };
+    interventions.forEach((i: any) => {
+      if (i.status === 'In Progress') summary.inProgress += 1;
+      else if (i.status !== 'Completed') summary.notStarted += 1;
+    });
+    const percentComplete = total ? Math.round((done / total) * 100) : 0;
+    const materials = interventions.map((i: any) => ({
+      id: i._id.toString(),
+      title: i.title || 'Untitled Intervention',
+      category: i.category || '',
+      type: i.type || '',
+      weakness: i.weakness || '',
+      status: i.status || 'Not Started',
+      assignedDate: i.assignedDate,
+    }));
 
     // Build merged timeline, sorted desc by date.
     const timeline: any[] = [];
@@ -127,6 +213,9 @@ export async function GET(req: NextRequest) {
           }
         : null,
       interventions: interventionsStat,
+      summary,
+      percentComplete,
+      materials,
       timeline,
       improvementPct,
     });
