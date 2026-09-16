@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { AlertTriangle, BookOpen, FlaskConical, Calculator, Loader2, AlertCircle } from "lucide-react";
 
 interface Flag {
@@ -30,6 +31,7 @@ export default function AtRiskLearnersPage() {
   const [stats, setStats] = useState<Stats>({ totalFlags: 0, reading: 0, science: 0, math: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { query } = useSearch();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,6 +60,17 @@ export default function AtRiskLearnersPage() {
 
   const subjIcon = (s: string) =>
     s === "Reading" ? BookOpen : s === "Science" ? FlaskConical : Calculator;
+
+  /** Header-search filter applied on the loaded flags. */
+  const q = query.trim().toLowerCase();
+  const filteredFlags = q
+    ? flags.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.grade.toLowerCase().includes(q) ||
+          s.subject.toLowerCase().includes(q)
+      )
+    : flags;
 
   return (
     <>
@@ -101,7 +114,7 @@ export default function AtRiskLearnersPage() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 <h3 className="text-base font-semibold text-gray-900">
-                  {flags.length} learners flagged
+                  {filteredFlags.length} learners flagged
                 </h3>
               </div>
               <p className="mt-0.5 text-xs text-gray-400">
@@ -142,7 +155,7 @@ export default function AtRiskLearnersPage() {
               <AlertCircle className="h-5 w-5" />
               <p>{error}</p>
             </div>
-          ) : flags.length === 0 ? (
+          ) : filteredFlags.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
               No flags for the current filters.
             </div>
@@ -161,7 +174,7 @@ export default function AtRiskLearnersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {flags.map((s, i) => {
+                  {filteredFlags.map((s, i) => {
                     const Icon = subjIcon(s.subject);
                     return (
                       <tr key={i} className="hover:bg-gray-50/60">

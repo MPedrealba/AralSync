@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { Search, Eye, Loader2, AlertCircle } from "lucide-react";
 
 interface LearnerRow {
@@ -29,7 +30,7 @@ export default function PrincipalLearnerRecordsPage() {
   const [learners, setLearners] = useState<LearnerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const { query: search, setQuery: setSearch } = useSearch();
   const [gradeFilter, setGradeFilter] = useState("");
 
   const load = async () => {

@@ -11,6 +11,7 @@ import {
   FlaskConical,
   AlertTriangle,
   TrendingUp,
+  FileText,
   User,
   LogOut,
 } from "lucide-react";
@@ -29,6 +30,12 @@ const navSections = [
       { name: "Subject Analysis", href: "/coordinator/subject-analysis", icon: FlaskConical },
       { name: "At-Risk Learners", href: "/coordinator/at-risk-learners", icon: AlertTriangle },
       { name: "Progress & Trends", href: "/coordinator/progress-trends", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "REPORTS",
+    items: [
+      { name: "Reports & PDF", href: "/coordinator/reports", icon: FileText },
     ],
   },
   {

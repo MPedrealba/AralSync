@@ -1,14 +1,14 @@
 "use client";
 
-import Header from "@/components/Header";
+import PrincipalHeader from "@/components/PrincipalHeader";
 import NationalDashboard from "@/components/NationalDashboard";
 
 export default function ReportsPage() {
   return (
     <>
-      <Header title="Reports & PDF" />
+      <PrincipalHeader title="Reports & PDF" />
       <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
-        <NationalDashboard role="teacher" />
+        <NationalDashboard role="coordinator" />
       </main>
     </>
   );

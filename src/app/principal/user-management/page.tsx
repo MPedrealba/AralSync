@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { UserPlus, MoreVertical, Shield, Loader2, AlertCircle, X } from "lucide-react";
 
 interface UserRow {
@@ -41,6 +42,7 @@ export default function UserManagementPage() {
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, inactive: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { query } = useSearch();
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formMsg, setFormMsg] = useState("");
@@ -114,6 +116,18 @@ export default function UserManagementPage() {
     }
   };
 
+  /** Header-search filter applied client-side over the loaded users. */
+  const q = query.trim().toLowerCase();
+  const filteredUsers = q
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          u.role.toLowerCase().includes(q) ||
+          (u.specialization ?? "").toLowerCase().includes(q)
+      )
+    : users;
+
   return (
     <>
       <PrincipalHeader title="User Management" />
@@ -175,7 +189,7 @@ export default function UserManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {users.map((u, i) => (
+                  {filteredUsers.map((u, i) => (
                     <tr key={i} className="hover:bg-gray-50/60">
                       <td className="px-6 py-3.5">
                         <div className="flex items-center gap-3">

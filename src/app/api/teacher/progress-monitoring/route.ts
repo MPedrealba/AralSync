@@ -32,13 +32,40 @@ export async function GET(req: NextRequest) {
     // per-material rollout, and a per-learner breakdown.
     if (!learnerId) {
       const records = await LearnerRecord.find().populate('studentId', 'name');
-      const studentIds = records.map((r: any) => r.studentId?._id).filter(Boolean);
+
+      // Filter options come from the full record set, so the grade/section
+      // dropdowns stay stable while a filter is active.
+      const availableGrades = [
+        ...new Set(records.map((r: any) => String(r.gradeLevel)).filter(Boolean)),
+      ].sort((a, b) => Number(a) - Number(b));
+      const availableSections = [
+        ...new Set(records.map((r: any) => r.section).filter(Boolean)),
+      ].sort((a, b) => a.localeCompare(b));
+
+      const gradeFilter = searchParams.get('grade') || '';
+      const sectionFilter = searchParams.get('section') || '';
+
+      // Scope to the selected grade/section so every aggregate below
+      // (summary, byMaterial, byLearner) reflects the current filter.
+      let scopedRecords = records as any[];
+      if (gradeFilter) {
+        scopedRecords = scopedRecords.filter(
+          (r: any) => String(r.gradeLevel) === gradeFilter
+        );
+      }
+      if (sectionFilter) {
+        scopedRecords = scopedRecords.filter(
+          (r: any) => r.section === sectionFilter
+        );
+      }
+
+      const studentIds = scopedRecords.map((r: any) => r.studentId?._id).filter(Boolean);
       const allInterventions = await Intervention.find({
         studentId: { $in: studentIds },
       });
 
       const recordByStudent = new Map(
-        records.map((r: any) => [r.studentId?._id?.toString(), r])
+        scopedRecords.map((r: any) => [r.studentId?._id?.toString(), r])
       );
 
       const summary = { total: allInterventions.length, completed: 0, inProgress: 0, notStarted: 0 };
@@ -70,17 +97,17 @@ export async function GET(req: NextRequest) {
       const byMaterial = Array.from(byMaterialMap.values());
 
       // Per-learner breakdown.
-      const learnerMap = new Map<string, { id: string; name: string; gradeSection: string; notStarted: number; inProgress: number; completed: number; total: number }>();
+      const learnerMap = new Map<string, { id: string; name: string; gradeSection: string; gradeLevel: string; section: string; notStarted: number; inProgress: number; completed: number; total: number }>();
       allInterventions.forEach((i: any) => {
         const sid = i.studentId?.toString();
         if (!sid) return;
+        const rec = recordByStudent.get(sid);
         const slot = learnerMap.get(sid) || {
           id: sid,
-          name: recordByStudent.get(sid)?.studentId?.name || 'Student',
-          gradeSection: (() => {
-            const rec = recordByStudent.get(sid);
-            return rec ? `Grade ${rec.gradeLevel} - ${rec.section}` : '';
-          })(),
+          name: rec?.studentId?.name || 'Student',
+          gradeSection: rec ? `Grade ${rec.gradeLevel} - ${rec.section}` : '',
+          gradeLevel: String(rec?.gradeLevel ?? ''),
+          section: rec?.section ?? '',
           notStarted: 0,
           inProgress: 0,
           completed: 0,
@@ -106,6 +133,7 @@ export async function GET(req: NextRequest) {
           byMaterial,
           byLearner,
         },
+        filters: { grades: availableGrades, sections: availableSections },
       });
     }
 

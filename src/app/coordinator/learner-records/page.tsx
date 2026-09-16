@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { Search, X, Loader2, AlertCircle, Eye, Phone, MapPin, UserRound, BookOpenText, ArrowUpRight } from "lucide-react";
 
 interface AssessmentRow {
@@ -68,7 +69,7 @@ export default function CoordinatorLearnerRecordsPage() {
   const [learners, setLearners] = useState<LearnerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const { query: search, setQuery: setSearch } = useSearch();
   const [gradeFilter, setGradeFilter] = useState("");
   const [selected, setSelected] = useState<LearnerRow | null>(null);
 

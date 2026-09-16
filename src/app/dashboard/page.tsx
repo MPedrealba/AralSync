@@ -4,14 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import StatCard from "@/components/StatCard";
-import OMRScanner from "@/components/OMRScanner";
 import {
   Users,
   AlertTriangle,
   FileCheck,
   Clock,
-  Scan,
-  Mic,
   ExternalLink,
 } from "lucide-react";
 import {
@@ -58,7 +55,6 @@ const CustomTooltip = ({
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [showOMR, setShowOMR] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -80,7 +76,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <>
-        <Header title="Dashboard" />
+        <Header title="Home" />
         <main className="flex h-[80vh] items-center justify-center bg-gray-50">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
         </main>
@@ -91,7 +87,7 @@ export default function DashboardPage() {
   if (!data) {
     return (
       <>
-        <Header title="Dashboard" />
+        <Header title="Home" />
         <main className="h-screen bg-gray-50 p-8">
           <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm font-medium text-red-600">
             Failed to load dashboard data.
@@ -119,35 +115,17 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header title="Dashboard" />
+      <Header title="Home" />
 
       <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
-        {/* ── A. Welcome & Action Header ── */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back, Teacher!
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Here is your ARAL Program learning recovery overview for Grade 7 &amp; 8 cohorts.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowOMR(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]"
-            >
-              <Scan className="h-4 w-4" />
-              New OMR Scan
-            </button>
-            <Link
-              href="/dashboard/reading-fluency"
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
-            >
-              <Mic className="h-4 w-4" />
-              Upload Audio
-            </Link>
-          </div>
+        {/* ── A. Welcome Header ── */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back, Teacher!
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Here is your ARAL Program learning recovery overview for Grade 7 &amp; 8 cohorts.
+          </p>
         </div>
 
         {/* ── B. Quick Stat Cards ── */}
@@ -406,9 +384,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
-
-      {/* OMR Scanner Modal */}
-      <OMRScanner isOpen={showOMR} onClose={() => setShowOMR(false)} />
     </>
   );
 }

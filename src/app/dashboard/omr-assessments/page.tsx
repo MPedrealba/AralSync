@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
+import { useSearch } from "@/components/SearchContext";
 import {
   Upload,
   Search,
@@ -112,7 +113,7 @@ function ResultsTab() {
   const [results, setResults] = useState<AssessmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const { query: search, setQuery: setSearch } = useSearch();
   const [subjectFilter, setSubjectFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   // Grading modal state

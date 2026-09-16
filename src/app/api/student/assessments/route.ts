@@ -28,6 +28,14 @@ function toRow(a: any) {
     subskills: a.subskills ?? [],
     notes: a.notes || null,
     date: a.date,
+    // Phil-IRI measured output.
+    miscueBreakdown: a.miscueBreakdown ?? null,
+    miscueTotal: a.miscueTotal ?? null,
+    stutterCount: a.stutterCount ?? null,
+    hesitations: a.hesitations ?? null,
+    longestPause: a.longestPause ?? null,
+    speechDurationSec: a.speechDurationSec ?? null,
+    silentSec: a.silenceSec ?? null,
   };
 }
 

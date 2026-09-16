@@ -21,6 +21,22 @@ interface AnalyzeResult {
   durationSec: number;
   masteryLevel: string;
   simulation: boolean;
+  miscueBreakdown?: MiscueCounts | null;
+  miscueTotal?: number | null;
+  stutters?: number | null;
+  hesitations?: number | null;
+  longestPause?: number | null;
+  activeDurationSec?: number | null;
+  spokenWords?: number | null;
+}
+
+interface MiscueCounts {
+  mispronunciations: number;
+  substitutions: number;
+  omissions: number;
+  insertions: number;
+  repetitions: number;
+  reversals: number;
 }
 
 interface FluencyRow {
@@ -34,7 +50,18 @@ interface FluencyRow {
   durationSec: number | null;
   masteryLevel: string;
   date: string;
+  miscueBreakdown?: MiscueCounts | null;
+  miscueTotal?: number | null;
+  stutterCount?: number | null;
+  hesitations?: number | null;
+  longestPause?: number | null;
+  speechDurationSec?: number | null;
+  silentSec?: number | null;
 }
+
+/** Label helper for a single measured row in the EXACT MEASUREMENTS card. */
+const hasData = (v: number | null | undefined): v is number =>
+  v != null && !Number.isNaN(v);
 
 const SAMPLE_PASSAGE =
   "The sun rose over the quiet town. Children walked to school along the dusty road, carrying their books and stories of the night before.";
@@ -207,12 +234,28 @@ export default function ReadingFluencyPage() {
   const level = latest?.masteryLevel ?? "No assessment";
   const levelClass = levelBadge[level] || "badge-beginning";
 
-  const breakdown = [
-    { label: "Oral Reading Speed", value: wpm ? `${wpm} / 120 WPM` : "—", pct: wpm ? Math.min(100, Math.round((wpm / 120) * 100)) : 0 },
-    { label: "Word Accuracy", value: acc != null ? `${acc}%` : "—", pct: acc ?? 0 },
-    { label: "Pause Frequency", value: latest?.pauses != null ? `${latest.pauses} pauses` : "—", pct: latest?.pauses != null ? Math.min(100, Math.round((latest.pauses / 10) * 100)) : 0 },
-    { label: "Hold Time", value: latest?.durationSec != null ? `${Math.round(latest.durationSec / 60)} min` : "—", pct: latest?.durationSec != null ? Math.min(100, Math.round((latest.durationSec / 300) * 100)) : 0 },
-  ];
+  // Every value below is measured from the recording (or the reader's actual
+  // result) — no targets, no benchmarks, nothing invented.
+  const mb = latest?.miscueBreakdown ?? null;
+  const fmtSec = (s: number) => (s >= 60 ? fmtTimer(Math.round(s)) : `${s.toFixed(1)}s`);
+  const measurements: Record<string, string> = {};
+  if (hasData(wpm)) measurements["Oral Reading Speed"] = `${wpm} WPM`;
+  if (hasData(latest?.accuracy)) measurements["Word Accuracy"] = `${acc}%`;
+  if (hasData(latest?.wer)) measurements["Word Error Rate (WER)"] = `${latest.wer}%`;
+  if (hasData(latest?.pauses)) measurements["Pauses (>1s)"] = `${latest.pauses}`;
+  if (hasData(latest?.hesitations)) measurements["Hesitations"] = `${latest.hesitations}`;
+  if (hasData(latest?.longestPause)) measurements["Longest Pause"] = fmtSec(latest.longestPause);
+  if (hasData(latest?.speechDurationSec)) measurements["Active Reading Time"] = fmtSec(latest.speechDurationSec);
+  if (hasData(latest?.miscueTotal)) measurements["Total Miscues"] = String(latest.miscueTotal);
+  if (mb) {
+    if (hasData(mb.mispronunciations)) measurements["Mispronunciations"] = String(mb.mispronunciations);
+    if (hasData(mb.substitutions)) measurements["Substitutions"] = String(mb.substitutions);
+    if (hasData(mb.omissions)) measurements["Omissions"] = String(mb.omissions);
+    if (hasData(mb.insertions)) measurements["Insertions"] = String(mb.insertions);
+    if (hasData(mb.repetitions)) measurements["Repetitions"] = String(mb.repetitions);
+    if (hasData(mb.reversals)) measurements["Reversals"] = String(mb.reversals);
+  }
+  if (hasData(latest?.stutterCount)) measurements["Stutters (repeats 3+)"] = String(latest.stutterCount);
 
   return (
     <div>
@@ -324,6 +367,24 @@ export default function ReadingFluencyPage() {
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>WER</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.wer != null ? `${result.wer}%` : "—"}</div></div>
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>LEVEL</div><div style={{ marginTop: "0.15rem" }}><span className={`badge ${levelBadge[result.masteryLevel] || "badge-beginning"}`}>{result.masteryLevel}</span></div></div>
             </div>
+            {result.miscueBreakdown &&
+              (result.stutters != null ||
+                result.hesitations != null ||
+                result.miscueTotal != null) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem 1rem", marginTop: "0.75rem", fontSize: "0.78rem", color: "#166534" }}>
+                  {result.miscueTotal != null && <span><strong>{result.miscueTotal}</strong> total miscues</span>}
+                  {result.miscueBreakdown.mispronunciations > 0 && <span><strong>{result.miscueBreakdown.mispronunciations}</strong> mispronounced</span>}
+                  {result.miscueBreakdown.substitutions > 0 && <span><strong>{result.miscueBreakdown.substitutions}</strong> substituted</span>}
+                  {result.miscueBreakdown.omissions > 0 && <span><strong>{result.miscueBreakdown.omissions}</strong> omitted</span>}
+                  {result.miscueBreakdown.insertions > 0 && <span><strong>{result.miscueBreakdown.insertions}</strong> inserted</span>}
+                  {result.miscueBreakdown.repetitions > 0 && <span><strong>{result.miscueBreakdown.repetitions}</strong> repeated</span>}
+                  {result.miscueBreakdown.reversals > 0 && <span><strong>{result.miscueBreakdown.reversals}</strong> reversed</span>}
+                  {result.stutters != null && result.stutters > 0 && <span><strong>{result.stutters}</strong> stutters</span>}
+                  {result.hesitations != null && result.hesitations > 0 && <span><strong>{result.hesitations}</strong> hesitations</span>}
+                  {result.longestPause != null && result.longestPause > 0 && <span>longest pause <strong>{result.longestPause.toFixed(1)}s</strong></span>}
+                  {result.spokenWords != null && <span><strong>{result.spokenWords}</strong> words spoken</span>}
+                </div>
+              )}
             {result.transcript && (
               <p style={{ fontSize: "0.78rem", color: "#374151", fontStyle: "italic", marginTop: "0.75rem", lineHeight: 1.5 }}>
                 Transcript: “{result.transcript}”
@@ -359,22 +420,19 @@ export default function ReadingFluencyPage() {
 
       {/* Middle Row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", marginBottom: "2rem" }}>
-        {/* Fluency Breakdown */}
+        {/* Exact Measurements — every value measured from the recording */}
         <div className="card">
-          <div className="card-title" style={{ marginBottom: "1.25rem" }}>FLUENCY BREAKDOWN</div>
-          {rows.length === 0 ? (
-            <p style={{ fontSize: "0.85rem", color: "#6b7280" }}>No fluency assessments yet.</p>
+          <div className="card-title" style={{ marginBottom: "1.25rem" }}>EXACT MEASUREMENTS</div>
+          {rows.length === 0 || Object.keys(measurements).length === 0 ? (
+            <p style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+              {rows.length === 0 ? "No fluency assessments yet." : "No measured values recorded for the latest assessment yet."}
+            </p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-              {breakdown.map((item, i) => (
-                <div key={i}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.35rem" }}>
-                    <span>{item.label}</span>
-                    <span>{item.value}</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${item.pct}%` }}></div>
-                  </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem 1.25rem" }}>
+              {Object.entries(measurements).map(([label, value]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.5rem", paddingBottom: "0.5rem", borderBottom: "1px solid #f3f4f6" }}>
+                  <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>{label}</span>
+                  <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</span>
                 </div>
               ))}
             </div>

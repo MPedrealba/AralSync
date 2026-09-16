@@ -77,11 +77,13 @@ export default function ProgressPage() {
     .filter((r) => r.type === "READING_FLUENCY")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestFluency = fluencyRows[0];
+  // Only metrics with an inherent 0–100% scale (accuracy / reading score) get
+  // a bar — WPM is shown as a plain measured value, no invented target.
   const readingRows = latestFluency
     ? [
-        { title: "Oral Reading Speed", val: `${latestFluency.wpm ?? "—"} WPM`, pct: latestFluency.wpm ? Math.min(100, Math.round((latestFluency.wpm / 120) * 100)) : 0, m: null },
-        { title: "Word Accuracy", val: latestFluency.accuracy != null ? `${latestFluency.accuracy}%` : "—", pct: latestFluency.accuracy ?? 0, m: null },
-        { title: "Reading Level", val: latestFluency.masteryLevel, pct: latestFluency.score ?? 0, m: latestFluency.masteryLevel },
+        { title: "Oral Reading Speed", val: `${latestFluency.wpm ?? "—"} WPM`, pct: null, m: null },
+        { title: "Word Accuracy", val: latestFluency.accuracy != null ? `${latestFluency.accuracy}%` : "—", pct: latestFluency.accuracy != null ? latestFluency.accuracy : null, m: null },
+        { title: "Reading Level", val: latestFluency.masteryLevel, pct: latestFluency.score != null ? latestFluency.score : null, m: latestFluency.masteryLevel },
       ]
     : [];
 
@@ -204,16 +206,18 @@ export default function ProgressPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
               {readingRows.map((i, idx) => (
                 <div key={idx}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.35rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem", fontWeight: 600, marginBottom: i.pct != null ? "0.35rem" : 0 }}>
                     <span>{i.title}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <span>{i.val}</span>
                       {i.m && <span className={`badge ${i.m.includes("Independent") ? "badge-proficiency" : i.m.includes("Instructional") ? "badge-approaching" : "badge-frustration"}`}>{i.m}</span>}
                     </div>
                   </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${i.pct}%`, height: "100%", borderRadius: "9999px" }}></div>
-                  </div>
+                  {i.pct != null && (
+                    <div className="progress-track">
+                      <div className="progress-fill" style={{ width: `${i.pct}%`, height: "100%", borderRadius: "9999px" }}></div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

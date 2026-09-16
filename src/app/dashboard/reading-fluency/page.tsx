@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
+import { useSearch } from "@/components/SearchContext";
 import {
   Mic,
   Search,
@@ -36,6 +37,25 @@ interface FluencyRow {
   notes: string | null;
   masteryLevel: string;
   date: string;
+  // Phil-IRI measured output.
+  miscueBreakdown?: MiscueCounts | null;
+  miscueTotal?: number | null;
+  stutterCount?: number | null;
+  hesitations?: number | null;
+  longestPause?: number | null;
+  speechDurationSec?: number | null;
+  pauseTotalSec?: number | null;
+  pauseAvgSec?: number | null;
+  silentSec?: number | null;
+}
+
+interface MiscueCounts {
+  mispronunciations: number;
+  substitutions: number;
+  omissions: number;
+  insertions: number;
+  repetitions: number;
+  reversals: number;
 }
 
 const fmtShort = (d: string) => {
@@ -713,7 +733,7 @@ function ResultHistoryTab({
   const [results, setResults] = useState<FluencyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const { query: search, setQuery: setSearch } = useSearch();
 
   const load = async () => {
     setLoading(true);
@@ -854,8 +874,6 @@ function FluencyReportModal({
 }) {
   const accuracyPct = learner.accuracy ?? 0;
   const errPct = 100 - accuracyPct;
-  const fluencyScore = learner.wpm ? Math.min(10, Math.round(learner.wpm / 12)) : 0;
-  const accuracyScore = Math.min(10, Math.round(accuracyPct / 10));
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState("");
 
@@ -932,13 +950,99 @@ function FluencyReportModal({
             />
           </div>
 
-          {/* Score Cards */}
+          {/* Score Cards — raw measured values, no invented /10 benchmarks */}
           <div className="mb-6 grid grid-cols-4 gap-3">
-            <ScoreCard label="Fluency" value={fluencyScore} max={10} color="bg-blue-600" />
-            <ScoreCard label="Accuracy" value={accuracyScore} max={10} color="bg-blue-600" />
+            <ScoreCard label="Fluency (WCPM)" value={learner.wpm ?? "—"} isText />
+            <ScoreCard label="Accuracy" value={`${accuracyPct}%`} isText />
             <ScoreCard label="Words Err" value={`${errPct.toFixed(1)}%`} isText />
             <ScoreCard label="Pauses" value={learner.pauses ?? "—"} isText />
           </div>
+
+          {/* Phil-IRI Miscue + Acoustic Breakdown — everything measured */}
+          {(learner.miscueBreakdown ||
+            learner.stutterCount != null ||
+            learner.hesitations != null ||
+            learner.longestPause != null) && (
+            <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
+              <h4 className="mb-3 text-sm font-semibold text-gray-700">
+                Measured Breakdown
+              </h4>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+                {learner.miscueTotal != null && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Total miscues</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueTotal}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.mispronunciations != null && learner.miscueBreakdown.mispronunciations > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Mispronunciations</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.mispronunciations}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.substitutions != null && learner.miscueBreakdown.substitutions > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Substitutions</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.substitutions}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.omissions != null && learner.miscueBreakdown.omissions > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Omissions</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.omissions}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.insertions != null && learner.miscueBreakdown.insertions > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Insertions</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.insertions}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.repetitions != null && learner.miscueBreakdown.repetitions > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Repetitions</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.repetitions}</span>
+                  </div>
+                )}
+                {learner.miscueBreakdown?.reversals != null && learner.miscueBreakdown.reversals > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Reversals</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.miscueBreakdown.reversals}</span>
+                  </div>
+                )}
+                {learner.stutterCount != null && learner.stutterCount > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Stutters</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.stutterCount}</span>
+                  </div>
+                )}
+                {learner.hesitations != null && learner.hesitations > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Hesitations</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.hesitations}</span>
+                  </div>
+                )}
+                {learner.longestPause != null && learner.longestPause > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Longest pause</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.longestPause.toFixed(1)}s</span>
+                  </div>
+                )}
+                {learner.pauseAvgSec != null && learner.pauseAvgSec > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Avg pause</span>
+                    <span className="text-sm font-bold text-gray-800">{learner.pauseAvgSec.toFixed(1)}s</span>
+                  </div>
+                )}
+                {learner.speechDurationSec != null && (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 pb-1.5">
+                    <span className="text-xs text-gray-500">Active speech</span>
+                    <span className="text-sm font-bold text-gray-800">{Math.round(learner.speechDurationSec)}s</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Teacher Validation */}
           <div className="mb-6 rounded-xl border border-gray-100 bg-gray-50 p-4">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { UserPlus, Pencil, Trash2, Power, Loader2, AlertCircle, X } from "lucide-react";
 
 interface UserRow {
@@ -53,6 +54,7 @@ export default function CoordinatorUserManagementPage() {
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, inactive: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { query } = useSearch();
   const [viewerId, setViewerId] = useState<string | null>(null);
 
   // Add-user modal
@@ -240,6 +242,19 @@ export default function CoordinatorUserManagementPage() {
 
   const inputCls = "w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10";
 
+  /** Header-search filter applied client-side over the loaded users. */
+  const q = query.trim().toLowerCase();
+  const filteredUsers = q
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.username.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          u.role.toLowerCase().includes(q) ||
+          (u.specialization ?? "").toLowerCase().includes(q)
+      )
+    : users;
+
   return (
     <>
       <PrincipalHeader title="User Management" />
@@ -300,7 +315,7 @@ export default function CoordinatorUserManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {users.map((u, i) => {
+                  {filteredUsers.map((u, i) => {
                     const isSelf = viewerId === u.id;
                     return (
                       <tr key={u.id || i} className="hover:bg-gray-50/60">

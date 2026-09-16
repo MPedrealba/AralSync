@@ -17,6 +17,29 @@ const AssessmentSchema = new mongoose.Schema({
   pacing: { type: Number }, // inter-onset interval CV (lower = more consistent pacing)
   hesitations: { type: Number }, // count of detected hesitation patterns
   longestPause: { type: Number }, // longest continuous pause in seconds
+  speechDurationSec: { type: Number }, // speech-only portion of the recording
+  pauseTotalSec: { type: Number }, // total time spent pausing
+  pauseAvgSec: { type: Number }, // average pause length
+  pacingMean: { type: Number }, // mean inter-onset interval (speech rhythm)
+  // ── Phil-IRI miscue engine (word-alignment derived) ──
+  miscueTotal: { type: Number }, // total miscues (formula numerator)
+  miscueBreakdown: {
+    mispronunciations: { type: Number, default: 0 },
+    substitutions: { type: Number, default: 0 },
+    omissions: { type: Number, default: 0 },
+    insertions: { type: Number, default: 0 },
+    repetitions: { type: Number, default: 0 },
+    reversals: { type: Number, default: 0 },
+  },
+  stutterCount: { type: Number, default: 0 }, // repetition runs of 3+ copies
+  miscueItems: [
+    {
+      type: { type: String }, // match|mispronunciation|substitution|omission|insertion|repetition|reversal
+      position: { type: Number, default: null },
+      expected: { type: String, default: null },
+      spoken: { type: String, default: null },
+    },
+  ],
   status: { type: String, enum: ['pending', 'approved', 'flagged'], default: 'pending' }, // teacher validation
   notes: { type: String }, // reading fluency / teacher notes
   competency: { type: String },

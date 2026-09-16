@@ -30,12 +30,15 @@ export default function ProgressMonitoringPage() {
       id: string;
       name: string;
       gradeSection: string;
+      gradeLevel: string;
+      section: string;
       notStarted: number;
       inProgress: number;
       completed: number;
       total: number;
     }[];
   };
+  filters: { grades: string[]; sections: string[] };
 }
 
 interface LearnerData {
@@ -58,6 +61,8 @@ interface LearnerData {
 
 const [data, setData] = useState<OverallData | LearnerData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [grade, setGrade] = useState("");
+  const [section, setSection] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -76,11 +81,18 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
   }, []);
 
   // learnerId === "" → overall (all learners); otherwise single-learner timeline.
+  // Grade/section narrow the overview to a class; the drill-down ignores them.
   useEffect(() => {
     setLoading(true);
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/teacher/progress-monitoring?learner=${learnerId}`);
+        const params = new URLSearchParams();
+        if (learnerId) params.set("learner", learnerId);
+        else {
+          if (grade) params.set("grade", grade);
+          if (section) params.set("section", section);
+        }
+        const res = await fetch(`/api/teacher/progress-monitoring?${params.toString()}`);
         const json = await res.json();
         if (json.success) setData(json.data);
       } catch (e) {
@@ -90,7 +102,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
       }
     };
     fetchData();
-  }, [learnerId]);
+  }, [learnerId, grade, section]);
 
   const isOverview = data?.overview === true;
   const donutPercent = !isOverview ? (data as LearnerData)?.interventions.percent ?? 0 : 0;
@@ -111,7 +123,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
               Track intervention progress for all learners or drill into a single learner.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <select
               value={learnerId}
               onChange={(e) => setLearnerId(e.target.value)}
@@ -124,6 +136,34 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                 </option>
               ))}
             </select>
+            {isOverview && data?.filters && (
+              <>
+                <select
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+                >
+                  <option value="">All Grades</option>
+                  {data.filters.grades.map((g) => (
+                    <option key={g} value={g}>
+                      Grade {g}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={section}
+                  onChange={(e) => setSection(e.target.value)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+                >
+                  <option value="">All Sections</option>
+                  {data.filters.sections.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
         </div>
 
@@ -327,7 +367,9 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
               </h3>
               {data.overall.byMaterial.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-400">
-                  No interventions assigned yet. Run Auto-Assign on the Interventions page.
+                  {grade || section
+                    ? "No interventions match the selected grade/section filters."
+                    : "No interventions assigned yet. Run Auto-Assign on the Interventions page."}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -378,7 +420,9 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
               </h3>
               {data.overall.byLearner.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-400">
-                  No learners have interventions yet.
+                  {grade || section
+                    ? "No learners match the selected grade/section filters."
+                    : "No learners have interventions yet."}
                 </p>
               ) : (
                 <div className="overflow-x-auto">

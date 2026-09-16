@@ -24,6 +24,10 @@ async function fetchLibrosaFeatures(
   pacing: number | null;
   hesitations: number | null;
   longestPause: number | null;
+  speechDurationSec: number | null;
+  pauseTotalSec: number | null;
+  pauseAvgSec: number | null;
+  pacingMean: number | null;
 } | null> {
   try {
     const form = new FormData();
@@ -48,6 +52,10 @@ async function fetchLibrosaFeatures(
           pacing: f.pacing_cv ?? null,
           hesitations: f.hesitations ?? null,
           longestPause: f.silence_longest_sec ?? null,
+          speechDurationSec: f.speech_duration_sec ?? null,
+          pauseTotalSec: f.pause_total_sec ?? null,
+          pauseAvgSec: f.pause_avg_sec ?? null,
+          pacingMean: f.pacing_mean ?? null,
         };
       }
     }
@@ -76,7 +84,7 @@ async function fetchLibrosaFeatures(
  *  assessment for the same session (Silent Reading component).
  *
  *  Reading level (accuracy → level):
- *    97–100%  Independent | 95–96% Instructional | 80–94% Frustration | <80% Non-Reader
+ *    96–100%  Independent | 91–95% Instructional | 80–90% Frustration | <80% Non-Reader
  * ──────────────────────────────────────────────────────────────
  */
 export async function POST(req: NextRequest) {
@@ -132,7 +140,7 @@ export async function POST(req: NextRequest) {
     let segmentsInput: { start: number; end: number }[] = [];
     if (!simulate && file) {
       try {
-        const { text, segments } = await transcribeGroq(file);
+        const { text, segments } = await transcribeGroq(file, passage);
         transcriptInput = text;
         segmentsInput = segments;
       } catch (e) {
@@ -148,8 +156,23 @@ export async function POST(req: NextRequest) {
     }
 
     /* ── Compute oral-reading metrics (shared Phil-IRI pipeline) ── */
-    const { transcript, simulation, accuracy, wer, wpm, pauses, level } =
-      computeFluencyMetrics({
+    const {
+      transcript,
+      simulation,
+      accuracy,
+      wer,
+      wpm,
+      pauses,
+      level,
+      miscueBreakdown,
+      miscueItems,
+      miscueTotal,
+      stutters,
+      hesitations,
+      longestPause,
+      activeDurationSec,
+      spokenWords,
+    } = computeFluencyMetrics({
         simulate,
         file,
         transcriptInput,
@@ -157,6 +180,7 @@ export async function POST(req: NextRequest) {
         passage,
         durationSec,
         miscues,
+        comprehension: hasComprehension ? comprehensionScore : undefined,
       });
 
     /* ── Persist the oral-reading assessment ── */
@@ -169,6 +193,10 @@ export async function POST(req: NextRequest) {
       pacing: number | null;
       hesitations: number | null;
       longestPause: number | null;
+      speechDurationSec: number | null;
+      pauseTotalSec: number | null;
+      pauseAvgSec: number | null;
+      pacingMean: number | null;
     } | null = null;
     if (file && !simulate) {
       librosaFeatures = await fetchLibrosaFeatures(file);
@@ -178,6 +206,8 @@ export async function POST(req: NextRequest) {
       transcript ? `Transcript: "${transcript.slice(0, 300)}"` + (transcript.length > 300 ? '…' : '') : '',
       hasMiscues
         ? `Miscues — substitutions: ${miscues.substitutions}, omissions: ${miscues.omissions}, insertions: ${miscues.insertions}, repetitions: ${miscues.repetitions}.`
+        : transcript && miscueTotal > 0
+        ? `Miscues — ${miscueBreakdown.mispronunciations} mispronounced, ${miscueBreakdown.substitutions} substituted, ${miscueBreakdown.omissions} omitted, ${miscueBreakdown.insertions} inserted, ${miscueBreakdown.repetitions} repeated, ${miscueBreakdown.reversals} reversed.`
         : '',
     ]
       .filter(Boolean)
@@ -197,8 +227,17 @@ export async function POST(req: NextRequest) {
       silenceSec: librosaFeatures?.silenceSec ?? undefined,
       silenceRatio: librosaFeatures?.silenceRatio ?? undefined,
       pacing: librosaFeatures?.pacing ?? undefined,
-      hesitations: librosaFeatures?.hesitations ?? undefined,
-      longestPause: librosaFeatures?.longestPause ?? undefined,
+      hesitations: librosaFeatures?.hesitations ?? hesitations,
+      longestPause: librosaFeatures?.longestPause ?? longestPause,
+      speechDurationSec: librosaFeatures?.speechDurationSec ?? undefined,
+      pauseTotalSec: librosaFeatures?.pauseTotalSec ?? undefined,
+      pauseAvgSec: librosaFeatures?.pauseAvgSec ?? undefined,
+      pacingMean: librosaFeatures?.pacingMean ?? undefined,
+      // Phil-IRI miscue engine output.
+      miscueBreakdown,
+      miscueItems,
+      miscueTotal,
+      stutterCount: stutters,
       notes,
       masteryLevel: level,
       status: 'pending',
@@ -217,6 +256,7 @@ export async function POST(req: NextRequest) {
         score: cScore,
         passageTitle,
         masteryLevel: comprehensionLevel(cScore),
+        combinedLevel: level, // Phil-IRI combined level (WR accuracy + comprehension)
         status: 'pending',
         notes: `Comprehension check for "${passageTitle}".`,
         date: new Date(),
@@ -259,6 +299,12 @@ export async function POST(req: NextRequest) {
       simulation,
       comprehension,
       librosa: librosaFeatures,
+      // Phil-IRI measured output.
+      miscueBreakdown,
+      miscueTotal,
+      stutters,
+      activeDurationSec: Math.round(activeDurationSec),
+      spokenWords,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

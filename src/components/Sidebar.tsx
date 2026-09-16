@@ -30,7 +30,7 @@ const allNavSections = [
   {
     label: "OVERVIEW",
     items: [
-      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Home", href: "/dashboard", icon: LayoutDashboard },
       { name: "Learners", href: "/dashboard/learners", icon: Users },
     ],
   },

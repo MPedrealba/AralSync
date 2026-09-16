@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
+import { useSearch } from "@/components/SearchContext";
 import { Loader2, AlertCircle, History, RefreshCw } from "lucide-react";
 
 interface LogEntry {
@@ -50,6 +51,7 @@ export default function AuditLogPage() {
   const [error, setError] = useState("");
   const [role, setRole] = useState("");
   const [action, setAction] = useState("");
+  const { query } = useSearch();
 
   const load = async () => {
     setLoading(true);
@@ -73,6 +75,18 @@ export default function AuditLogPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, action]);
+
+  /** Header-search filter applied client-side over the loaded entries. */
+  const q = query.trim().toLowerCase();
+  const filteredEntries = q
+    ? entries.filter(
+        (e) =>
+          (e.actorName ?? "").toLowerCase().includes(q) ||
+          e.role.toLowerCase().includes(q) ||
+          e.action.toLowerCase().includes(q) ||
+          (e.targetType ?? "").toLowerCase().includes(q)
+      )
+    : entries;
 
   return (
     <>
@@ -124,7 +138,7 @@ export default function AuditLogPage() {
             <option value="intervention_updated">Intervention Update</option>
             <option value="intervention_marked_done">Marked Done</option>
           </select>
-          <span className="text-xs text-gray-400">{entries.length} entries</span>
+          <span className="text-xs text-gray-400">{filteredEntries.length} entries</span>
         </div>
 
         {loading ? (
@@ -136,9 +150,9 @@ export default function AuditLogPage() {
             <AlertCircle className="h-5 w-5" />
             <p>{error}</p>
           </div>
-        ) : entries.length === 0 ? (
+        ) : filteredEntries.length === 0 ? (
           <div className="rounded-xl border border-gray-100 bg-white py-12 text-center text-sm text-gray-400">
-            No audit entries{role || action ? " match the current filters" : " yet"}.
+            No audit entries{role || action || q ? " match the current filters" : " yet"}.
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
@@ -152,7 +166,7 @@ export default function AuditLogPage() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => {
+                {filteredEntries.map((e) => {
                   const a = actionLabels[e.action] || { label: e.action, color: "bg-gray-100 text-gray-600" };
                   const metaJson = e.meta && Object.keys(e.meta).length ? e.meta : null;
                   return (

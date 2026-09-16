@@ -103,7 +103,7 @@ export default function StudentSidebar() {
 
       {/* Footer */}
       <div className="sidebar-footer">
-        <Link href="/student" className="sidebar-nav-item">
+        <Link href="/student/profile" className="sidebar-nav-item">
           <User size={18} color="#6b7280" />
           <span>My Profile</span>
         </Link>
