@@ -13,6 +13,7 @@ import {
   CartesianGrid,
   Tooltip,
   LabelList,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 import { Download } from "lucide-react";
@@ -69,10 +70,10 @@ const RMA_BAND_COLOR: Record<string, string> = {
   Beginning: "#ef4444",
 };
 const RMA_BAND_BADGE: Record<string, string> = {
-  Proficient: "bg-emerald-50 text-emerald-700",
-  Approaching: "bg-amber-50 text-amber-700",
-  Developing: "bg-orange-50 text-orange-700",
-  Beginning: "bg-red-50 text-red-700",
+  Proficient: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  Approaching: "border-amber-200 bg-amber-50 text-amber-700",
+  Developing: "border-orange-200 bg-orange-50 text-orange-700",
+  Beginning: "border-red-200 bg-red-50 text-red-700",
 };
 const strandBand = (score: number): keyof typeof RMA_BAND_COLOR =>
   score >= 90 ? "Proficient" : score >= 75 ? "Approaching" : score >= 50 ? "Developing" : "Beginning";
@@ -83,19 +84,26 @@ function StrandTooltip({ active, payload }: { active?: boolean; payload?: any[] 
   const s = payload[0].payload as StrandRow;
   const band = strandBand(s.avgScore);
   return (
-    <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
+    <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-lg min-w-[200px]">
       <p className="text-xs font-semibold text-gray-800">{s.name}</p>
       <div className="mt-1 flex items-center justify-between gap-3">
         <span className="text-sm font-bold text-gray-900">{s.avgScore}%</span>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${RMA_BAND_BADGE[band]}`}>
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${RMA_BAND_BADGE[band]}`}>
           {band}
         </span>
       </div>
-      {s.count > 0 && (
-        <p className="mt-1 text-[11px] text-gray-400">
-          Based on {s.count} {s.count === 1 ? "assessment" : "assessments"}
-        </p>
-      )}
+      <div className="mt-2 space-y-0.5 border-t border-gray-100 pt-1.5 text-[11px] text-gray-500">
+        <div className="flex justify-between gap-4">
+          <span>Assessed:</span>
+          <span className="font-medium text-gray-800">
+            {s.count} {s.count === 1 ? "learner" : "learners"}
+          </span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span>Mastery (≥75%):</span>
+          <span className="font-medium text-gray-800">{s.masteredPct}%</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -122,11 +130,28 @@ function MasteryCard({ label, value, pct, cls }: { label: string; value: number;
   );
 }
 
-function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function ChartCard({
+  title,
+  subtitle,
+  children,
+  action,
+  className = "",
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      {subtitle && <p className="mt-0.5 text-sm text-gray-400">{subtitle}</p>}
+    <div className={`rounded-xl border border-gray-100 bg-white p-6 shadow-sm print-break-inside-avoid ${className}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-sm text-gray-400">{subtitle}</p>}
+        </div>
+        {action && <div>{action}</div>}
+      </div>
       {children}
     </div>
   );
@@ -209,7 +234,32 @@ export default function NationalDashboard({ role }: NationalDashboardProps) {
   const handlePrint = useReactToPrint({
     contentRef: reportRef,
     documentTitle: `AralSync_RMA_PhilIRI_${(data?.sy ?? "").replace("/", "-")}_${period}`,
-    pageStyle: "@page { size: A4 landscape; margin: 10mm; } @media print { .no-print { display: none !important; } }",
+    pageStyle: `
+      @page { 
+        size: A4 landscape; 
+        margin: 10mm; 
+      } 
+      @media print { 
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .no-print { 
+          display: none !important; 
+        } 
+        .print-break-inside-avoid {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        table {
+          page-break-inside: auto;
+        }
+        tr {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+      }
+    `,
   });
 
   /** Grades present in the data, so the filter never hardcodes grade options. */
@@ -349,58 +399,124 @@ function RmaSection({ rma, periodLabel }: { rma: RmaPayload; periodLabel: string
             </ChartCard>
           </div>
 
-          {/* Strand / competency bar */}
+          {/* Strand / competency section */}
           <ChartCard
             title="Strands / Learning Competencies"
-            subtitle="Average % per strand across learners' latest assessment"
+            subtitle="Average % score and DepEd mastery compliance per competency across learners' latest Mathematics assessments"
+            action={
+              strands.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 text-gray-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span>Proficient (≥90%)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-gray-700">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span>Approaching (75–89%)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-gray-700">
+                    <span className="h-2 w-2 rounded-full bg-orange-500" />
+                    <span>Developing (50–74%)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-gray-700">
+                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    <span>Beginning (&lt;50%)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-medium text-blue-600 sm:border-l sm:border-gray-200 sm:pl-3">
+                    <span className="h-0.5 w-3 border-t-2 border-dashed border-blue-500" />
+                    <span>75% Benchmark</span>
+                  </div>
+                </div>
+              ) : undefined
+            }
           >
             {strands.length === 0 ? (
               <DataState state="empty" emptyMessage="No strand detail recorded for these assessments." height={200} />
             ) : (
-              <div className="mt-4">
-                <div
-                  className={`h-[340px] min-h-[340px] ${
-                    strands.length === 1
-                      ? "mx-auto max-w-sm"
-                      : strands.length === 2
-                      ? "mx-auto max-w-md"
-                      : strands.length === 3
-                      ? "mx-auto max-w-xl"
-                      : ""
-                  }`}
-                >
-                  <ResponsiveContainer width="100%" height={340}>
+              <div className="mt-5 space-y-6">
+                {/* Summary stat cards */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">Competencies</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">{strands.length}</p>
+                    <p className="text-[11px] text-gray-400">Assessed domains</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">Mean Score</p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {Math.round(strands.reduce((acc, s) => acc + s.avgScore, 0) / strands.length)}%
+                    </p>
+                    <p className="text-[11px] text-gray-400">Across all competencies</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-emerald-700">On Target (≥75%)</p>
+                    <p className="mt-1 text-xl font-bold text-emerald-700">
+                      {strands.filter((s) => s.avgScore >= 75).length}
+                    </p>
+                    <p className="text-[11px] text-emerald-600/80">Met DepEd benchmark</p>
+                  </div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-amber-700">Intervention Needed</p>
+                    <p className="mt-1 text-xl font-bold text-amber-700">
+                      {strands.filter((s) => s.avgScore < 75).length}
+                    </p>
+                    <p className="text-[11px] text-amber-600/80">Below 75% standard</p>
+                  </div>
+                </div>
+
+                {/* Visual Bar Chart */}
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={strands}
-                      margin={{ top: 20, right: 30, left: 0, bottom: 60 }}
-                      barCategoryGap={strands.length <= 2 ? "35%" : strands.length <= 3 ? "25%" : "15%"}
-                      style={{ overflow: "visible" }}
+                      margin={{
+                        top: 25,
+                        right: 25,
+                        left: -5,
+                        bottom: strands.length > 4 || strands.some((s) => s.name.length > 18) ? 45 : 20,
+                      }}
+                      barCategoryGap={strands.length <= 2 ? "45%" : strands.length <= 3 ? "30%" : "15%"}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                       <XAxis
                         dataKey="name"
                         interval={0}
-                        angle={-25}
-                        textAnchor="end"
-                        height={60}
-                        tick={{ fontSize: 12, fill: "#4B5563", dy: 8 }}
+                        angle={strands.length > 4 || strands.some((s) => s.name.length > 18) ? -20 : 0}
+                        textAnchor={strands.length > 4 || strands.some((s) => s.name.length > 18) ? "end" : "middle"}
+                        height={strands.length > 4 || strands.some((s) => s.name.length > 18) ? 45 : 25}
+                        tick={{ fontSize: 12, fill: "#374151", fontWeight: 500 }}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         domain={[0, 100]}
-                        width={40}
+                        width={42}
                         tick={{ fontSize: 12, fill: "#9ca3af" }}
                         axisLine={false}
                         tickLine={false}
+                        unit="%"
                       />
                       <Tooltip content={<StrandTooltip />} cursor={{ fill: "#f8fafc" }} />
-                      <Bar dataKey="avgScore" name="Avg %" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      <ReferenceLine
+                        y={75}
+                        stroke="#3b82f6"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: "DepEd Benchmark (75%)",
+                          position: "insideTopRight",
+                          fill: "#2563eb",
+                          fontSize: 11,
+                          fontWeight: 600,
+                        }}
+                      />
+                      <Bar dataKey="avgScore" name="Avg %" radius={[6, 6, 0, 0]} maxBarSize={56}>
                         <LabelList
                           dataKey="avgScore"
                           position="top"
                           formatter={(val: any) => `${Math.round(Number(val))}%`}
-                          className="text-xs font-semibold fill-gray-600"
+                          className="text-xs font-bold fill-gray-700"
+                          offset={8}
                         />
                         {strands.map((s, i) => (
                           <Cell key={i} fill={RMA_BAND_COLOR[strandBand(s.avgScore)]} />
@@ -408,6 +524,104 @@ function RmaSection({ rma, periodLabel }: { rma: RmaPayload; periodLabel: string
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+
+                {/* Detailed Competency Table */}
+                <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+                  <div className="border-b border-gray-100 bg-gray-50/70 px-4 py-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                      Competency Performance &amp; Mastery Breakdown
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/40 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          <th className="px-4 py-3">Strand / Competency</th>
+                          <th className="px-4 py-3">Assessed Learners</th>
+                          <th className="px-4 py-3">Average Score</th>
+                          <th className="px-4 py-3">Mastery Rate (≥75%)</th>
+                          <th className="px-4 py-3">DepEd Band</th>
+                          <th className="px-4 py-3">Action Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {strands.map((s, i) => {
+                          const band = strandBand(s.avgScore);
+                          const isMastered = s.avgScore >= 75;
+                          const isHigh = s.avgScore >= 90;
+                          return (
+                            <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-3.5 font-medium text-gray-900">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="h-2 w-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: RMA_BAND_COLOR[band] }}
+                                  />
+                                  <span>{s.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5 text-gray-600">
+                                <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                                  {s.count} {s.count === 1 ? "learner" : "learners"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-bold text-gray-900 w-10 text-right">{s.avgScore}%</span>
+                                  <div className="h-2.5 w-28 rounded-full bg-gray-100 overflow-hidden relative">
+                                    <div
+                                      className="absolute top-0 bottom-0 left-[75%] w-0.5 bg-blue-500 z-10"
+                                      title="75% Benchmark"
+                                    />
+                                    <div
+                                      className="h-full rounded-full transition-all duration-300"
+                                      style={{
+                                        width: `${Math.min(100, Math.max(0, s.avgScore))}%`,
+                                        backgroundColor: RMA_BAND_COLOR[band],
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="font-semibold text-gray-800">{s.masteredPct}%</span>
+                                <span className="ml-1 text-xs text-gray-400">
+                                  ({Math.round((s.masteredPct / 100) * s.count)} of {s.count})
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${RMA_BAND_BADGE[band]}`}
+                                >
+                                  {band}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                {isHigh ? (
+                                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                                    Mastered · Standard Met
+                                  </span>
+                                ) : isMastered ? (
+                                  <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                                    Approaching · On Track
+                                  </span>
+                                ) : s.avgScore >= 50 ? (
+                                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                                    Developing · Needs Support
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                                    Beginning · Priority Recovery
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
