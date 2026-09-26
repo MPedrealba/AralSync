@@ -17,8 +17,13 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!username || !password) {
+    if (!username.trim() || !password) {
       setError("Please enter both username and password.");
+      return;
+    }
+
+    if (!role) {
+      setError("Please select your role.");
       return;
     }
 
@@ -28,7 +33,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password, role }),
       });
 
       const data = await res.json();
@@ -138,13 +143,26 @@ export default function LoginPage() {
                 id="role"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-10 pr-10 text-sm text-gray-800 outline-none transition-colors focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                required
+                className={`h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-10 pr-10 text-sm outline-none transition-colors cursor-pointer focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15 ${
+                  role ? "text-gray-800 font-medium" : "text-gray-400"
+                }`}
               >
-                <option value="">Select your role</option>
-                <option value="teacher">Teacher</option>
-                <option value="principal">Principal</option>
-                <option value="coordinator">ARAL Coordinator</option>
-                <option value="student">Student</option>
+                <option value="" disabled className="text-gray-400 font-normal">
+                  Select your role
+                </option>
+                <option value="teacher" className="text-gray-800 font-normal">
+                  Teacher
+                </option>
+                <option value="principal" className="text-gray-800 font-normal">
+                  Principal
+                </option>
+                <option value="coordinator" className="text-gray-800 font-normal">
+                  ARAL Coordinator
+                </option>
+                <option value="student" className="text-gray-800 font-normal">
+                  Student
+                </option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             </div>
