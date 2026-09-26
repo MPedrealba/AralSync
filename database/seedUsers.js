@@ -150,6 +150,7 @@ const seedDB = async () => {
           competency: OMR_MATH[k].competency,
           score: pct,
           masteryLevel: masteryFromScore(pct),
+          status: 'approved',
           date: weeksAgo(10 - k * 2),
         });
       }
@@ -170,6 +171,7 @@ const seedDB = async () => {
           durationSec: Math.round(60 + (1 - a) * 60),
           notes: a < 0.6 ? 'Needs decoding practice' : 'Good pace and expression',
           masteryLevel: a < 0.6 ? 'Frustration' : a < 0.75 ? 'Instructional' : 'Independent',
+          status: 'approved',
           date: weeksAgo(9 - k * 3),
         });
       }
@@ -186,6 +188,7 @@ const seedDB = async () => {
           competency: COMP_READ[k].competency,
           score: pct,
           masteryLevel: masteryFromScore(pct),
+          status: 'approved',
           subskills: [
             { name: 'Literal', status: pct >= 75 ? 'OK' : 'Needs Work', score: Math.round(pct + 5) },
             { name: 'Inference', status: pct >= 75 ? 'OK' : 'Needs Work', score: Math.round(pct - 10) },
@@ -194,6 +197,27 @@ const seedDB = async () => {
           date: weeksAgo(8 - k * 3),
         });
       }
+
+      // Populate LearnerRecord Phil-IRI fields (Phase B)
+      const rLevel = a < 0.6 ? 'Frustration' : a < 0.75 ? 'Instructional' : 'Independent';
+      const oralAcc = Math.round(Math.min(100, Math.max(40, a * 100)));
+      const oralW = Math.round(40 + a * 80);
+      const compSc = Math.round(Math.min(98, Math.max(30, a * 100)));
+      const compLvl = compSc >= 80 ? 'Independent' : compSc >= 59 ? 'Instructional' : 'Frustration';
+      await LearnerRecord.findOneAndUpdate(
+        { studentId: s.user._id },
+        {
+          readingLevel: rLevel,
+          oralReadingAccuracy: oralAcc,
+          oralReadingWpm: oralW,
+          oralReadingLevel: rLevel,
+          comprehensionScore: compSc,
+          comprehensionLevel: compLvl,
+          combinedReadingLevel: rLevel,
+          philIriStatus: 'approved',
+          lastReadingAssessmentDate: new Date(),
+        }
+      );
     }
 
     console.log('Creating Interventions...');

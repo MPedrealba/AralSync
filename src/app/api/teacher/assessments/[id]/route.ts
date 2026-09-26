@@ -4,11 +4,15 @@ import { ok, fail } from '@/lib/api';
 import connectDB from '../../../../../../database/db';
 import Assessment from '../../../../../../models/Assessment';
 import { logAudit } from '@/lib/audit';
+import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 
 /**
  * PATCH /api/teacher/assessments/[id]
  * Teacher validation (capstone FR step): approve or flag a learner assessment.
  * Only 'approved' / 'flagged' transitions are allowed by this route.
+ *
+ * Phase B: Approving an assessment triggers an approval side-effect that
+ * synchronizes and recalculates the learner's Phil-IRI metrics on LearnerRecord.
  */
 export async function PATCH(
   req: NextRequest,
@@ -37,6 +41,14 @@ export async function PATCH(
       return fail('Assessment not found', 404);
     }
 
+    // If paired assessment exists (e.g. reading comprehension paired with oral reading), update it too
+    if (updated.pairedAssessmentId) {
+      await Assessment.findByIdAndUpdate(updated.pairedAssessmentId, { status });
+    }
+
+    // ── Phase B: Approval side-effect on LearnerRecord ──
+    const philIri = await syncLearnerPhilIriMetrics(updated.studentId);
+
     await logAudit({
       actorId: teacher.id,
       actorName: teacher.name,
@@ -48,6 +60,8 @@ export async function PATCH(
         status,
         masteryLevel: updated.masteryLevel,
         studentId: String(updated.studentId || ''),
+        philIriReadingLevel: philIri?.readingLevel,
+        philIriStatus: philIri?.philIriStatus,
       },
     });
 
@@ -56,6 +70,7 @@ export async function PATCH(
       status: updated.status,
       masteryLevel: updated.masteryLevel,
       title: updated.title,
+      philIri,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

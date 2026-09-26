@@ -42,14 +42,16 @@ export async function GET(req: NextRequest) {
 
     const rows = records
       .map((r: any) => {
-        const level = readingLevels.get(String(r.studentId)) || 'Not Assessed';
+        const sid = String(r.studentId);
+        const level = (r.readingLevel && r.readingLevel !== 'Not Assessed') ? r.readingLevel : (readingLevels.get(sid) || 'Not Assessed');
         return {
-          name: userMap.get(String(r.studentId)) || 'Unknown',
+          name: userMap.get(sid) || 'Unknown',
           lrn: r.lrn,
           grade: `Grade ${r.gradeLevel ?? '?'}`,
           gradeNum: r.gradeLevel ?? 0,
           section: r.section || '—',
           reading: level,
+          philIriStatus: r.philIriStatus || 'unassessed',
           risk: r.riskLevel === 'High Risk',
           status: r.riskLevel === 'High Risk' ? 'At Risk' : 'Active',
         };

@@ -16,10 +16,10 @@ interface Learner {
 }
 
 interface EditLearnerModalProps {
-  learner: Learner | null;
+  learner: any;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (learner: Learner) => void;
+  onSave: (learner: any) => void | Promise<void>;
 }
 
 export default function EditLearnerModal({

@@ -41,6 +41,7 @@ const AssessmentSchema = new mongoose.Schema({
     },
   ],
   status: { type: String, enum: ['pending', 'approved', 'flagged'], default: 'pending' }, // teacher validation
+  pairedAssessmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Assessment' },
   notes: { type: String }, // reading fluency / teacher notes
   competency: { type: String },
   masteryLevel: { type: String },

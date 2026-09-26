@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../../database/db";
 import Question from "../../../../../../models/Question";
 import AnswerKey from "../../../../../../models/AnswerKey";
@@ -19,7 +19,7 @@ const difficultyLabel = (d: string) =>
  *   writtenCount  — how many of those items to mark as "written" (teacher-graded)
  *                   must be ≤ count; remaining items are MC (auto-graded)
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     await requireAuth(req, ["teacher"]);
     await connectDB();

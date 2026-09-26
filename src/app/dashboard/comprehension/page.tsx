@@ -35,6 +35,7 @@ interface CompRow {
   masteryLevel: string;
   passageTitle: string | null;
   subskills: { name: string; status: string; score: number }[];
+  status?: string;
   date: string;
 }
 
@@ -328,8 +329,8 @@ function NewCheckFlow() {
   }
 
   /* ── STEP: RESULTS ── */
-  const correctCount = answers.reduce(
-    (acc, ans, i) => (acc || 0) + (ans === sampleQuestions[i]?.correctIndex ? 1 : 0),
+  const correctCount = answers.reduce<number>(
+    (acc, ans, i) => acc + (ans === sampleQuestions[i]?.correctIndex ? 1 : 0),
     0
   );
   const percentage = Math.round((correctCount / totalQuestions) * 100);
@@ -435,6 +436,24 @@ function ResultsHistoryTab() {
     }
   };
 
+  const validateEntry = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`/api/teacher/assessments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setResults((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status } : r))
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => { load(); }, []);
 
   const filtered = results.filter((r) =>
@@ -529,34 +548,74 @@ function ResultsHistoryTab() {
                   </div>
                 </button>
 
-                {/* Expanded subskills */}
-                {isExpanded && entry.subskills.length > 0 && (
-                  <div className="mx-4 mb-3 rounded-b-xl border border-t-0 border-gray-100 bg-gray-50 p-5">
-                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Subskills Breakdown
-                    </h4>
-                    <div className="space-y-2.5">
-                      {entry.subskills.map((s, i) => (
-                        <div key={i}>
-                          <div className="mb-1 flex items-center justify-between">
-                            <span className="text-sm text-gray-700">{s.name}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium text-gray-500">{s.score}%</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${masteryColor(s.status)}`}>
-                                {s.status}
-                              </span>
+                {/* Expanded details & validation */}
+                {isExpanded && (
+                  <div className="mx-4 mb-3 rounded-b-xl border border-t-0 border-gray-100 bg-gray-50 p-5 space-y-4">
+                    {entry.subskills.length > 0 && (
+                      <div>
+                        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                          Subskills Breakdown
+                        </h4>
+                        <div className="space-y-2.5">
+                          {entry.subskills.map((s, i) => (
+                            <div key={i}>
+                              <div className="mb-1 flex items-center justify-between">
+                                <span className="text-sm text-gray-700">{s.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-gray-500">{s.score}%</span>
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${masteryColor(s.status)}`}>
+                                    {s.status}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    s.score >= 75 ? "bg-emerald-500" : s.score >= 60 ? "bg-amber-500" : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${s.score}%` }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                s.score >= 75 ? "bg-emerald-500" : s.score >= 60 ? "bg-amber-500" : "bg-red-500"
-                              }`}
-                              style={{ width: `${s.score}%` }}
-                            />
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {/* Teacher Validation (Phase B) */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200/60 pt-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Phil-IRI Validation:</span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          entry.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : entry.status === 'flagged'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {entry.status === 'approved' ? 'Approved' : entry.status === 'flagged' ? 'Flagged' : 'Pending'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            await validateEntry(entry.id, 'approved');
+                          }}
+                          disabled={entry.status === 'approved'}
+                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40"
+                        >
+                          Approve Result
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await validateEntry(entry.id, 'flagged');
+                          }}
+                          disabled={entry.status === 'flagged'}
+                          className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 disabled:opacity-40"
+                        >
+                          Flag Result
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

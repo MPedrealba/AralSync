@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../database/db";
 import Question from "../../../../../models/Question";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
@@ -9,7 +9,7 @@ import { requireAuth, authErrorResponse } from "@/lib/auth";
  * ?subject=, ?grade=, ?topic= filters so the generator tab can preview
  * available questions.
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     await requireAuth(req, ["teacher"]);
     await connectDB();
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
  * POST /api/teacher/questions
  * Add a single question to the bank.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     await requireAuth(req, ["teacher"]);
     await connectDB();

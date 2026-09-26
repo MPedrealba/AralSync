@@ -31,6 +31,18 @@ interface LearnerRow {
   address: string;
   risk: boolean;
   status: string;
+  philIri?: {
+    readingLevel: string;
+    combinedReadingLevel?: string | null;
+    oralReadingAccuracy?: number | null;
+    oralReadingWpm?: number | null;
+    oralReadingWer?: number | null;
+    oralReadingLevel?: string | null;
+    comprehensionScore?: number | null;
+    comprehensionLevel?: string | null;
+    status: string;
+    lastAssessmentDate?: string | null;
+  };
   history: AssessmentRow[];
 }
 
@@ -290,6 +302,50 @@ export default function CoordinatorLearnerRecordsPage() {
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${selected.status === "At Risk" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
                   {selected.status}
                 </span>
+              </div>
+
+              {/* Phil-IRI Official Profile (Phase B) */}
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-900">
+                    <BookOpenText className="h-4 w-4 text-blue-600" /> Phil-IRI Official Profile
+                  </p>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    selected.philIri?.status === 'approved'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : selected.philIri?.status === 'pending'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {selected.philIri?.status === 'approved' ? 'Verified / Approved' : selected.philIri?.status === 'pending' ? 'Pending Approval' : 'Unassessed'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="rounded-lg bg-white p-2.5 shadow-xs border border-blue-100">
+                    <p className="text-[10px] font-semibold uppercase text-gray-400">Oral Accuracy</p>
+                    <p className="mt-1 text-base font-bold text-gray-800">
+                      {selected.philIri?.oralReadingAccuracy != null ? `${Math.round(selected.philIri.oralReadingAccuracy)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white p-2.5 shadow-xs border border-blue-100">
+                    <p className="text-[10px] font-semibold uppercase text-gray-400">Oral Speed</p>
+                    <p className="mt-1 text-base font-bold text-gray-800">
+                      {selected.philIri?.oralReadingWpm != null ? `${selected.philIri.oralReadingWpm} wpm` : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white p-2.5 shadow-xs border border-blue-100">
+                    <p className="text-[10px] font-semibold uppercase text-gray-400">Comprehension</p>
+                    <p className="mt-1 text-base font-bold text-gray-800">
+                      {selected.philIri?.comprehensionScore != null ? `${Math.round(selected.philIri.comprehensionScore)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white p-2.5 shadow-xs border border-blue-100">
+                    <p className="text-[10px] font-semibold uppercase text-gray-400">Combined Level</p>
+                    <p className="mt-1 text-base font-bold text-blue-700">
+                      {selected.philIri?.combinedReadingLevel || selected.philIri?.readingLevel || selected.reading}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Guardian & contact */}

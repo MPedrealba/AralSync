@@ -9,6 +9,7 @@ import {
   transcribeGroq,
 } from '@/lib/reading';
 import { logAudit } from '@/lib/audit';
+import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
@@ -23,6 +24,10 @@ async function fetchLibrosaFeatures(
   pacing: number | null;
   hesitations: number | null;
   longestPause: number | null;
+  speechDurationSec: number | null;
+  pauseTotalSec: number | null;
+  pauseAvgSec: number | null;
+  pacingMean: number | null;
 } | null> {
   try {
     const form = new FormData();
@@ -46,6 +51,10 @@ async function fetchLibrosaFeatures(
           pacing: f.pacing_cv ?? null,
           hesitations: f.hesitations ?? null,
           longestPause: f.silence_longest_sec ?? null,
+          speechDurationSec: f.speech_duration_sec ?? null,
+          pauseTotalSec: f.pause_total_sec ?? null,
+          pauseAvgSec: f.pause_avg_sec ?? null,
+          pacingMean: f.pacing_mean ?? null,
         };
       }
     }
@@ -250,7 +259,15 @@ export async function POST(req: NextRequest) {
         score: cScore,
         masteryLevel: comprehensionLevel(cScore),
       };
+
+      assessment.pairedAssessmentId = comp._id;
+      await assessment.save();
+      comp.pairedAssessmentId = assessment._id;
+      await comp.save();
     }
+
+    // Synchronize learner record Phil-IRI status (will reflect pending)
+    await syncLearnerPhilIriMetrics(studentId);
 
     await logAudit({
       actorId: studentId,

@@ -141,7 +141,7 @@ export default function ReadingLevelsPage() {
                     <Pie data={overallDist} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" strokeWidth={0}>
                       {overallDist.map((e, i) => <Cell key={i} fill={e.color} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number, n: string) => [`${v}`, n]} contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
+                    <Tooltip formatter={(v: any, n: any) => [`${v}`, n]} contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

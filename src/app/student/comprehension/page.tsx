@@ -13,6 +13,7 @@ interface Subskill {
 interface CompRow {
   title: string;
   passageTitle: string | null;
+  subject?: string;
   score: number | null;
   masteryLevel: string;
   subskills: Subskill[];

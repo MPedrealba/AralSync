@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../database/db";
 import AnswerKey from "../../../../../models/AnswerKey";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     await requireAuth(req, ["teacher"]);
     await connectDB();
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     await requireAuth(req, ["teacher"]);
     await connectDB();

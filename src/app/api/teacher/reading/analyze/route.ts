@@ -9,6 +9,7 @@ import {
   transcribeGroq,
 } from '@/lib/reading';
 import { logAudit } from '@/lib/audit';
+import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
@@ -266,7 +267,15 @@ export async function POST(req: NextRequest) {
         score: cScore,
         masteryLevel: comprehensionLevel(cScore),
       };
+
+      assessment.pairedAssessmentId = comp._id;
+      await assessment.save();
+      comp.pairedAssessmentId = assessment._id;
+      await comp.save();
     }
+
+    // Synchronize learner record Phil-IRI status (will be marked pending if unassessed)
+    await syncLearnerPhilIriMetrics(studentId);
 
     await logAudit({
       actorId: teacher.id,

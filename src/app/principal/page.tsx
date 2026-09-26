@@ -140,7 +140,7 @@ export default function PrincipalDashboardPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number, name: string) => [`${value} learners`, name]}
+                      formatter={(value: any, name: any) => [`${value} learners`, name]}
                       contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }}
                     />
                   </PieChart>

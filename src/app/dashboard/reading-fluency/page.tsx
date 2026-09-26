@@ -876,10 +876,12 @@ function FluencyReportModal({
   const errPct = 100 - accuracyPct;
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState("");
+  const [validationSuccess, setValidationSuccess] = useState("");
 
   const validate = async (status: string) => {
     setValidating(true);
     setValidationError("");
+    setValidationSuccess("");
     try {
       const res = await fetch(`/api/teacher/assessments/${learner.id}`, {
         method: "PATCH",
@@ -888,6 +890,11 @@ function FluencyReportModal({
       });
       const json = await res.json();
       if (json.success) {
+        if (status === "approved") {
+          setValidationSuccess("Assessment approved! Learner record Phil-IRI metrics updated.");
+        } else {
+          setValidationSuccess("Assessment flagged.");
+        }
         onUpdated?.(status);
       } else {
         setValidationError(json.error || "Update failed.");
@@ -1088,7 +1095,10 @@ function FluencyReportModal({
               </span>
             </div>
             {validationError && (
-              <p className="mt-2 text-xs text-red-600">{validationError}</p>
+              <p className="mt-2 text-xs font-medium text-red-600">{validationError}</p>
+            )}
+            {validationSuccess && (
+              <p className="mt-2 text-xs font-semibold text-emerald-600">{validationSuccess}</p>
             )}
           </div>
 

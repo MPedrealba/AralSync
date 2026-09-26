@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../../database/db';
 import CustomExam from '../../../../../models/CustomExam';
 import AnswerKey from '../../../../../models/AnswerKey';
@@ -8,7 +8,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth';
  * GET /api/teacher/exams
  * List all exams uploaded by the logged-in teacher.
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const teacher = await requireAuth(req, ['teacher']);
     await connectDB();
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
  *
  * On success, auto-creates an AnswerKey so the exam can be scanned/graded.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const teacher = await requireAuth(req, ['teacher']);
     await connectDB();

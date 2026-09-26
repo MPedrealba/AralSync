@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       .sort({ date: 1 })
       .lean();
 
-    const latest = new Map<string, { level: string; grade: number }>();
+    const latest = new Map<string, { level: string; grade: number; date: number }>();
     for (const a of fluency as any[]) {
       const sid = String(a.studentId);
       const t = new Date(a.date).getTime();

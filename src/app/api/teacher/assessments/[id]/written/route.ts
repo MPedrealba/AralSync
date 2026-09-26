@@ -4,6 +4,7 @@ import { ok, fail } from '@/lib/api';
 import connectDB from '../../../../../../../database/db';
 import Assessment from '../../../../../../../models/Assessment';
 import { logAudit } from '@/lib/audit';
+import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 
 /** OMR mastery bands (mirror of the scanner). */
 const masteryFromPercentage = (pct: number): string => {
@@ -69,11 +70,17 @@ export async function PATCH(
       {
         writtenScore,
         gradingStatus: 'complete',
+        status: 'approved',
         score: pct,
         masteryLevel: masteryFromPercentage(pct),
       },
       { new: true }
     );
+
+    let philIri = null;
+    if (assessment.subject === 'Reading' || assessment.type === 'READING_FLUENCY' || assessment.type === 'COMPREHENSION') {
+      philIri = await syncLearnerPhilIriMetrics(assessment.studentId);
+    }
 
     await logAudit({
       actorId: teacher.id,

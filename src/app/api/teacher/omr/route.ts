@@ -5,6 +5,7 @@ import connectDB from '../../../../../database/db';
 import Assessment from '../../../../../models/Assessment';
 import AnswerKey from '../../../../../models/AnswerKey';
 import { logAudit } from '@/lib/audit';
+import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 
 /* ──────────────────────────────────────────────────────────────
  *  OMR Processing — OpenCV via Python microservice
@@ -119,6 +120,7 @@ export async function POST(req: NextRequest) {
 
     const percentage = totalItems > 0 ? Math.round((mcCorrect / totalItems) * 100) : 0;
     const gradingStatus = writtenItems.length > 0 ? 'partial' : 'complete';
+    const status = gradingStatus === 'complete' ? 'approved' : 'pending';
 
     /* ── Save assessment ── */
     const assessment = await Assessment.create({
@@ -133,12 +135,17 @@ export async function POST(req: NextRequest) {
       writtenMax,
       writtenScore: 0, // teacher grades written items later
       gradingStatus,
+      status,
       competency,
       masteryLevel: masteryLevel(percentage),
       answerKeyRef: keyDoc?._id || undefined,
       writtenItems,
       date: new Date(),
     });
+
+    if (subject === 'Reading' && status === 'approved') {
+      await syncLearnerPhilIriMetrics(studentId);
+    }
 
     await logAudit({
       actorId: teacher.id,
