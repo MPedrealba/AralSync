@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
       type: TYPE_MAP[rec.kind] || 'Activity',
       status: 'Not Started',
       assignedDate: new Date(),
+      recommendationRef: rec._id,
+      workbookUrl: rec.workbookUrl || null,
+      tutorGuideUrl: rec.tutorGuideUrl || null,
+      keyStage: rec.keyStage || null,
     });
 
     return ok({

@@ -31,6 +31,11 @@ export async function GET(req: NextRequest) {
         subject: rec.subject || '',
         kind: rec.kind,
         meta: rec.meta || {},
+        workbookUrl: rec.workbookUrl || null,
+        tutorGuideUrl: rec.tutorGuideUrl || null,
+        keyStage: rec.keyStage || null,
+        programLevel: rec.programLevel || null,
+        targetGrades: rec.targetGrades || [],
       });
     });
 

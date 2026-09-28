@@ -12,7 +12,11 @@ const InterventionSchema = new mongoose.Schema({
   // "Reading Comprehension"). Used by auto-assign to avoid duplicate active interventions.
   weakness: { type: String },
   // The library item this was auto-assigned from, when applicable.
-  recommendationRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Recommendation' }
+  recommendationRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Recommendation' },
+  // ARAL Learning Materials
+  workbookUrl: { type: String, default: null },
+  tutorGuideUrl: { type: String, default: null },
+  keyStage: { type: String, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.models.Intervention || mongoose.model('Intervention', InterventionSchema);

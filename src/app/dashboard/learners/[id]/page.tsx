@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { ArrowLeft, ShieldCheck, FileCheck2 } from "lucide-react";
+import { ArrowLeft, ShieldCheck, FileCheck2, Eye } from "lucide-react";
+import OMRSheetViewerModal, { OMRSheetViewerItem } from "@/components/OMRSheetViewerModal";
 
 interface OMRRow {
   id: string;
@@ -13,6 +14,8 @@ interface OMRRow {
   subject: string;
   score: number;
   mastery: string;
+  omrSheetUrl?: string | null;
+  detectedAnswers?: (string | null)[];
 }
 
 interface ReadingRow {
@@ -48,6 +51,7 @@ export default function LearnerViewPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [viewingSheet, setViewingSheet] = useState<OMRSheetViewerItem | null>(null);
 
   useEffect(() => {
     const fetchLearner = async () => {
@@ -217,13 +221,16 @@ export default function LearnerViewPage() {
                     <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">
                       Mastery
                     </th>
+                    <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white">
+                      Sheet
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {data.omrAssessments.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="px-5 py-8 text-center text-sm text-gray-400"
                       >
                         No OMR assessments yet.
@@ -243,6 +250,28 @@ export default function LearnerViewPage() {
                         </td>
                         <td className="px-5 py-3 text-sm text-gray-600">
                           {a.mastery}
+                        </td>
+                        <td className="px-5 py-3">
+                          <button
+                            onClick={() =>
+                              setViewingSheet({
+                                id: a.id,
+                                title: a.title,
+                                studentName: data.learner?.name,
+                                gradeSection: `Grade ${data.learner?.gradeLevel} - ${data.learner?.section}`,
+                                score: a.score,
+                                masteryLevel: a.mastery,
+                                date: a.date,
+                                omrSheetUrl: a.omrSheetUrl,
+                                detectedAnswers: a.detectedAnswers,
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50/50 transition-colors"
+                            title="View scanned answer sheet image"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-blue-600" />
+                            View
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -320,6 +349,13 @@ export default function LearnerViewPage() {
           </div>
         </div>
       </main>
+
+      {/* OMR Sheet Viewer Modal */}
+      <OMRSheetViewerModal
+        isOpen={Boolean(viewingSheet)}
+        onClose={() => setViewingSheet(null)}
+        assessment={viewingSheet}
+      />
     </>
   );
 }

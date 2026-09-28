@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
       type: i.type || 'Activity',
       status: i.status || 'Not Started',
       assignedDate: i.assignedDate,
+      workbookUrl: i.workbookUrl || null,
+      tutorGuideUrl: i.tutorGuideUrl || null,
+      keyStage: i.keyStage || null,
     }));
 
     const completed = data.filter((d) => d.status === 'Completed').length;

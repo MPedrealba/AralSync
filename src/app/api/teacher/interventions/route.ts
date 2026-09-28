@@ -61,6 +61,9 @@ export async function GET(req: NextRequest) {
         created,
         status: i.status || 'Not Started',
         reviewed: i.reviewed ?? false,
+        workbookUrl: i.workbookUrl || null,
+        tutorGuideUrl: i.tutorGuideUrl || null,
+        keyStage: i.keyStage || null,
       };
     });
 

@@ -57,6 +57,8 @@ export async function GET(
         subject: a.subject || 'Math',
         score: a.score,
         mastery: a.masteryLevel,
+        omrSheetUrl: a.omrSheetUrl || null,
+        detectedAnswers: a.detectedAnswers || [],
       }));
 
     const readingAssessments = assessments

@@ -14,10 +14,15 @@ interface RecItem {
   subject: string;
   kind: string;
   meta: { items?: number; lessons?: number; duration?: string; level?: string };
+  workbookUrl?: string | null;
+  tutorGuideUrl?: string | null;
+  keyStage?: string | null;
+  programLevel?: string | null;
+  targetGrades?: number[];
 }
 
 export default function RecommendationsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("Videos");
+  const [activeTab, setActiveTab] = useState<Tab>("Modules");
   const [data, setData] = useState<{
     videos: RecItem[];
     quizzes: RecItem[];
@@ -166,6 +171,11 @@ export default function RecommendationsPage() {
                   <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
                     {item.subject}
                   </span>
+                  {item.keyStage && (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                      ARAL {item.keyStage} {item.programLevel ? `• ${item.programLevel}` : ''}
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-sm font-semibold text-gray-900">{item.title}</h3>
                 <p className="mt-1.5 flex-1 text-xs leading-relaxed text-gray-500">
@@ -176,14 +186,39 @@ export default function RecommendationsPage() {
                   {activeTab === "Quizzes" && item.meta.items
                     ? `${item.meta.items} questions`
                     : ""}
-                  {activeTab === "Modules" && item.meta.lessons
-                    ? `${item.meta.lessons} lessons`
-                    : ""}
+                  {activeTab === "Modules" && (item.meta.level || `${item.meta.lessons || 32} lessons`)}
                   {activeTab === "Activities" && (item.meta.duration || "Hands-on")}
                 </p>
+
+                {/* ARAL PDF Quick Access */}
+                {(item.workbookUrl || item.tutorGuideUrl) && (
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-2.5">
+                    {item.workbookUrl && (
+                      <a
+                        href={item.workbookUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50/70 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        📘 Learner Workbook (PDF)
+                      </a>
+                    )}
+                    {item.tutorGuideUrl && (
+                      <a
+                        href={item.tutorGuideUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        🎓 Tutor's Guide (PDF)
+                      </a>
+                    )}
+                  </div>
+                )}
+
                 <button
                   onClick={() => assign(item)}
-                  className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]"
+                  className="mt-3 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]"
                 >
                   Assign to Learner
                 </button>

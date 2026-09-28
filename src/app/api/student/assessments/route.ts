@@ -36,6 +36,7 @@ function toRow(a: any) {
     longestPause: a.longestPause ?? null,
     speechDurationSec: a.speechDurationSec ?? null,
     silentSec: a.silenceSec ?? null,
+    omrSheetUrl: a.omrSheetUrl || null,
   };
 }
 

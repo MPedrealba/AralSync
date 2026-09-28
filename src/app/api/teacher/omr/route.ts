@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import path from 'path';
 import { NextResponse, NextRequest } from 'next/server';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
@@ -96,9 +98,27 @@ export async function POST(req: NextRequest) {
     const keyModes: string[] = keyDoc?.modes ?? [];
     const totalItems = keyAnswers.length || 20;
 
-    /* ── Process OMR sheet (simulated) ── */
+    /* ── Process OMR sheet (simulated or OpenCV) ── */
     const imageBuffer = await file.arrayBuffer();
     const detectedAnswers = await processOMRSheet(imageBuffer, totalItems);
+
+    /* ── Persist uploaded sheet image to disk ── */
+    let omrSheetUrl: string | null = null;
+    const originalFilename = file.name || 'sheet.png';
+    const ext = path.extname(originalFilename).toLowerCase() || '.png';
+    const safeExt = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext) ? ext : '.png';
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'omr');
+    const filename = `omr-${studentId}-${Date.now()}${safeExt}`;
+    const filePath = path.join(uploadDir, filename);
+
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+      await fs.writeFile(filePath, Buffer.from(imageBuffer));
+      omrSheetUrl = `/uploads/omr/${filename}`;
+    } catch (saveErr) {
+      console.error('Failed to save OMR sheet image to disk:', saveErr);
+      // Non-fatal fallback: continue scoring even if disk write encounters an issue
+    }
 
     /* ── Grade MC items only; written items are scored later by teacher ── */
     let mcCorrect = 0;
@@ -140,6 +160,9 @@ export async function POST(req: NextRequest) {
       masteryLevel: masteryLevel(percentage),
       answerKeyRef: keyDoc?._id || undefined,
       writtenItems,
+      omrSheetUrl,
+      omrOriginalFilename: originalFilename,
+      detectedAnswers,
       date: new Date(),
     });
 
@@ -173,6 +196,8 @@ export async function POST(req: NextRequest) {
       gradingStatus,
       masteryLevel: masteryLevel(percentage),
       assessmentId: String(assessment._id),
+      omrSheetUrl,
+      detectedAnswers,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

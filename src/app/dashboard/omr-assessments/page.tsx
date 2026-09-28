@@ -17,7 +17,9 @@ import {
   BookOpen,
   PenLine,
   Trash2,
+  Eye,
 } from "lucide-react";
+import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 
 /* ──── Tab names ──── */
 const tabs = ["Results/History", "Generate Questionnaire", "Answer Keys"] as const;
@@ -41,6 +43,9 @@ interface AssessmentRow {
   gradingStatus: "complete" | "partial";
   writtenItems: { index: number; prompt: string; max: number }[];
   masteryLevel: string;
+  omrSheetUrl?: string | null;
+  omrOriginalFilename?: string | null;
+  detectedAnswers?: (string | null)[];
   date: string;
 }
 
@@ -121,6 +126,8 @@ function ResultsTab() {
   const [draftScores, setDraftScores] = useState<number[]>([]);
   const [savingGrades, setSavingGrades] = useState(false);
   const [gradeError, setGradeError] = useState("");
+  // Sheet viewer modal state
+  const [viewingSheet, setViewingSheet] = useState<AssessmentRow | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -307,18 +314,28 @@ function ResultsTab() {
                       </span>
                     </td>
                     <td className="px-6 py-3.5">
-                      {r.gradingStatus === "partial" && r.writtenItems.length > 0 && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => openGrading(r)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                          onClick={() => setViewingSheet(r)}
+                          title="View uploaded answer sheet image"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700 active:scale-95"
                         >
-                          <PenLine className="h-3.5 w-3.5" />
-                          Grade Written ({r.writtenItems.length})
+                          <Eye className="h-3.5 w-3.5 text-blue-600" />
+                          View Sheet
                         </button>
-                      )}
-                      {r.gradingStatus === "complete" && (
-                        <span className="text-[10px] font-medium text-emerald-600">Fully graded</span>
-                      )}
+                        {r.gradingStatus === "partial" && r.writtenItems.length > 0 && (
+                          <button
+                            onClick={() => openGrading(r)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 active:scale-95"
+                          >
+                            <PenLine className="h-3.5 w-3.5" />
+                            Grade ({r.writtenItems.length})
+                          </button>
+                        )}
+                        {r.gradingStatus === "complete" && (
+                          <span className="text-[10px] font-medium text-emerald-600">Fully graded</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -341,12 +358,23 @@ function ResultsTab() {
                 {grading.title} &mdash; {grading.studentName}
               </p>
             </div>
-            <button
-              onClick={() => setGrading(null)}
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setViewingSheet(grading)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                title="Inspect student's handwritten answers on sheet"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                View Sheet Image
+              </button>
+              <button
+                onClick={() => setGrading(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Items */}
@@ -404,6 +432,13 @@ function ResultsTab() {
         </div>
       </div>
     )}
+
+    {/* OMR Answer Sheet Viewer Modal */}
+    <OMRSheetViewerModal
+      isOpen={Boolean(viewingSheet)}
+      onClose={() => setViewingSheet(null)}
+      assessment={viewingSheet}
+    />
     </>
   );
 }
@@ -1028,6 +1063,7 @@ interface GeneratedDoc {
   gradeLevel: number;
   itemCount: number;
   passageTitle?: string;
+  passageText?: string;
   writtenCount: number;
   questions: GeneratedQuestion[];
   answers: string[];
@@ -1044,14 +1080,15 @@ interface PassageOption {
 const PrintAry = ["A", "B", "C", "D"];
 
 function GenerateTab() {
-  const [genType, setGenType] = useState<"bank" | "reading" | "upload">("bank");
+  const [genType, setGenType] = useState<"bank" | "aral" | "reading" | "upload">("aral");
   const [subject, setSubject] = useState("Math");
   const [grade, setGrade] = useState(7);
-  const [count, setCount] = useState(20);
+  const [count, setCount] = useState(10);
   const [writtenCount, setWrittenCount] = useState(0);
   const [topic, setTopic] = useState("");
   const [passages, setPassages] = useState<PassageOption[]>([]);
   const [passageId, setPassageId] = useState("");
+  const [aralPassageId, setAralPassageId] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [doc, setDoc] = useState<GeneratedDoc | null>(null);
@@ -1063,8 +1100,14 @@ function GenerateTab() {
       try {
         const res = await fetch("/api/teacher/reading/passages");
         const json = await res.json();
-        if (json.success) setPassages(json.data || []);
-        else setGenError(json.error || "Failed to load passages.");
+        if (json.success) {
+          const list: PassageOption[] = json.data || [];
+          setPassages(list);
+          const firstAral = list.find((p) => p.title.startsWith("ARAL"));
+          if (firstAral) setAralPassageId(firstAral.id);
+        } else {
+          setGenError(json.error || "Failed to load passages.");
+        }
       } catch {
         // silent — the dropdown will show its fallback state
       }
@@ -1087,6 +1130,27 @@ function GenerateTab() {
     setGenerating(true);
     setGenError("");
     try {
+      if (genType === "aral") {
+        if (!aralPassageId) {
+          setGenError("Select an ARAL reading module first.");
+          setGenerating(false);
+          return;
+        }
+        const res = await fetch("/api/teacher/questionnaire/generate-aral", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            passageId: aralPassageId,
+            count,
+            writtenCount,
+          }),
+        });
+        const json = await res.json();
+        if (json.success) setDoc(json.data);
+        else setGenError(json.error || "Failed to generate ARAL questionnaire.");
+        return;
+      }
+
       const isReading = genType === "reading";
       if (isReading && !passageId) {
         setGenError("Select a reading passage or module first.");
@@ -1126,46 +1190,146 @@ function GenerateTab() {
             Auto-Generate OMR Sheet
           </h3>
           <p className="mb-5 text-sm text-gray-400">
-            Build a questionnaire + bubble sheet from the DepEd-aligned question
-            bank, or from a reading passage/module (comprehension check).
+            Build a questionnaire + bubble sheet from official DepEd ARAL materials,
+            the subject question bank, or a reading passage.
           </p>
 
           {/* Source toggle */}
-          <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1">
+          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-gray-100 p-1">
+            <button
+              onClick={() => setGenType("aral")}
+              className={`rounded-lg px-2 py-2 text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                genType === "aral"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <span>ARAL</span>
+              <span className="rounded bg-blue-100 px-1 py-0.2 text-[9px] font-bold text-blue-800">DepEd</span>
+            </button>
             <button
               onClick={() => setGenType("bank")}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+              className={`rounded-lg px-2 py-2 text-xs font-semibold transition-all ${
                 genType === "bank"
                   ? "bg-white text-blue-700 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              Question Bank
+              Bank
             </button>
             <button
               onClick={() => setGenType("reading")}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+              className={`rounded-lg px-2 py-2 text-xs font-semibold transition-all ${
                 genType === "reading"
                   ? "bg-white text-blue-700 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              Reading Passage
+              Reading
             </button>
             <button
               onClick={() => setGenType("upload")}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+              className={`rounded-lg px-2 py-2 text-xs font-semibold transition-all ${
                 genType === "upload"
                   ? "bg-white text-blue-700 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              Upload Exam
+              Upload
             </button>
           </div>
 
           <div className="space-y-4">
-            {genType === "bank" ? (
+            {genType === "aral" ? (
+              <>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    ARAL Module &amp; Story
+                  </label>
+                  <select
+                    value={aralPassageId}
+                    onChange={(e) => setAralPassageId(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select an ARAL reading module…</option>
+                    {passages
+                      .filter((p) => p.title.startsWith("ARAL"))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title} (Gr {p.gradeLevel ?? "—"}) — {p.questionCount} Qs
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Extracts selections &amp; comprehension items from the official ARAL Workbooks.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2.5 text-xs text-blue-800 space-y-1">
+                  <p className="font-semibold text-blue-900 text-[11px]">
+                    ARAL Reference Documents:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <a
+                      href="/learning-materials/ks3-plus/learner-workbook.pdf"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200 shadow-2xs hover:bg-blue-50"
+                    >
+                      📘 KS3 Plus
+                    </a>
+                    <a
+                      href="/learning-materials/ks3-plus/tutors-guide.pdf"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200 shadow-2xs hover:bg-blue-50"
+                    >
+                      🎓 KS3 Guide
+                    </a>
+                    <a
+                      href="/learning-materials/ks2-plus/learner-workbook.pdf"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200 shadow-2xs hover:bg-blue-50"
+                    >
+                      📘 KS2 Plus
+                    </a>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Items Count
+                  </label>
+                  <select
+                    value={count}
+                    onChange={(e) => setCount(parseInt(e.target.value))}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+                    {[10, 20, 30].map((n) => (
+                      <option key={n} value={n}>{n} items</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Written Items (teacher-graded)
+                  </label>
+                  <select
+                    value={writtenCount}
+                    onChange={(e) => setWrittenCount(parseInt(e.target.value))}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                  >
+                    {[0, 2, 5].filter((n) => n <= count).map((n) => (
+                      <option key={n} value={n}>
+                        {n === 0 ? "None (all MC auto-graded)" : `${n} written response items`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : genType === "bank" ? (
               <>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</label>
@@ -1343,6 +1507,20 @@ function GenerateTab() {
                   </button>
                 </div>
               </div>
+
+              {/* Reading selection callout if present */}
+              {doc.passageText && (
+                <div className="border-b border-gray-100 bg-amber-50/40 p-6">
+                  <div className="rounded-xl border border-amber-200 bg-white p-4 shadow-2xs">
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                      📖 Reading Selection: {doc.passageTitle}
+                    </p>
+                    <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-gray-700 max-h-48 overflow-y-auto">
+                      {doc.passageText}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Questions list */}
               <div className="divide-y divide-gray-50">
@@ -1678,6 +1856,18 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
         <div className="flex gap-2"><span className="font-semibold">Grade &amp; Section:</span><span className="flex-1 border-b border-gray-400" /></div>
         <div className="flex gap-2"><span className="font-semibold">Date:</span><span className="flex-1 border-b border-gray-400" /></div>
       </div>
+
+      {/* Reading selection box for print */}
+      {doc.passageText && (
+        <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
+          <p className="font-bold uppercase tracking-wider text-black mb-1">
+            Reading Selection: {doc.passageTitle}
+          </p>
+          <div className="whitespace-pre-line text-gray-800">
+            {doc.passageText}
+          </div>
+        </div>
+      )}
 
       <div className="text-sm">
         {doc.questions.map((q) => (

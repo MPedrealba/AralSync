@@ -98,7 +98,11 @@ export async function GET(req: NextRequest) {
         deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'See assessment scores',
         intervention: suggested
           ? `${suggested.title} (${suggested.type})`
-          : 'Recommended: assign a targeted ARAL intervention',
+          : record.gradeLevel >= 7
+          ? 'Suggested: ARAL Reading Plus / Basic (Key Stage 3)'
+          : record.gradeLevel >= 4
+          ? 'Suggested: ARAL Reading Basic / Plus (Key Stage 2)'
+          : 'Suggested: ARAL English / Filipino (Key Stage 1)',
       });
     }
 

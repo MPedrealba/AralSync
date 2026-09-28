@@ -80,6 +80,9 @@ export async function GET(req: NextRequest) {
         subskills: a.subskills ?? [],
         status: a.status || 'pending',
         notes: a.notes || null,
+        omrSheetUrl: a.omrSheetUrl || null,
+        omrOriginalFilename: a.omrOriginalFilename || null,
+        detectedAnswers: a.detectedAnswers || [],
         date: a.date,
       };
     });

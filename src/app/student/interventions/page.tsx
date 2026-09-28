@@ -10,6 +10,9 @@ interface Intervention {
   type: string;
   status: string;
   assignedDate: string;
+  workbookUrl?: string | null;
+  tutorGuideUrl?: string | null;
+  keyStage?: string | null;
 }
 
 /* Map seed category → subject column */
@@ -177,7 +180,29 @@ export default function InterventionsPage() {
                 Open this {s.type.toLowerCase()} and follow the instructions. Complete all assigned tasks, then mark
                 it as done so your teacher knows you finished. Your teacher will review and confirm your progress.
               </p>
-              <div style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem" }}>
+                {s.workbookUrl && (
+                  <a
+                    href={s.workbookUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      background: "#eff6ff",
+                      color: "#1d4ed8",
+                      border: "1px solid #bfdbfe",
+                      padding: "0.5rem 1rem",
+                      borderRadius: "8px",
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    📘 Open Learner's Workbook (PDF)
+                  </a>
+                )}
                 {isCompleted ? (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "0.4rem 0.9rem", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 700 }}>
                     <Check size={15} /> Completed
@@ -264,7 +289,14 @@ export default function InterventionsPage() {
                   {items.map((it) => (
                     <div key={it.id} style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "1rem", background: "#ffffff" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                        <span style={{ fontSize: "0.72rem", background: (typeChip[it.type] || typeChip.Activity).bg, color: (typeChip[it.type] || typeChip.Activity).color, padding: "0.15rem 0.5rem", borderRadius: "4px", fontWeight: 600 }}>{it.type}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                          <span style={{ fontSize: "0.72rem", background: (typeChip[it.type] || typeChip.Activity).bg, color: (typeChip[it.type] || typeChip.Activity).color, padding: "0.15rem 0.5rem", borderRadius: "4px", fontWeight: 600 }}>{it.type}</span>
+                          {it.workbookUrl && (
+                            <span style={{ fontSize: "0.68rem", background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 700 }}>
+                              ARAL PDF
+                            </span>
+                          )}
+                        </div>
                         <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{fmtDate(it.assignedDate)}</span>
                       </div>
                       <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#111827", marginBottom: "0.5rem" }}>{it.title}</h4>

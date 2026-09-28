@@ -15,6 +15,12 @@ const RecommendationSchema = new mongoose.Schema(
     // DepEd curriculum alignment: competency code + which learning resource it maps to
     depedCode: { type: String, default: '' }, // e.g. M7NS-IIc-1
     source: { type: String, default: 'DepEd Learning Resource' },
+    // ARAL Learning Materials additions
+    workbookUrl: { type: String, default: null },
+    tutorGuideUrl: { type: String, default: null },
+    keyStage: { type: String, default: null },
+    programLevel: { type: String, default: null },
+    targetGrades: [{ type: Number }],
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

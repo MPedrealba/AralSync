@@ -8,7 +8,9 @@ import {
   CheckCircle,
   Loader2,
   ChevronDown,
+  Eye,
 } from "lucide-react";
+import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 
 interface OMRScannerProps {
   isOpen: boolean;
@@ -21,6 +23,9 @@ interface GradeResult {
   masteryLevel: string;
   gradingStatus?: "complete" | "partial";
   writtenItems?: { index: number; prompt: string; max: number }[];
+  assessmentId?: string;
+  omrSheetUrl?: string | null;
+  detectedAnswers?: (string | null)[];
 }
 
 export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
@@ -35,6 +40,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<GradeResult | null>(null);
   const [error, setError] = useState("");
+  const [showViewer, setShowViewer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch students list
@@ -77,6 +83,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
       setAnswerKeyId("");
       setResult(null);
       setError("");
+      setShowViewer(false);
       setIsProcessing(false);
     }
   }, [isOpen]);
@@ -330,10 +337,18 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
                   <p className="text-xs text-gray-500">Percentage</p>
                 </div>
               </div>
-              <div className="mt-4 flex justify-center">
+              <div className="mt-4 flex flex-col items-center gap-2.5">
                 <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getMasteryColor(result.masteryLevel)}`}>
                   {result.masteryLevel}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setShowViewer(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-50 active:scale-95"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  View Scanned Sheet Image
+                </button>
               </div>
             </div>
           )}
@@ -360,6 +375,30 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
           </button>
         </div>
       </div>
+
+      {/* OMR Sheet Viewer Modal */}
+      <OMRSheetViewerModal
+        isOpen={showViewer}
+        onClose={() => setShowViewer(false)}
+        assessment={
+          result
+            ? {
+                id: result.assessmentId || "recent-scan",
+                title: competency ? `${competency} Diagnostic` : "OMR Diagnostic",
+                studentName: students.find((s) => s._id === studentId)?.name || "Student",
+                score: Math.round((result.score / result.total) * 100),
+                masteryLevel: result.masteryLevel,
+                omrSheetUrl: result.omrSheetUrl || preview,
+                omrOriginalFilename: file?.name || "sheet.png",
+                detectedAnswers: result.detectedAnswers || [],
+                totalItems: result.total,
+                mcTotal: result.total,
+                scoredItems: result.score,
+                writtenItems: result.writtenItems || [],
+              }
+            : null
+        }
+      />
     </div>
   );
 }

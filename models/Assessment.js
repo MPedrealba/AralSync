@@ -56,6 +56,10 @@ const AssessmentSchema = new mongoose.Schema({
   gradingStatus: { type: String, enum: ['complete', 'partial'], default: 'complete' },
   answerKeyRef: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
   writtenItems: { type: [{ index: Number, prompt: String, max: Number }], default: [] },
+  // ── OMR Scanned Sheet Image & Detected Answers ──
+  omrSheetUrl: { type: String, default: null },
+  omrOriginalFilename: { type: String, default: null },
+  detectedAnswers: [{ type: String }],
   subskills: [
     {
       name: { type: String },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
 import {
   AlertTriangle,
@@ -208,6 +209,12 @@ export default function LearningRecoveryPage() {
                         📋 Suggested Intervention
                       </p>
                       <p className="text-xs text-gray-600">{student.intervention}</p>
+                      <Link
+                        href="/dashboard/recommendations"
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+                      >
+                        Assign ARAL Module &rarr;
+                      </Link>
                     </div>
                   </div>
                 );
