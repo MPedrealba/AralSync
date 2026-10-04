@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { BookOpen, Calculator, FlaskConical, Wand2 } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Intervention {
   id: string;
@@ -52,7 +53,7 @@ export default function InterventionsPage() {
     setError("");
     try {
       const res = await fetch("/api/teacher/interventions");
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) setInterventions(json.data);
       else setError(json.error || "Failed to load interventions.");
     } catch (e) {
@@ -105,7 +106,7 @@ export default function InterventionsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         const s = json.data.summary;
         setAssignMsg({
@@ -145,20 +146,20 @@ export default function InterventionsPage() {
   return (
     <>
       <Header title="Interventions" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6 sm:space-y-8">
         {/* Title + Filters */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Interventions</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Interventions</h1>
+            <p className="mt-1 text-sm text-slate-500">
               Assign and track personalized learning materials.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={runAutoAssign}
               disabled={assigning}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Wand2 className="h-4 w-4" />
               {assigning ? "Assigning..." : "Run Auto-Assign"}
@@ -166,9 +167,9 @@ export default function InterventionsPage() {
             <select
               value={learnerFilter}
               onChange={(e) => setLearnerFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
             >
-              <option value="">Learner</option>
+              <option value="">All Learners</option>
               {learners.map((l) => (
                 <option key={l} value={l}>{l}</option>
               ))}
@@ -176,9 +177,9 @@ export default function InterventionsPage() {
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
             >
-              <option value="">Grade Level</option>
+              <option value="">All Grades</option>
               <option>Grade 7</option>
               <option>Grade 8</option>
               <option>Grade 9</option>
@@ -187,9 +188,9 @@ export default function InterventionsPage() {
             <select
               value={sectionFilter}
               onChange={(e) => setSectionFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
             >
-              <option value="">Section</option>
+              <option value="">All Sections</option>
               <option>Rosal</option>
               <option>Sampaguita</option>
               <option>Ilang-Ilang</option>
@@ -199,10 +200,10 @@ export default function InterventionsPage() {
 
         {assignMsg && (
           <div
-            className={`rounded-xl border p-4 text-sm font-medium ${
+            className={`rounded-xl border p-4 text-sm font-semibold ${
               assignMsg.ok
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-600"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
             }`}
           >
             {assignMsg.text}
@@ -210,11 +211,11 @@ export default function InterventionsPage() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-medium text-red-600">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-sm font-semibold text-rose-800">
             {error}
             <button
               onClick={load}
-              className="ml-3 rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-100"
+              className="ml-3 rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
             >
               Retry
             </button>
@@ -223,11 +224,11 @@ export default function InterventionsPage() {
 
         {/* Intervention Cards Grid */}
         {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-xl border border-gray-100 bg-white">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+          <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-white">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-red-800"></div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-400">
             No interventions found for the current filters.
           </div>
         ) : (
@@ -243,75 +244,77 @@ export default function InterventionsPage() {
               return (
                 <div
                   key={item.id}
-                  className="flex flex-col justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
+                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-md"
                 >
                   {/* Top */}
                   <div>
-                    <div className="flex items-start justify-between">
-                      <h3 className="text-sm font-semibold text-gray-900">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-bold text-slate-900">
                         {item.title}
                       </h3>
                       <div className="flex flex-col items-end gap-1">
                         <span
-                          className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${st.bg} ${st.text} ${st.border}`}
+                          className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${st.bg} ${st.text} ${st.border}`}
                         >
                           {item.status}
                         </span>
                         {item.status === "Completed" && !item.reviewed && (
-                          <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                          <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                             Needs review
                           </span>
                         )}
                         {item.reviewed && (
-                          <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                          <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                             Reviewed
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="mt-0.5 text-xs font-medium text-blue-600">
+                    <p className="mt-0.5 text-xs font-semibold text-red-900">
                       {item.learner}
                     </p>
 
                     {item.weakness && (
-                      <span className="mt-2 inline-flex w-fit rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                      <span className="mt-2 inline-flex w-fit rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                         Targets: {item.weakness}
                       </span>
                     )}
 
-                    <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-                      <TypeIcon className="h-3.5 w-3.5" />
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                      <TypeIcon className="h-3.5 w-3.5 text-slate-400" />
                       {item.category}
                     </div>
-                    <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                    <p className="mt-2 text-xs leading-relaxed text-slate-600">
                       {item.description}
                     </p>
-                    <p className="mt-3 text-xs text-gray-400">
+                    <p className="mt-3 text-[11px] text-slate-400">
                       Created {item.created}
                     </p>
                   </div>
 
                   {/* Bottom actions */}
-                  <div className="mt-4 flex items-center gap-2">
-                    {item.status !== "Completed" && (
-                      <button
-                        onClick={() => markComplete(item.id)}
-                        className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]"
-                      >
-                        Complete
-                      </button>
-                    )}
-                    {item.status === "Completed" && !item.reviewed && (
-                      <button
-                        onClick={() => approve(item.id)}
-                        className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-emerald-700 active:scale-[0.98]"
-                      >
-                        Approve
-                      </button>
-                    )}
-                    <span className="text-xs text-gray-400">
+                  <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <span className="text-xs font-semibold text-slate-500">
                       {item.gradeSection || item.type}
                     </span>
+                    <div className="flex items-center gap-2">
+                      {item.status !== "Completed" && (
+                        <button
+                          onClick={() => markComplete(item.id)}
+                          className="rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
+                        >
+                          Complete
+                        </button>
+                      )}
+                      {item.status === "Completed" && !item.reviewed && (
+                        <button
+                          onClick={() => approve(item.id)}
+                          className="rounded-xl bg-emerald-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-emerald-800 active:scale-[0.98]"
+                        >
+                          Approve
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

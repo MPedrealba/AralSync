@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Mic,
   Search,
@@ -72,28 +73,29 @@ export default function ReadingFluencyPage() {
   return (
     <>
       <Header title="Reading Fluency" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
         {/* Title */}
-        <div className="mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">
-            AI Reading Fluency Screener
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Record a learner&apos;s reading session, analyze fluency with
-            speech-to-text, track improvements, and generate reports.
-          </p>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+              AI Reading Fluency Screener
+            </h1>
+            <p className="mt-1 text-xs text-slate-500 md:text-sm">
+              Record a learner&apos;s oral reading session, analyze Phil-IRI metrics with speech-to-text, and track mastery.
+            </p>
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm w-fit">
+        <div className="mb-6 flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-lg px-5 py-2 text-sm font-medium transition-all ${
+              className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
                 activeTab === tab
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  ? "bg-red-800 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
               {tab}
@@ -185,6 +187,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [studentId, setStudentId] = useState("");
   const [passageTitle, setPassageTitle] = useState("Oral Reading Passage");
   const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
+  const [isEditingPassage, setIsEditingPassage] = useState(false);
 
   /* Recording state */
   const [isRecording, setIsRecording] = useState(false);
@@ -233,7 +236,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     (async () => {
       try {
         const res = await fetch("/api/teacher/learners");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setLearners(
             json.data
@@ -251,7 +254,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       }
       try {
         const res = await fetch("/api/teacher/reading/passages");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setPassages(json.data);
       } catch {
         /* passages list is optional */
@@ -338,7 +341,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setResult(json.data);
         onAnalyzed();
@@ -355,325 +358,132 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
 
   const levelColor = (lv?: string) =>
     lv === "Independent"
-      ? "text-green-600"
+      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
       : lv === "Instructional"
-      ? "text-amber-600"
+      ? "text-amber-700 bg-amber-50 border-amber-200"
       : lv === "Non-Reader"
-      ? "text-gray-800"
-      : "text-red-600";
+      ? "text-slate-800 bg-slate-100 border-slate-200"
+      : "text-rose-700 bg-rose-50 border-rose-200";
+
+  const wordCount = passageText.split(/\s+/).filter(Boolean).length;
+  const currentPassageObj = passages.find((p) => p.title === passageTitle);
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-      {/* Recording Card — 3/5 */}
-      <div className="lg:col-span-3">
-        <div className="rounded-xl border border-gray-100 bg-white p-8 shadow-sm">
-          <h3 className="mb-1 text-center text-base font-semibold text-gray-900">
-            Recording Session
-          </h3>
-          <p className="mb-8 text-center text-sm text-gray-400">
-            Press the microphone to start recording the learner&apos;s reading.
-          </p>
-
-          <div className="flex flex-col items-center">
-            {/* Timer */}
-            <p className="mb-6 font-mono text-4xl font-bold text-gray-800">
-              {fmtTimer(recTime)}
-            </p>
-
-            {/* Mic Button */}
-            <button
-              onClick={isRecording ? stopRecording : startRecording}
-              className={`group relative flex h-28 w-28 items-center justify-center rounded-full transition-all duration-300 ${
-                isRecording
-                  ? "bg-red-500 shadow-lg shadow-red-500/30 animate-pulse"
-                  : "bg-blue-600 shadow-lg shadow-blue-600/30 hover:shadow-xl hover:scale-105"
-              }`}
-            >
-              {isRecording ? (
-                <Square className="h-9 w-9 text-white" />
-              ) : (
-                <Mic className="h-10 w-10 text-white" />
-              )}
-              {isRecording && (
-                <span className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping opacity-30" />
-              )}
-            </button>
-
-            <p className="mt-6 text-sm text-gray-400">
-              {isRecording ? "Recording... Tap to stop" : "Tap mic to begin"}
-            </p>
-
-            {/* Playback preview */}
-            {audioUrl && (
-              <div className="mt-6 w-full max-w-sm">
-                <audio controls src={audioUrl} className="w-full" />
-                <p className="mt-1 text-center text-xs text-gray-400">
-                  Recording captured ({Math.max(recTime, 1)}s) — ready to analyze.
-                </p>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+      {/* ── LEFT COLUMN (58%): Reading Passage Reader Card ── */}
+      <div className="lg:col-span-7">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          {/* Header & Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-red-800" />
+                <h3 className="text-base font-bold text-slate-900">
+                  {passageTitle}
+                </h3>
+                {currentPassageObj?.gradeLevel && (
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Grade {currentPassageObj.gradeLevel}
+                  </span>
+                )}
               </div>
-            )}
-
-            {/* Actions */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => runAnalysis(false)}
-                disabled={analyzing || analyzingSim}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {analyzing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
-                {analyzing ? "Analyzing…" : "Analyze Recording"}
-              </button>
-              <button
-                type="button"
-                onClick={() => runAnalysis(true)}
-                disabled={analyzing || analyzingSim}
-                className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-2.5 text-sm font-semibold text-blue-700 transition-all hover:bg-blue-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {analyzingSim ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Wand2 className="h-4 w-4" />
-                )}
-                {analyzingSim ? "Simulating…" : "Simulate (no audio)"}
-              </button>
-            </div>
-            {!studentId && (
-              <p className="mt-4 text-center text-xs text-amber-600">
-                Select a learner in the Session Setup panel to enable analysis.
+              <p className="mt-0.5 text-xs text-slate-500">
+                Learner reads aloud from this passage during the session
               </p>
-            )}
+            </div>
 
-            {error && (
-              <div className="mt-5 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                {error}
-              </div>
-            )}
-
-            {/* Result */}
-            {result && (
-              <div className="mt-6 w-full rounded-xl border border-gray-100 bg-gray-50 p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    Analysis Complete
-                  </h4>
-                  {result.simulation && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                      Simulated
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="rounded-lg bg-white p-3 text-center shadow-sm">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      WCPM
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-blue-600">
-                      {result.wpm ?? "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-white p-3 text-center shadow-sm">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      Accuracy
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-blue-600">
-                      {result.accuracy}%
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-white p-3 text-center shadow-sm">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      Pauses
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-gray-800">
-                      {result.pauses}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-white p-3 text-center shadow-sm">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      Level
-                    </p>
-                    <p className={`mt-1 text-sm font-bold ${levelColor(result.masteryLevel)}`}>
-                      {result.masteryLevel}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Miscue summary */}
-                {result.miscues && (
-                  <div className="mt-3 rounded-lg bg-white p-3 text-xs text-gray-500 shadow-sm">
-                    Miscues — Sub: {result.miscues.substitutions} · Om:{" "}
-                    {result.miscues.omissions} · Ins: {result.miscues.insertions} ·
-                    Rep: {result.miscues.repetitions}
-                  </div>
-                )}
-
-                {/* Comprehension result */}
-                {result.comprehension && (
-                  <div className="mt-3 flex items-center justify-between rounded-lg bg-white p-3 text-xs shadow-sm">
-                    <span className="text-gray-500">
-                      Comprehension (Silent Reading)
-                    </span>
-                    <span className="font-semibold">
-                      {result.comprehension.score}% ·{" "}
-                      <span className={levelColor(result.comprehension.masteryLevel)}>
-                        {result.comprehension.masteryLevel}
-                      </span>
-                    </span>
-                  </div>
-                )}
-
-                {/* Combined Phil-IRI level */}
-                {result.comprehension?.combinedLevel && (
-                  <div className="mt-2 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs">
-                    <span className="font-medium text-gray-600">
-                      Phil-IRI Combined Level <span className="text-gray-400">(accuracy + comprehension)</span>
-                    </span>
-                    <span className={`font-bold ${levelColor(result.comprehension.combinedLevel)}`}>
-                      {result.comprehension.combinedLevel}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+                {wordCount} words
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsEditingPassage(!isEditingPassage)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                {isEditingPassage ? "Done Editing" : "Edit Text"}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Session Setup — 2/5 */}
-      <div className="lg:col-span-2">
-        <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 text-base font-semibold text-gray-900">
-            Session Setup
-          </h3>
+          {/* Passage Selector Bar */}
+          <div className="mt-3 flex items-center gap-2">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+              Select Passage:
+            </label>
+            <select
+              value={passageTitle}
+              onChange={(e) => {
+                setPassageTitle(e.target.value);
+                const p = passages.find((x) => x.title === e.target.value);
+                if (p) setPassageText(p.text);
+                setCompAnswers([]);
+                setCompScore(null);
+                setCompDone(false);
+              }}
+              className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            >
+              <option value="Oral Reading Passage">Custom passage…</option>
+              {passages.map((p) => (
+                <option key={p.id} value={p.title}>
+                  {p.title} {p.gradeLevel ? `(Grade ${p.gradeLevel})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Learner
-              </label>
-              <select
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-              >
-                <option value="">Select learner</option>
-                {learners.map((l) => (
-                  <option key={l.studentId} value={l.studentId}>
-                    {l.name} — Grade {l.gradeLevel} {l.section}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Reading Passage
-              </label>
-              <select
-                value={passageTitle}
-                onChange={(e) => {
-                  setPassageTitle(e.target.value);
-                  const p = passages.find((x) => x.title === e.target.value);
-                  if (p) setPassageText(p.text);
-                  setCompAnswers([]);
-                  setCompScore(null);
-                  setCompDone(false);
-                }}
-                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-              >
-                <option value="Oral Reading Passage">Custom passage…</option>
-                {passages.map((p) => (
-                  <option key={p.id} value={p.title}>
-                    {p.title}
-                    {p.gradeLevel ? ` (Grade ${p.gradeLevel})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Passage Text
-              </label>
+          {/* Beautiful Reader Viewport */}
+          {isEditingPassage ? (
+            <div className="mt-4">
               <textarea
-                rows={8}
+                rows={9}
                 value={passageText}
                 onChange={(e) => setPassageText(e.target.value)}
                 placeholder="Paste or type the reading passage here..."
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 font-serif text-base leading-relaxed text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               />
             </div>
-          </div>
-
-          {/* Phil-IRI Miscue Tracker (manual mode) */}
-          <div className="mt-5 border-t border-gray-100 pt-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                Phil-IRI Miscue Tracker
-              </h4>
-              <span className="text-[10px] text-gray-400">Optional</span>
-            </div>
-            <p className="mb-3 text-[11px] leading-relaxed text-gray-400">
-              Log reading errors you observe. Accuracy is then computed with the
-              Phil-IRI formula: (words read correctly ÷ total words) × 100.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {(
-                [
-                  ["substitutions", "Substitutions"],
-                  ["omissions", "Omissions"],
-                  ["insertions", "Insertions"],
-                  ["repetitions", "Repetitions"],
-                ] as [keyof Miscues, string][]
-              ).map(([key, label]) => (
-                <div key={key}>
-                  <label className="mb-1 block text-[11px] font-medium text-gray-500">
-                    {label}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={miscues[key]}
-                    onChange={(e) => setMiscue(key, e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Comprehension (Silent Reading) Check */}
-          {activeQuestions.length > 0 && (
-            <div className="mt-5 border-t border-gray-100 pt-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Comprehension Check
-                </h4>
-                <span className="text-[10px] text-gray-400">Silent Reading</span>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
+              <div className="font-serif text-lg sm:text-xl leading-relaxed text-slate-800 tracking-normal space-y-4">
+                {passageText.split("\n\n").map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
               </div>
-              <p className="mb-3 text-[11px] leading-relaxed text-gray-400">
-                Have the learner answer the questions about the passage.
-              </p>
-              <div className="space-y-4">
+            </div>
+          )}
+
+          {/* Comprehension Check (Silent Reading) Section */}
+          {activeQuestions.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Comprehension Questions (Silent Reading)
+                  </h4>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Ask the learner these follow-up questions to assess comprehension
+                  </p>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                  {activeQuestions.length} Items
+                </span>
+              </div>
+
+              <div className="space-y-4 mt-4">
                 {activeQuestions.map((q, qi) => (
-                  <div key={qi}>
-                    <p className="mb-2 text-xs font-medium text-gray-700">
+                  <div key={qi} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
+                    <p className="mb-2 text-xs font-semibold text-slate-800">
                       {qi + 1}. {q.question}
                     </p>
-                    <div className="grid grid-cols-1 gap-1.5">
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {q.options.map((opt) => (
                         <label
                           key={opt}
-                          className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-colors ${
                             compAnswers[qi] === opt
-                              ? "border-blue-500 bg-blue-50 text-blue-700"
-                              : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                              ? "border-red-800 bg-red-50 text-red-900 font-semibold"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                           }`}
                         >
                           <input
@@ -686,37 +496,259 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                               next[qi] = opt;
                               setCompAnswers(next);
                             }}
-                            className="accent-blue-600"
+                            className="accent-red-800"
                           />
-                          {opt}
+                          <span>{opt}</span>
                         </label>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-              <button
-                onClick={checkComprehension}
-                disabled={compAnswers.some((a) => !a)}
-                className="mt-4 w-full rounded-lg border border-blue-200 bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Check Comprehension
-              </button>
-              {compDone && compScore !== null && (
-                <div className="mt-3 flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs">
-                  <span className="text-gray-500">Comprehension Score</span>
-                  <span className="font-bold text-gray-800">{compScore}%</span>
-                </div>
-              )}
+
+              <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={checkComprehension}
+                  disabled={compAnswers.some((a) => !a)}
+                  className="h-10 rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Score Comprehension
+                </button>
+                {compDone && compScore !== null && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">Score:</span>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                      {compScore}%
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-
-          <p className="mt-4 text-xs text-gray-400">
-            Tip: Start the recording, have the learner read the passage aloud,
-            then tap stop and analyze. Simulate runs the same grading without
-            audio.
-          </p>
         </div>
+      </div>
+
+      {/* ── RIGHT COLUMN (42%): Screener & Recording Controls Deck ── */}
+      <div className="lg:col-span-5 space-y-6">
+        {/* Learner Selection Card */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Assigned Learner
+          </label>
+          <select
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+          >
+            <option value="">Select learner to assess...</option>
+            {learners.map((l) => (
+              <option key={l.studentId} value={l.studentId}>
+                {l.name} — Grade {l.gradeLevel} {l.section}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Recording Deck */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs text-center">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">
+            Audio Screener Workstation
+          </h3>
+          <p className="text-xs text-slate-400 mb-6">
+            Press microphone to capture reading speech in real-time
+          </p>
+
+          <div className="flex flex-col items-center">
+            {/* Timer */}
+            <p className="mb-6 font-mono text-4xl font-bold tracking-tight text-slate-900">
+              {fmtTimer(recTime)}
+            </p>
+
+            {/* Generous Mic Toggle Button */}
+            <button
+              type="button"
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`group relative flex h-24 w-24 items-center justify-center rounded-full transition-all duration-300 shadow-md ${
+                isRecording
+                  ? "bg-rose-600 text-white ring-4 ring-rose-200 animate-pulse active:scale-95"
+                  : "bg-red-800 text-white hover:bg-red-900 active:scale-95"
+              }`}
+              title={isRecording ? "Stop recording" : "Start recording"}
+            >
+              {isRecording ? (
+                <Square className="h-8 w-8 text-white" />
+              ) : (
+                <Mic className="h-9 w-9 text-white" />
+              )}
+            </button>
+
+            <p className="mt-4 text-xs font-medium text-slate-500">
+              {isRecording ? "Recording in progress... Tap to stop" : "Tap mic to begin oral reading"}
+            </p>
+
+            {/* Playback preview */}
+            {audioUrl && (
+              <div className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <audio controls src={audioUrl} className="w-full h-8" />
+                <p className="mt-1.5 text-center text-[11px] text-slate-500">
+                  Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI transcription
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 w-full">
+              <button
+                type="button"
+                onClick={() => runAnalysis(false)}
+                disabled={analyzing || analyzingSim}
+                className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {analyzing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {analyzing ? "Analyzing Audio..." : "Analyze Recording"}
+              </button>
+              <button
+                type="button"
+                onClick={() => runAnalysis(true)}
+                disabled={analyzing || analyzingSim}
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {analyzingSim ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
+                {analyzingSim ? "Simulating..." : "Simulate"}
+              </button>
+            </div>
+
+            {!studentId && (
+              <p className="mt-3 text-xs text-amber-600 font-medium">
+                Please select a learner above to start assessment.
+              </p>
+            )}
+
+            {error && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700 text-left w-full">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Phil-IRI Miscue Tracker (Manual Observation) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Phil-IRI Miscue Tracker
+            </h4>
+            <span className="text-[10px] font-medium text-slate-400">Optional Observations</span>
+          </div>
+          <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+            Log observed oral reading errors. Accuracy is automatically calculated using the standard Phil-IRI formula.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {(
+              [
+                ["substitutions", "Substitutions"],
+                ["omissions", "Omissions"],
+                ["insertions", "Insertions"],
+                ["repetitions", "Repetitions"],
+              ] as [keyof Miscues, string][]
+            ).map(([key, label]) => (
+              <div key={key}>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+                  {label}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={miscues[key]}
+                  onChange={(e) => setMiscue(key, e.target.value)}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Live Analysis Output Card */}
+        {result && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs animate-in fade-in-50 duration-200">
+            <div className="mb-4 flex items-center justify-between pb-3 border-b border-slate-100">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                Fluency Screener Results
+              </h4>
+              {result.simulation && (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                  Simulated
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  WCPM
+                </p>
+                <p className="mt-1 text-xl font-black text-slate-900">
+                  {result.wpm ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Accuracy
+                </p>
+                <p className="mt-1 text-xl font-black text-slate-900">
+                  {result.accuracy}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Pauses
+                </p>
+                <p className="mt-1 text-xl font-black text-slate-900">
+                  {result.pauses}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Mastery
+                </p>
+                <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(result.masteryLevel)}`}>
+                  {result.masteryLevel}
+                </span>
+              </div>
+            </div>
+
+            {/* Miscues Breakdown */}
+            {result.miscues && (
+              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Miscues: </span>
+                Sub: {result.miscues.substitutions} &bull; Om: {result.miscues.omissions} &bull; Ins: {result.miscues.insertions} &bull; Rep: {result.miscues.repetitions}
+              </div>
+            )}
+
+            {/* Combined Phil-IRI level */}
+            {result.comprehension?.combinedLevel && (
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <span className="font-medium text-slate-700">
+                  Phil-IRI Combined Level:
+                </span>
+                <span className={`rounded-full border px-2.5 py-0.5 font-bold ${levelColor(result.comprehension.combinedLevel)}`}>
+                  {result.comprehension.combinedLevel}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -740,7 +772,7 @@ function ResultHistoryTab({
     setError("");
     try {
       const res = await fetch("/api/teacher/assessments?type=READING_FLUENCY");
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) setResults(json.data);
       else setError(json.error || "Failed to load results.");
     } catch {
@@ -763,35 +795,35 @@ function ResultHistoryTab({
     <div>
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search learners..."
+            placeholder="Search learners or assessments..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
           />
         </div>
       </div>
 
       {loading ? (
         <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          <Loader2 className="h-6 w-6 animate-spin text-red-800" />
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-12 text-sm text-red-600">
+        <div className="flex flex-col items-center gap-3 py-12 text-xs text-rose-700">
           <AlertCircle className="h-5 w-5" />
           <p>{error}</p>
           <button
             onClick={load}
-            className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+            className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
           >
             Retry
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-white py-12 text-center text-sm text-gray-400">
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">
           No reading fluency sessions recorded yet.
         </div>
       ) : (
@@ -800,34 +832,36 @@ function ResultHistoryTab({
           {filtered.map((l) => {
             const pct = l.accuracy ?? 0;
             const barColor =
-              pct >= 75 ? "bg-green-500" : pct >= 60 ? "bg-yellow-500" : "bg-red-500";
+              pct >= 75 ? "bg-emerald-600" : pct >= 60 ? "bg-amber-500" : "bg-rose-500";
             return (
               <button
                 key={l.id}
                 onClick={() => setSelectedLearner(l)}
-                className={`group rounded-xl border bg-white p-5 text-left shadow-sm transition-all hover:shadow-md hover:border-blue-500/30 ${
+                className={`group rounded-2xl border bg-white p-5 text-left shadow-xs transition-all hover:border-slate-300 ${
                   selectedLearner?.id === l.id
-                    ? "border-blue-500 ring-2 ring-blue-500/20"
-                    : "border-gray-100"
+                    ? "border-red-800 ring-2 ring-red-800/10"
+                    : "border-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{l.studentName}</p>
-                    <p className="text-xs text-gray-400">{l.gradeSection}</p>
+                    <p className="text-sm font-semibold text-slate-900 group-hover:text-red-900 transition-colors">
+                      {l.studentName}
+                    </p>
+                    <p className="text-xs text-slate-500">{l.gradeSection}</p>
                   </div>
                   <div className="text-right">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
                       {l.studentName.split(" ").map((n) => n[0]).join("")}
                     </div>
                     {l.status && (
                       <span
-                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                        className={`mt-1.5 inline-block rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                           l.status === "approved"
-                            ? "bg-emerald-100 text-emerald-700"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                             : l.status === "flagged"
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-gray-100 text-gray-500"
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-slate-200 bg-slate-50 text-slate-600"
                         }`}
                       >
                         {l.status === "pending" ? "Pending" : l.status}
@@ -837,11 +871,11 @@ function ResultHistoryTab({
                 </div>
 
                 <div className="mt-4">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-[11px] text-gray-400">Accuracy</span>
-                    <span className="text-xs font-semibold text-gray-700">{pct}%</span>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-slate-400">Accuracy</span>
+                    <span className="text-xs font-bold text-slate-800">{pct}%</span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
                       className={`h-full rounded-full ${barColor} transition-all duration-500`}
                       style={{ width: `${Math.min(pct, 100)}%` }}
@@ -849,9 +883,9 @@ function ResultHistoryTab({
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-                  <span>{l.wpm ? `${l.wpm} WCPM` : "—"}</span>
-                  <span>{l.date ? fmtShort(l.date) : "—"}</span>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-semibold">{l.wpm ? `${l.wpm} WCPM` : "—"}</span>
+                  <span suppressHydrationWarning className="text-slate-400">{l.date ? fmtShort(l.date) : "—"}</span>
                 </div>
               </button>
             );
@@ -888,7 +922,7 @@ function FluencyReportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         if (status === "approved") {
           setValidationSuccess("Assessment approved! Learner record Phil-IRI metrics updated.");
@@ -934,7 +968,9 @@ function FluencyReportModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-gray-900">{learner.studentName}</h3>
-              <p className="text-xs text-gray-400">{learner.gradeSection} • {fmtShort(learner.date)}</p>
+              <p className="text-xs text-gray-400">
+                {learner.gradeSection} • <span suppressHydrationWarning>{fmtShort(learner.date)}</span>
+              </p>
             </div>
           </div>
 

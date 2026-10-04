@@ -4,16 +4,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import EditLearnerModal from "@/components/EditLearnerModal";
-import ImportLearnersModal from "@/components/ImportLearnersModal";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Search,
-  Plus,
   MoreHorizontal,
   Eye,
   Pencil,
   Trash2,
   ChevronDown,
-  FileSpreadsheet,
+  Info,
+  Users,
 } from "lucide-react";
 
 interface Learner {
@@ -39,16 +39,16 @@ const riskDisplay: Record<string, string> = {
   "At Risk": "At Risk",
 };
 
-const riskConfig: Record<string, { bg: string; text: string }> = {
-  High: { bg: "bg-red-100", text: "text-red-700" },
-  "At Risk": { bg: "bg-orange-100", text: "text-orange-700" },
-  Moderate: { bg: "bg-yellow-100", text: "text-yellow-700" },
-  Low: { bg: "bg-green-100", text: "text-green-700" },
+const riskConfig: Record<string, { bg: string; text: string; border: string }> = {
+  High: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  "At Risk": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  Moderate: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+  Low: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
 };
 
-const statusConfig: Record<string, { bg: string; text: string }> = {
-  Active: { bg: "bg-green-50", text: "text-green-700" },
-  Completed: { bg: "bg-gray-100", text: "text-gray-600" },
+const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
+  Active: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  Completed: { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200" },
 };
 
 function ActionDropdown({
@@ -77,17 +77,17 @@ function ActionDropdown({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+        className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-gray-100 bg-white py-1.5 shadow-lg">
+        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl">
           <Link
             href={`/dashboard/learners/${learnerId}`}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+            className="flex w-full items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-3.5 w-3.5 text-slate-500" />
             View Profile
           </Link>
           <button
@@ -95,20 +95,20 @@ function ActionDropdown({
               onEdit();
               setOpen(false);
             }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+            className="flex w-full items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5 text-slate-500" />
             Edit Details
           </button>
-          <hr className="my-1 border-gray-100" />
+          <hr className="my-1 border-slate-100" />
           <button
             onClick={() => {
               onDelete();
               setOpen(false);
             }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+            className="flex w-full items-center gap-2.5 px-4 py-2 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
             Delete
           </button>
         </div>
@@ -129,12 +129,11 @@ export default function LearnersPage() {
     open: boolean;
     learner: Learner | null;
   }>({ open: false, learner: null });
-  const [importOpen, setImportOpen] = useState(false);
 
   const loadLearners = useCallback(async () => {
     try {
       const res = await fetch("/api/teacher/learners");
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setLearners(
           json.data.map((r: any) => ({
@@ -185,7 +184,7 @@ export default function LearnersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (!res.ok || !json.success) {
         alert(json.error || "Failed to update learner.");
         return;
@@ -213,59 +212,59 @@ export default function LearnersPage() {
   return (
     <>
       <Header title="Learners" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
         {/* Title Row */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Learner Profile
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+              Learner Profile Directory
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage and track your students across sections.
+            <p className="mt-1 text-xs text-slate-500 md:text-sm">
+              Manage and track your assigned students across classes and sections.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setImportOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-50 active:scale-[0.98]"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Import from Excel
-            </button>
-            <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98]">
-              <Plus className="h-4 w-4" />
-              Add Learner
-            </button>
+        </div>
+
+        {/* Informational Banner */}
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-800">
+            <Info className="h-4 w-4" />
+          </div>
+          <div className="text-xs sm:text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">Showing assigned learners. </span>
+            <span>
+              Contact your ARAL Coordinator to update student rosters, enroll new learners, or adjust section assignments.
+            </span>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or ID"
+                placeholder="Search by learner name or LRN..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-4 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/10"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               />
             </div>
             <FilterSelect
-              label="Grade Level"
+              label="All Grades"
               value={gradeFilter}
               onChange={setGradeFilter}
               options={["Grade 7", "Grade 8", "Grade 9", "Grade 10"]}
             />
             <FilterSelect
-              label="Section"
+              label="All Sections"
               value={sectionFilter}
               onChange={setSectionFilter}
               options={["Rosal", "Sampaguita", "Ilang-Ilang"]}
             />
             <FilterSelect
-              label="Risk Level"
+              label="All Risk Levels"
               value={riskFilter}
               onChange={setRiskFilter}
               options={["High", "At Risk", "Moderate", "Low"]}
@@ -275,16 +274,16 @@ export default function LearnersPage() {
 
         {/* Loading / Error states */}
         {loading && (
-          <div className="flex h-48 items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+          <div className="flex h-48 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-red-800"></div>
           </div>
         )}
         {!loading && error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm font-medium text-red-600">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-sm font-medium text-rose-700">
             {error}
             <button
               onClick={() => window.location.reload()}
-              className="ml-3 rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-100"
+              className="ml-3 rounded-xl border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
             >
               Retry
             </button>
@@ -292,87 +291,99 @@ export default function LearnersPage() {
         )}
 
         {/* Table */}
-        <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100 bg-blue-600">
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                    Learner ID
+                <tr className="border-b border-slate-200 bg-slate-50/80">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    LRN
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                    Name
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Learner Name
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                    Grade & Section
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Grade &amp; Section
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Risk Level
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                  <th className="px-6 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-5 py-10 text-center text-sm text-gray-400"
+                      className="px-6 py-12 text-center"
                     >
-                      No learners found.
+                      {learners.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center">
+                          <Users className="h-9 w-9 text-slate-300 mb-2" />
+                          <p className="font-semibold text-slate-700">No students assigned to you yet.</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Please contact your ARAL Coordinator to assign learners to your section.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">No learners match your search and filter criteria.</p>
+                      )}
                     </td>
                   </tr>
                 ) : (
                   filtered.map((learner) => {
                     const riskLabel = riskDisplay[learner.riskLevel] ?? learner.riskLevel;
                     const risk = riskConfig[riskLabel] ?? {
-                      bg: "bg-gray-100",
-                      text: "text-gray-600",
+                      bg: "bg-slate-50",
+                      text: "text-slate-600",
+                      border: "border-slate-200",
                     };
                     const statusLabel = learner.status || "Active";
                     const status = statusConfig[statusLabel] ?? {
-                      bg: "bg-gray-100",
-                      text: "text-gray-600",
+                      bg: "bg-slate-50",
+                      text: "text-slate-600",
+                      border: "border-slate-200",
                     };
                     return (
                     <tr
                       key={learner.id}
-                      className="transition-colors hover:bg-gray-50/60"
+                      className="transition-colors hover:bg-slate-50/80"
                     >
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-500">
+                      <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-500">
                         {learner.lrn}
                       </td>
-                      <td className="px-5 py-3.5 text-sm font-medium text-gray-800">
+                      <td className="px-6 py-4 text-sm font-semibold text-slate-900">
                         <Link
                           href={`/dashboard/learners/${learner.id}`}
-                          className="hover:text-blue-600 hover:underline"
+                          className="hover:text-red-900 hover:underline transition-colors"
                         >
                           {learner.name}
                         </Link>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">
-                        {learner.gradeLevel} - {learner.section}
+                      <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                        {learner.gradeLevel} &bull; {learner.section}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-6 py-4">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${risk.bg} ${risk.text}`}
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${risk.bg} ${risk.text} ${risk.border}`}
                         >
                           {riskLabel}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-6 py-4">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${status.bg} ${status.text}`}
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${status.bg} ${status.text} ${status.border}`}
                         >
                           {statusLabel}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-6 py-4 text-right">
                         <ActionDropdown
                           learnerId={learner.id}
                           onEdit={() =>
@@ -398,13 +409,6 @@ export default function LearnersPage() {
         onClose={() => setEditModal({ open: false, learner: null })}
         onSave={handleSave}
       />
-
-      {/* Import Modal */}
-      <ImportLearnersModal
-        isOpen={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={loadLearners}
-      />
     </>
   );
 }
@@ -426,7 +430,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-600 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+        className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-700 outline-none transition-colors focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
       >
         <option value="">{label}</option>
         {options.map((o) => (
@@ -435,7 +439,7 @@ function FilterSelect({
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
     </div>
   );
 }

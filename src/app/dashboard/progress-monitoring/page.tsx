@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { TrendingUp } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 const fmtShort = (d: string) => {
   const date = new Date(d);
@@ -68,7 +69,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
     const load = async () => {
       try {
         const res = await fetch("/api/teacher/learners");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           const list = json.data.map((s: any) => ({ id: s.studentId, name: s.name }));
           setLearners(list);
@@ -93,7 +94,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
           if (section) params.set("section", section);
         }
         const res = await fetch(`/api/teacher/progress-monitoring?${params.toString()}`);
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setData(json.data);
       } catch (e) {
         console.error("Failed to load progress data:", e);
@@ -285,7 +286,9 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                               {m.weakness ? ` · ${m.weakness}` : ""}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-sm text-gray-500">{fmtShort(m.assignedDate)}</td>
+                          <td suppressHydrationWarning className="px-3 py-3 text-sm text-gray-500">
+                            <span suppressHydrationWarning>{fmtShort(m.assignedDate)}</span>
+                          </td>
                           <td className="px-3 py-3">
                             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge}`}>
                               {m.status}

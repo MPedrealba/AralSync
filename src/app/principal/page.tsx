@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import StatCard from "@/components/StatCard";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import { Users, AlertTriangle, UserCheck, FileCheck } from "lucide-react";
 import {
   PieChart,
@@ -25,7 +26,7 @@ export default function PrincipalDashboardPage() {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/principal/dashboard");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
         }

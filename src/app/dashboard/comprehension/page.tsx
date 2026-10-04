@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Search,
   CheckCircle2,
@@ -79,28 +80,30 @@ export default function ComprehensionCheckPage() {
   return (
     <>
       <Header title="Comprehension Check" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
         {/* Page Title */}
-        <div className="mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Comprehension Quick Check
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Generate AI-powered comprehension questions from any reading
-            passage to quickly assess learner understanding.
-          </p>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+              Comprehension Quick Check
+            </h1>
+            <p className="mt-1 text-xs text-slate-500 md:text-sm">
+              Generate AI-powered comprehension questions from any reading
+              passage to quickly assess learner understanding.
+            </p>
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm w-fit">
+        <div className="mb-6 flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
           {(["New Check", "Results History"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-lg px-5 py-2 text-sm font-medium transition-all ${
+              className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
                 activeTab === tab
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  ? "bg-red-800 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
               {tab}
@@ -154,24 +157,24 @@ function NewCheckFlow() {
   /* ── STEP: SETUP ── */
   if (step === "setup") {
     return (
-      <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
-        <h3 className="mb-1 text-base font-semibold text-gray-900">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
+        <h3 className="text-base font-bold text-slate-900">
           Set Up Comprehension Check
         </h3>
-        <p className="mb-6 text-sm text-gray-400">
+        <p className="mt-1 mb-6 text-xs text-slate-500">
           Paste a reading passage below. The AI will generate comprehension
           questions automatically.
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Learner
             </label>
             <select
               value={learner}
               onChange={(e) => setLearner(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+              className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
               <option>Juan dela Cruz</option>
               <option>Ana Reyes</option>
@@ -180,31 +183,33 @@ function NewCheckFlow() {
             </select>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Grade
-            </label>
-            <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-              <option>Grade 7</option>
-              <option>Grade 8</option>
-              <option>Grade 9</option>
-              <option>Grade 10</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Grade
+              </label>
+              <select className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10">
+                <option>Grade 7</option>
+                <option>Grade 8</option>
+                <option>Grade 9</option>
+                <option>Grade 10</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Section
+              </label>
+              <select className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10">
+                <option>Rosal</option>
+                <option>Sampaguita</option>
+                <option>Ilang-Ilang</option>
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Section
-            </label>
-            <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-              <option>Rosal</option>
-              <option>Sampaguita</option>
-              <option>Ilang-Ilang</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Reading Passage
             </label>
             <textarea
@@ -212,28 +217,30 @@ function NewCheckFlow() {
               value={passage}
               onChange={(e) => setPassage(e.target.value)}
               placeholder="Paste or type the reading passage here..."
-              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3.5 font-serif text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             />
-            <div className="mt-1 flex items-center justify-between text-xs text-gray-400">
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
               <span>{passage.split(/\s+/).filter(Boolean).length} words</span>
               <span>Recommended: 100-300 words</span>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
+            type="button"
             onClick={() => setStep("reading")}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-red-800 px-5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
           >
             Generate Questions
           </button>
           <button
+            type="button"
             onClick={() => navigator.clipboard.readText().then(setPassage).catch(() => {})}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50"
           >
-            <ClipboardPaste className="h-4 w-4" />
-            Paste from Clipboard
+            <ClipboardPaste className="h-4 w-4 text-slate-500" />
+            <span>Paste from Clipboard</span>
           </button>
         </div>
       </div>
@@ -243,30 +250,39 @@ function NewCheckFlow() {
   /* ── STEP: READING ── */
   if (step === "reading") {
     return (
-      <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
-        <h3 className="mb-1 text-lg font-bold text-gray-900">
-          Photosynthesis Explained
-        </h3>
-        <p className="mb-5 text-xs text-gray-400">
-          Reading passage for {learner} • Generated {totalQuestions} questions
-        </p>
-
-        <div className="rounded-lg border border-gray-100 bg-gray-50 p-5 text-sm leading-relaxed text-gray-700">
-          {passage.split("\n\n").map((para, i) => (
-            <p key={i} className={i > 0 ? "mt-3" : ""}>
-              {para}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Photosynthesis Explained
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Reading passage for {learner} &bull; Generated {totalQuestions} questions
             </p>
-          ))}
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+            {passage.split(/\s+/).filter(Boolean).length} words
+          </span>
+        </div>
+
+        {/* Font-serif Reader Card */}
+        <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
+          <div className="font-serif text-lg leading-relaxed text-slate-800 space-y-4">
+            {passage.split("\n\n").map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
         </div>
 
         <button
+          type="button"
           onClick={() => {
             setStep("quiz");
             setSelectedOption(null);
           }}
-          className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]"
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
         >
-          Close Reading
+          Begin Comprehension Questions
         </button>
       </div>
     );
@@ -276,53 +292,55 @@ function NewCheckFlow() {
   if (step === "quiz") {
     const q = sampleQuestions[currentQ];
     return (
-      <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-400">
+          <span className="text-xs font-semibold text-slate-500">
             Question {currentQ + 1} of {totalQuestions}
           </span>
-          <span className="text-xs text-gray-400">{learner}</span>
+          <span className="text-xs font-medium text-slate-500">{learner}</span>
         </div>
-        <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+        <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full bg-blue-600 transition-all duration-300"
+            className="h-full rounded-full bg-red-800 transition-all duration-300"
             style={{ width: `${((currentQ + 1) / totalQuestions) * 100}%` }}
           />
         </div>
 
-        <h3 className="mb-5 text-base font-semibold text-gray-900">{q.question}</h3>
+        <h3 className="mb-5 text-base font-bold text-slate-900">{q.question}</h3>
 
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {q.options.map((option, oi) => (
             <button
               key={oi}
+              type="button"
               onClick={() => setSelectedOption(oi)}
-              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left text-xs font-medium transition-all ${
                 selectedOption === oi
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                  ? "border-red-800 bg-red-50 text-red-900 font-semibold ring-1 ring-red-800/20"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
               <span
-                className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
                   selectedOption === oi
-                    ? "border-blue-500 bg-blue-600 text-white"
-                    : "border-gray-300 text-gray-400"
+                    ? "border-red-800 bg-red-800 text-white"
+                    : "border-slate-300 text-slate-400"
                 }`}
               >
                 {String.fromCharCode(65 + oi)}
               </span>
-              {option}
+              <span>{option}</span>
             </button>
           ))}
         </div>
 
         <button
+          type="button"
           onClick={handleSubmitAnswer}
           disabled={selectedOption === null}
-          className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+          className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
         >
-          Submit Answer
+          {currentQ < totalQuestions - 1 ? "Next Question" : "Complete Assessment"}
         </button>
       </div>
     );
@@ -336,53 +354,53 @@ function NewCheckFlow() {
   const percentage = Math.round((correctCount / totalQuestions) * 100);
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-3xl">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
       <div className="flex flex-col items-center py-4">
-        <CheckCircle2 className="mb-3 h-10 w-10 text-emerald-500" />
-        <h3 className="text-lg font-bold text-gray-900">Check Complete!</h3>
+        <CheckCircle2 className="mb-3 h-10 w-10 text-emerald-600" />
+        <h3 className="text-lg font-bold text-slate-900">Check Complete!</h3>
 
         <div className="relative my-6 flex h-32 w-32 items-center justify-center">
           <svg className="absolute inset-0 h-full w-full -rotate-90">
-            <circle cx="64" cy="64" r="56" fill="none" stroke="#f3f4f6" strokeWidth="8" />
+            <circle cx="64" cy="64" r="56" fill="none" stroke="#f1f5f9" strokeWidth="8" />
             <circle
               cx="64"
               cy="64"
               r="56"
               fill="none"
-              stroke={percentage >= 50 ? "#22c55e" : "#ef4444"}
+              stroke={percentage >= 50 ? "#059669" : "#e11d48"}
               strokeWidth="8"
               strokeLinecap="round"
               strokeDasharray={`${(percentage / 100) * 352} 352`}
             />
           </svg>
-          <span className="text-3xl font-bold text-gray-900">{percentage}%</span>
+          <span className="text-3xl font-bold text-slate-900">{percentage}%</span>
         </div>
       </div>
 
-      <div className="space-y-3 border-t border-gray-100 pt-5">
+      <div className="space-y-3 border-t border-slate-100 pt-5">
         {sampleQuestions.map((q, i) => {
           const userAnswer = answers[i];
           const isCorrect = userAnswer === q.correctIndex;
           return (
             <div
               key={q.id}
-              className={`flex items-start gap-3 rounded-lg border p-4 ${
+              className={`flex items-start gap-3 rounded-xl border p-4 ${
                 isCorrect
                   ? "border-emerald-200 bg-emerald-50"
-                  : "border-red-200 bg-red-50"
+                  : "border-rose-200 bg-rose-50"
               }`}
             >
               {isCorrect ? (
-                <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" />
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
               ) : (
-                <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+                <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
               )}
               <div>
-                <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                <p className="text-xs font-semibold text-slate-800">{q.question}</p>
                 {!isCorrect && (
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-slate-600">
                     Correct answer:{" "}
-                    <span className="font-medium text-emerald-700">
+                    <span className="font-semibold text-emerald-700">
                       {q.options[q.correctIndex]}
                     </span>
                   </p>
@@ -395,14 +413,16 @@ function NewCheckFlow() {
 
       <div className="mt-6 flex items-center gap-3">
         <button
+          type="button"
           onClick={handleReset}
-          className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:scale-[0.98]"
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-red-800 px-5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
         >
           Save History
         </button>
         <button
+          type="button"
           onClick={handleReset}
-          className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50"
         >
           New Check
         </button>
@@ -426,7 +446,7 @@ function ResultsHistoryTab() {
     setError("");
     try {
       const res = await fetch("/api/teacher/assessments?type=COMPREHENSION");
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) setResults(json.data);
       else setError(json.error || "Failed to load results.");
     } catch {
@@ -443,7 +463,7 @@ function ResultsHistoryTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setResults((prev) =>
           prev.map((r) => (r.id === id ? { ...r, status } : r))
@@ -465,10 +485,10 @@ function ResultsHistoryTab() {
 
   const masteryColor = (level: string) => {
     switch (level) {
-      case "Proficient": return "bg-emerald-100 text-emerald-700";
-      case "Approaching": return "bg-blue-100 text-blue-700";
-      case "Developing": return "bg-amber-100 text-amber-700";
-      default: return "bg-red-100 text-red-700";
+      case "Proficient": return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      case "Approaching": return "border-blue-200 bg-blue-50 text-blue-700";
+      case "Developing": return "border-amber-200 bg-amber-50 text-amber-700";
+      default: return "border-rose-200 bg-rose-50 text-rose-700";
     }
   };
 
@@ -476,35 +496,35 @@ function ResultsHistoryTab() {
     <div>
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by name or passage..."
+            placeholder="Search by student name or passage title..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
           />
         </div>
       </div>
 
       {loading ? (
         <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          <Loader2 className="h-6 w-6 animate-spin text-red-800" />
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-12 text-sm text-red-600">
+        <div className="flex flex-col items-center gap-3 py-12 text-xs text-rose-700">
           <AlertCircle className="h-5 w-5" />
           <p>{error}</p>
           <button
             onClick={load}
-            className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+            className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
           >
             Retry
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-white py-12 text-center text-sm text-gray-400">
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">
           No comprehension checks recorded yet.
         </div>
       ) : (
@@ -518,32 +538,32 @@ function ResultsHistoryTab() {
               <div key={entry.id}>
                 <button
                   onClick={() => setExpanded(isExpanded ? null : entry.id)}
-                  className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md cursor-pointer text-left"
+                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-slate-300 cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
                       {entry.studentName.split(" ").map((n) => n[0]).join("")}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">
+                      <p className="text-sm font-semibold text-slate-900">
                         {entry.studentName}
                       </p>
-                      <p className="text-xs text-gray-400">
-                        {entry.gradeSection} • {fmtShort(entry.date)}
-                        {entry.passageTitle ? ` • ${entry.passageTitle}` : ""}
+                      <p className="text-xs text-slate-500">
+                        {entry.gradeSection} &bull; <span suppressHydrationWarning>{fmtShort(entry.date)}</span>
+                        {entry.passageTitle ? ` &bull; ${entry.passageTitle}` : ""}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900">{pct}%</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-base font-bold text-slate-900">{pct}%</p>
+                      <p className="text-xs text-slate-400">
                         {entry.score}/{entry.totalItems} correct
                       </p>
                     </div>
                     <ChevronRight
-                      className={`h-4 w-4 text-gray-300 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                      className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
                     />
                   </div>
                 </button>

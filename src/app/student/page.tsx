@@ -4,21 +4,26 @@ import { useEffect, useState } from "react";
 import { BookOpen, ShieldCheck, TrendingUp, Target } from "lucide-react";
 import Link from "next/link";
 import StatCard from "@/components/StatCard";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 export default function StudentDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/student/dashboard");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
+        } else {
+          setErrorMsg(json.error || "Failed to load dashboard data.");
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch dashboard data:", error);
+        setErrorMsg("Network error. Please check your connection.");
       } finally {
         setLoading(false);
       }
@@ -37,7 +42,7 @@ export default function StudentDashboardPage() {
   if (!data) {
     return (
       <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm font-medium text-red-600">
-        Failed to load dashboard data.
+        {errorMsg || "Failed to load dashboard data."}
       </div>
     );
   }

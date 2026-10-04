@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../../../database/db';
+import Question from '../../../../../../models/Question';
 import ReadingPassage from '../../../../../../models/ReadingPassage';
 import AnswerKey from '../../../../../../models/AnswerKey';
+import User from '../../../../../../models/User';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
-
-const STOPWORDS = new Set([
-  'a', 'an', 'the', 'of', 'to', 'and', 'or', 'in', 'on', 'is', 'are', 'was',
-  'were', 'be', 'been', 'being', 'it', 'at', 'by', 'for', 'with', 'as', 'that',
-  'this', 'these', 'those', 'they', 'them', 'we', 'you', 'he', 'she', 'his',
-  'her', 'their', 'there', 'have', 'has', 'had', 'from', 'about', 'into', 'over',
-  'can', 'will', 'would', 'do', 'does', 'did', 'but', 'so', 'not', 'also', 'such',
-  'its', 'than', 'then', 'when', 'where', 'what', 'which', 'who', 'some', 'each',
-  'every', 'while', 'because', 'out', 'up', 'down', 'off', 'how', 'why', 'very',
-]);
-
-function words(text: string): string[] {
-  return text.toLowerCase().replace(/[^a-zA-Z0-9'\s]/g, ' ').split(/\s+/).filter(Boolean);
-}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -29,180 +17,266 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function generateFromText(text: string, count: number): {
-  prompt: string;
-  choices: string[];
-  answerLetter: string;
-}[] {
-  const sentences = text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => {
-      const n = words(s).length;
-      return n >= 5 && n <= 24;
-    });
-
-  const seen = new Set<string>();
-  const vocab: string[] = [];
-  for (const tok of text.replace(/[^a-zA-Z0-9'\s]/g, ' ').split(/\s+/)) {
-    const lw = tok.toLowerCase();
-    if (STOPWORDS.has(lw) || lw.length < 4 || seen.has(lw)) continue;
-    seen.add(lw);
-    vocab.push(tok);
-  }
-  if (vocab.length < 4) return [];
-
-  const generated: { prompt: string; choices: string[]; answerLetter: string }[] = [];
-
-  for (const s of sentences) {
-    if (generated.length >= count) break;
-    const sWords = s.split(/\s+/).filter(Boolean);
-    let idx = -1;
-    for (let i = 1; i < sWords.length - 1; i++) {
-      const lw = sWords[i].toLowerCase().replace(/[^a-z0-9']/g, '');
-      if (lw.length >= 4 && !STOPWORDS.has(lw)) {
-        idx = i;
-        break;
-      }
-    }
-    if (idx < 0) continue;
-
-    const target = sWords[idx];
-    const targetLw = target.toLowerCase().replace(/[^a-z0-9']/g, '');
-    const distractors = shuffle(vocab.filter((v) => v.toLowerCase() !== targetLw)).slice(0, 3);
-    if (distractors.length < 3) continue;
-
-    const shown = sWords.map((w, i) => (i === idx ? '________' : w)).join(' ');
-    const choices = shuffle([target, ...distractors]);
-    const answerIndex = choices.findIndex((c) => c.toLowerCase() === targetLw);
-    generated.push({
-      prompt: `Based on the ARAL passage, complete the statement: “${shown}”.`,
-      choices,
-      answerLetter: LETTERS[answerIndex] || 'A',
-    });
-  }
-
-  return generated;
-}
-
 /**
  * POST /api/teacher/questionnaire/generate-aral
  * Builds a standardized OMR assessment questionnaire directly grounded in the
  * official DepEd ARAL Program learning materials and reading selections.
+ * 
+ * Supports both topic-based generation (by reading competency) and passage-based.
+ * No OpenAI is called.
  */
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
     await connectDB();
 
     const body = await req.json();
+    const assessmentType: 'quiz' | 'exam' = body?.assessmentType === 'exam' ? 'exam' : 'quiz';
+
+    // Parse topics (supports array of 1-2 topics or single topic)
+    let requestedTopics: string[] = [];
+    if (Array.isArray(body?.topics)) {
+      requestedTopics = body.topics.filter((t: any) => typeof t === 'string' && t.trim().length > 0);
+    } else if (body?.topic && typeof body.topic === 'string' && body.topic.trim()) {
+      requestedTopics = [body.topic.trim()];
+    }
+
     const passageId = body?.passageId;
-    const requestedCount = Math.min(30, Math.max(5, Number(body?.count) || 10));
-    const writtenCount = Math.max(0, Math.min(requestedCount, Number(body?.writtenCount) || 0));
+    const targetCount = Math.min(50, Math.max(5, Number(body?.count) || (assessmentType === 'exam' ? 50 : 10)));
+    const writtenCount = Math.max(0, Math.min(targetCount, Number(body?.writtenCount) || 0));
+    const allowRetake = Boolean(body?.allowRetake);
 
-    let passage: any = null;
-    if (passageId) {
-      passage = await ReadingPassage.findById(passageId).lean();
-    }
-    if (!passage) {
-      // Find the first available ARAL passage
-      passage = await ReadingPassage.findOne({ title: /^ARAL/ }).lean();
-    }
-
-    if (!passage) {
+    // 1. Check teacher's assigned subject
+    const user = await User.findById(authUser.userId).select('assignedSubject specialization').lean();
+    const assignedSubject = (user as any)?.assignedSubject;
+    if (assignedSubject && assignedSubject !== 'Reading' && assignedSubject !== 'All') {
       return NextResponse.json(
-        { success: false, error: 'No ARAL reading passage found. Please seed ARAL materials first.' },
-        { status: 404 }
+        {
+          success: false,
+          error: `You are assigned to ${assignedSubject}. You can only generate assessments for your assigned subject.`,
+        },
+        { status: 403 }
       );
     }
 
-    const text = passage.text || '';
-    const embedded = Array.isArray(passage.questions) ? passage.questions : [];
+    let finalTopic = '';
+    let finalTopicsList: string[] = [];
+    let selectedQuestions: any[] = [];
+    let passageTitle = '';
+    let passageText = '';
 
-    const rawItems: {
-      prompt: string;
-      choices: string[];
-      answerLetter: string;
-      topic: string;
-      competency: string;
-    }[] = [];
+    // 2. Generate according to assessment type
+    if (assessmentType === 'quiz') {
+      // ──── QUIZ MODE: Formative weekly assessment (1 or 2 topics only) ────
+      if (requestedTopics.length === 0 && !passageId) {
+        return NextResponse.json(
+          { success: false, error: 'Please select 1 or 2 topics for this weekly quiz.' },
+          { status: 400 }
+        );
+      }
+      if (requestedTopics.length > 2) {
+        return NextResponse.json(
+          { success: false, error: 'A weekly quiz can only cover 1 or 2 topics. For all topics, choose "Comprehensive Exam".' },
+          { status: 400 }
+        );
+      }
 
-    // 1. Add authentic embedded comprehension questions from the ARAL material
-    embedded.forEach((q: any) => {
-      const choices = Array.isArray(q.options) && q.options.length === 4 ? q.options : (q.options || []);
-      const ansIdx = choices.indexOf(q.answer);
-      const letter = ansIdx >= 0 ? LETTERS[ansIdx] : 'A';
-      rawItems.push({
-        prompt: q.question,
-        choices,
-        answerLetter: letter,
-        topic: passage.title,
-        competency: 'ARAL Reading Comprehension',
-      });
-    });
+      if (requestedTopics.length > 0) {
+        finalTopicsList = requestedTopics;
+        finalTopic = requestedTopics.join(' & ');
 
-    // 2. If more items are needed, generate cloze/context items from the passage text
-    if (rawItems.length < requestedCount && text) {
-      const needed = requestedCount - rawItems.length;
-      const extra = generateFromText(text, needed);
-      extra.forEach((g) => {
-        rawItems.push({
-          prompt: g.prompt,
-          choices: g.choices,
-          answerLetter: g.answerLetter,
-          topic: passage.title,
-          competency: 'ARAL Vocabulary & Context Analysis',
+        // Check if teacher already assessed these topics
+        if (!allowRetake) {
+          for (const t of requestedTopics) {
+            const priorKey = await AnswerKey.findOne({
+              teacherId: authUser.userId,
+              $or: [{ topic: t }, { topics: t }],
+              assessmentType: 'quiz',
+            }).select('title created').lean();
+
+            if (priorKey) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: `Topic "${t}" was already assessed in a quiz. Check "Allow Retake" to create another quiz for this topic.`,
+                  alreadyAssessed: true,
+                },
+                { status: 400 }
+              );
+            }
+          }
+        }
+
+        if (requestedTopics.length === 1) {
+          const t = requestedTopics[0];
+          const topicQuestions = await Question.find({ subject: 'Reading', topic: t }).lean();
+          if (topicQuestions.length === 0) {
+            return NextResponse.json({ success: false, error: `No questions found in learning materials for topic "${t}".` }, { status: 404 });
+          }
+          if (topicQuestions.length >= targetCount) {
+            selectedQuestions = shuffle(topicQuestions).slice(0, targetCount);
+          } else {
+            const needed = targetCount - topicQuestions.length;
+            const otherQuestions = await Question.find({ subject: 'Reading', topic: { $ne: t } }).lean();
+            selectedQuestions = [...topicQuestions, ...shuffle(otherQuestions).slice(0, needed)];
+          }
+        } else {
+          // Exactly 2 topics: split items evenly between them
+          const half = Math.floor(targetCount / 2);
+          const remainder = targetCount - half;
+
+          const q1 = await Question.find({ subject: 'Reading', topic: requestedTopics[0] }).lean();
+          const q2 = await Question.find({ subject: 'Reading', topic: requestedTopics[1] }).lean();
+
+          if (q1.length === 0 && q2.length === 0) {
+            return NextResponse.json({ success: false, error: 'No questions found for the selected topics.' }, { status: 404 });
+          }
+
+          let set1 = shuffle(q1).slice(0, half);
+          let set2 = shuffle(q2).slice(0, remainder);
+
+          if (set1.length < half) {
+            const extra = shuffle(q2.filter((q) => !set2.some((s) => String(s._id) === String(q._id)))).slice(0, half - set1.length);
+            set2 = [...set2, ...extra];
+          } else if (set2.length < remainder) {
+            const extra = shuffle(q1.filter((q) => !set1.some((s) => String(s._id) === String(q._id)))).slice(0, remainder - set2.length);
+            set1 = [...set1, ...extra];
+          }
+
+          selectedQuestions = shuffle([...set1, ...set2]);
+        }
+      } else if (passageId) {
+        // Fallback: Passage-based quiz
+        const passage = await ReadingPassage.findById(passageId).lean();
+        if (!passage) {
+          return NextResponse.json({ success: false, error: 'Reading passage not found.' }, { status: 404 });
+        }
+        finalTopic = (passage as any).title || 'Reading Comprehension';
+        finalTopicsList = [finalTopic];
+        passageTitle = (passage as any).title || '';
+        passageText = (passage as any).text || (passage as any).content || '';
+        const embedded = Array.isArray(passage.questions) ? passage.questions : [];
+        const passageQuestions = embedded.map((q: any) => {
+          const choices = Array.isArray(q.options) && q.options.length ? q.options : [];
+          const ansIdx = choices.indexOf(q.answer);
+          const letter = ansIdx >= 0 ? LETTERS[ansIdx] : (['A', 'B', 'C', 'D'].includes(q.answer) ? q.answer : 'A');
+          return {
+            prompt: q.question || q.prompt,
+            choices,
+            correctAnswer: letter,
+            difficulty: 'mid',
+            competencyCode: 'EN-RC',
+            competency: 'Reading Comprehension',
+            topic: passage.title || '',
+          };
         });
+        if (passageQuestions.length >= targetCount) {
+          selectedQuestions = passageQuestions.slice(0, targetCount);
+        } else {
+          const needed = targetCount - passageQuestions.length;
+          const supplemental = await Question.find({ subject: 'Reading' }).limit(needed).lean();
+          selectedQuestions = [...passageQuestions, ...supplemental];
+        }
+      }
+    } else {
+      // ──── COMPREHENSIVE EXAM MODE: Covers the WHOLE set of topics ────
+      const allDistinct = await Question.distinct('topic', { subject: 'Reading' });
+      const allTopics = allDistinct
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+        .sort((a, b) => a.localeCompare(b));
+
+      if (allTopics.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'No curriculum topics found in learning materials for exam generation.' },
+          { status: 404 }
+        );
+      }
+
+      finalTopic = 'Whole Curriculum';
+      finalTopicsList = allTopics;
+
+      // Balanced distribution: evenly allocate questions across every single topic
+      const numTopics = allTopics.length;
+      const basePerTopic = Math.floor(targetCount / numTopics);
+      const remainder = targetCount % numTopics;
+
+      const questionsByTopic: Record<string, any[]> = {};
+      for (const t of allTopics) {
+        questionsByTopic[t] = await Question.find({ subject: 'Reading', topic: t }).lean();
+      }
+
+      let examPool: any[] = [];
+      allTopics.forEach((t, idx) => {
+        const quota = basePerTopic + (idx < remainder ? 1 : 0);
+        const avail = shuffle(questionsByTopic[t] || []);
+        examPool.push(...avail.slice(0, quota));
       });
+
+      // If any topic had fewer questions than its quota, fill remainder from surplus pool
+      if (examPool.length < targetCount) {
+        const usedIds = new Set(examPool.map((q) => String(q._id)));
+        const surplus: any[] = [];
+        for (const t of allTopics) {
+          const unused = (questionsByTopic[t] || []).filter((q: any) => !usedIds.has(String(q._id)));
+          surplus.push(...unused);
+        }
+        examPool.push(...shuffle(surplus).slice(0, targetCount - examPool.length));
+      }
+
+      selectedQuestions = shuffle(examPool);
     }
 
-    const picked = rawItems.slice(0, requestedCount);
-    if (picked.length === 0) {
+    if (selectedQuestions.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Failed to generate questions from the selected ARAL material.' },
+        { success: false, error: 'Could not assemble questions for the requested assessment.' },
         { status: 422 }
       );
     }
 
-    const itemCount = picked.length;
-    // Last writtenCount items become written if teacher requested hybrid grading
-    const modes: ('mc' | 'written')[] = picked.map((_, i) =>
-      i >= itemCount - writtenCount ? 'written' : 'mc'
-    );
-
-    const questions = picked.map((item, i) => ({
+    const itemCount = selectedQuestions.length;
+    const questions = selectedQuestions.map((q, i) => ({
       number: i + 1,
-      id: `aral-${i + 1}`,
-      prompt: item.prompt,
-      choices: modes[i] === 'written' ? [] : item.choices,
-      mode: modes[i],
-      difficulty: i < itemCount * 0.4 ? 'Easy' : i < itemCount * 0.8 ? 'Average' : 'Hard',
-      competencyCode: 'ARAL-RECOVERY',
-      competency: item.competency,
-      topic: item.topic,
+      id: `q${i + 1}`,
+      prompt: q.prompt,
+      choices: q.choices || [],
+      mode: (i >= itemCount - writtenCount ? 'written' : 'mc') as 'mc' | 'written',
+      difficulty: q.difficulty === 'easy' ? 'Easy' : q.difficulty === 'hard' ? 'Hard' : 'Average',
+      competencyCode: q.competencyCode || 'EN7RC-ARAL',
+      competency: q.competency || q.topic || finalTopic,
+      topic: q.topic || finalTopic,
     }));
 
-    const answerLetters = picked.map((item) => item.answerLetter);
+    const answerLetters = selectedQuestions.map((q) => q.correctAnswer || 'A');
+    const structuredAnswers = answerLetters.map((letter, i) => ({
+      itemNumber: i + 1,
+      correctKey: letter,
+    }));
 
-    const writtenItems = questions
-      .filter((q) => q.mode === 'written')
-      .map((q) => ({
-        index: q.number - 1,
-        prompt: q.prompt,
-        max: 2,
-      }));
+    const title =
+      assessmentType === 'exam'
+        ? `Comprehensive Exam: Reading (${itemCount} items • Whole Curriculum)`
+        : (finalTopicsList.length > 1
+            ? `Weekly Quiz: ${finalTopicsList.join(' & ')} (${itemCount} items)`
+            : `Weekly Quiz: ${finalTopic} (${itemCount} items)`);
 
-    const title = `${passage.title} — OMR Recovery Assessment (${itemCount} items)`;
-
+    // Save official AnswerKey linked to this teacher and assessment category
     const answerKey = await AnswerKey.create({
       title,
       subject: 'Reading',
+      assessmentType,
+      topic: finalTopic,
+      topics: finalTopicsList,
+      teacherId: authUser.userId,
       items: itemCount,
-      answers: answerLetters,
-      modes,
-      writtenItems,
+      totalItems: itemCount,
+      examId: null,
+      questionnaireId: `Q-${assessmentType.toUpperCase()}-${Date.now()}`,
+      answers: structuredAnswers,
+      answerLetters,
+      modes: questions.map((q) => q.mode),
+      questions,
+      passageTitle,
+      passageText,
       created: new Date(),
     });
 
@@ -210,26 +284,31 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         title,
+        assessmentType,
         subject: 'Reading',
-        gradeLevel: passage.gradeLevel || 7,
+        topic: finalTopic,
+        topics: finalTopicsList,
+        gradeLevel: 7,
         itemCount,
-        passageTitle: passage.title,
-        passageText: passage.text,
         writtenCount,
         questions,
         answers: answerLetters,
-        modes,
+        bubbleSheetUrl: '/bubble-sheets/reading-bubble.pdf',
         answerKey: {
           id: String(answerKey._id),
           title: answerKey.title,
+          assessmentType: answerKey.assessmentType,
           subject: answerKey.subject,
+          topic: answerKey.topic,
+          topics: answerKey.topics,
           items: answerKey.items,
+          totalItems: answerKey.totalItems,
         },
       },
     });
-  } catch (e: any) {
-    if (e instanceof AuthError) return authErrorResponse(e);
-    console.error('Generate ARAL Questionnaire Error:', e);
+  } catch (error: any) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    console.error('Generate ARAL Questionnaire Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

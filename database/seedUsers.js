@@ -34,7 +34,7 @@ const seedDB = async () => {
     await Recommendation.deleteMany({});
     await AnswerKey.deleteMany({});
     await ReadingPassage.deleteMany({});
-    await Question.deleteMany({});
+    await Question.deleteMany({ subject: { $ne: 'Reading' } });
 
     console.log('Hashing passwords...');
     const salt = await bcrypt.genSalt(10);
@@ -49,10 +49,12 @@ const seedDB = async () => {
       role: 'principal',
     });
 
+    const coordinatorPassword = await bcrypt.hash('password123', salt);
+
     const coordinator = await User.create({
       username: 'coordinator1',
-      password: hashedPassword,
-      name: 'ARAL Coordinator',
+      password: coordinatorPassword,
+      name: 'Coordinator Sarah',
       role: 'coordinator',
     });
 
@@ -62,6 +64,16 @@ const seedDB = async () => {
       name: 'Teacher Miguel',
       role: 'teacher',
       specialization: 'reading',
+      assignedSubject: 'Reading',
+    });
+
+    const teacher2 = await User.create({
+      username: 'teacher2',
+      password: hashedPassword,
+      name: 'Teacher Elena',
+      role: 'teacher',
+      specialization: 'all-subjects',
+      assignedSubject: 'All',
     });
 
     // Ability drives how well each student performs (0..1).
@@ -109,6 +121,8 @@ const seedDB = async () => {
           guardian: d.name.includes('Juan') ? 'Gloria dela Cruz' : guardians[i],
           contact: `09${100000000 + i * 111111}`.slice(0, 11),
           address: `Blk ${i + 1} St. ${d.section}, San Isidro`,
+          assignedTeacherId: teacher._id,
+          assignedTeacherName: teacher.name,
         })
       );
     }

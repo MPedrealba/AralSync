@@ -26,11 +26,11 @@ const LearnerRecordSchema = new mongoose.Schema({
   comprehensionScore: { type: Number },
   comprehensionLevel: {
     type: String,
-    enum: ['Independent', 'Instructional', 'Frustration']
+    enum: ['Independent', 'Instructional', 'Frustration', 'Non-Reader', 'Beginning', 'Developing', 'Approaching', 'Proficient', 'Not Assessed']
   },
   combinedReadingLevel: {
     type: String,
-    enum: ['Independent', 'Instructional', 'Frustration']
+    enum: ['Independent', 'Instructional', 'Frustration', 'Non-Reader', 'Beginning', 'Developing', 'Approaching', 'Proficient', 'Not Assessed']
   },
   philIriStatus: {
     type: String,
@@ -38,7 +38,16 @@ const LearnerRecordSchema = new mongoose.Schema({
     default: 'unassessed'
   },
   lastReadingAssessmentDate: { type: Date },
-  lastReadingAssessmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Assessment' }
-}, { timestamps: true });
+  lastReadingAssessmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Assessment' },
+  // ── Teacher Assignment ──
+  assignedTeacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  assignedTeacherName: { type: String, default: null }
+}, { timestamps: true, strictPopulate: false });
+
+LearnerRecordSchema.index({ assignedTeacherId: 1 });
+
+if (mongoose.models.LearnerRecord && !mongoose.models.LearnerRecord.schema.paths.assignedTeacherId) {
+  delete mongoose.models.LearnerRecord;
+}
 
 module.exports = mongoose.models.LearnerRecord || mongoose.model('LearnerRecord', LearnerRecordSchema);

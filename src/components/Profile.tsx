@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Loader2,
   AlertCircle,
@@ -72,13 +73,24 @@ export default function Profile() {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
 
+  const syncFormFields = (profile: ProfileData) => {
+    setName(profile.name || "");
+    setUsername(profile.username || "");
+    setEmail(profile.email || "");
+    setSpecialization(profile.specialization || "all-subjects");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setFormError("");
+  };
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError("");
       try {
         const res = await fetch("/api/auth/me");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
           syncFormFields(json.data);
@@ -93,17 +105,6 @@ export default function Profile() {
     };
     load();
   }, []);
-
-  const syncFormFields = (profile: ProfileData) => {
-    setName(profile.name || "");
-    setUsername(profile.username || "");
-    setEmail(profile.email || "");
-    setSpecialization(profile.specialization || "all-subjects");
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setFormError("");
-  };
 
   const handleStartEdit = () => {
     if (data) syncFormFields(data);
@@ -176,7 +177,7 @@ export default function Profile() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
 
       if (!res.ok || !json.success) {
         setFormError(json.error || "Failed to update profile.");

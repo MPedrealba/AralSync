@@ -10,9 +10,9 @@ interface StatCardProps {
   trendUp?: boolean;
   /** Optional muted subtext below the value. */
   subtext?: string;
-  /** Tint for the icon tile & accent. Maps to a blue-tinted palette by default. */
+  /** Semantic color theme */
   color?: "blue" | "emerald" | "amber" | "red" | "violet";
-  /** Optional icon color override (Tailwind text class e.g. "text-red-600"). */
+  /** Optional icon color override (Tailwind text class e.g. "text-red-800"). */
   iconColor?: string;
   /** Optional icon tile background override (Tailwind bg class). */
   iconBg?: string;
@@ -21,9 +21,8 @@ interface StatCardProps {
 }
 
 /**
- * Consistent stat card used across all role dashboards.
- * The accent bar + tinted icon tile give each metric a bit of color and depth,
- * and the soft lift on hover adds an elevation hierarchy to the dashboard grid.
+ * Modern executive metric card used across all role dashboards.
+ * Clean, restrained DepEd SaaS aesthetic.
  */
 export default function StatCard({
   title,
@@ -35,51 +34,51 @@ export default function StatCard({
   color = "blue",
   iconColor,
   iconBg,
-  valueColor = "text-gray-900",
+  valueColor = "text-slate-900",
 }: StatCardProps) {
-  const palettes: Record<string, { tile: string; bar: string }> = {
-    blue: { tile: "bg-[#fff1f2]", bar: "bg-[#e11d48]" },
-    emerald: { tile: "bg-emerald-50", bar: "bg-emerald-500" },
-    amber: { tile: "bg-amber-50", bar: "bg-amber-500" },
-    red: { tile: "bg-red-50", bar: "bg-red-500" },
-    violet: { tile: "bg-violet-50", bar: "bg-violet-500" },
+  const palettes: Record<string, { tile: string; icon: string; bar: string }> = {
+    blue: { tile: "bg-red-50", icon: "text-red-800", bar: "bg-red-800" },
+    emerald: { tile: "bg-emerald-50", icon: "text-emerald-700", bar: "bg-emerald-600" },
+    amber: { tile: "bg-amber-50", icon: "text-amber-700", bar: "bg-amber-600" },
+    red: { tile: "bg-rose-50", icon: "text-rose-700", bar: "bg-rose-600" },
+    violet: { tile: "bg-slate-100", icon: "text-slate-700", bar: "bg-slate-700" },
   };
-  const palette = palettes[color];
+  const palette = palettes[color] ?? palettes.blue;
 
   return (
     <div
-      className="group relative overflow-hidden rounded-xl border border-gray-100/80 bg-white p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover"
+      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all duration-200 hover:border-slate-300 hover:shadow-sm"
       aria-label={`${title}: ${value}${trend ? ` (${trendUp ? "up" : "down"} ${trend})` : ""}`}
     >
-      {/* Accent bar */}
+      {/* Top accent bar */}
       <span
-        className={`absolute inset-x-0 top-0 h-0.5 ${palette.bar} opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
+        className={`absolute inset-x-0 top-0 h-1 ${palette.bar} opacity-90`}
       />
       <div className="flex items-start justify-between">
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className={`text-3xl font-bold tracking-tight ${valueColor}`}>
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+          <p className={`text-3xl font-extrabold tracking-tight ${valueColor}`}>
             {value}
           </p>
           {trend ? (
             <p
-              className={`inline-flex items-center gap-1 text-xs font-medium ${
-                trendUp ? "text-emerald-600" : "text-red-500"
+              className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                trendUp ? "text-emerald-600" : "text-rose-600"
               }`}
             >
               <span>{trendUp ? "↑" : "↓"}</span>
               {trend}
             </p>
           ) : subtext ? (
-            <p className="text-xs text-gray-400">{subtext}</p>
+            <p className="text-xs text-slate-400">{subtext}</p>
           ) : null}
         </div>
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-lg ${
+          className={`flex h-11 w-11 items-center justify-center rounded-xl border border-slate-100 ${
             iconBg ?? palette.tile
-          } ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-110`}
+          } transition-transform duration-200 group-hover:scale-105`}
         >
-          <Icon className={`h-5 w-5 ${iconColor ?? color === "blue" ? "text-[#e11d48]" : color === "emerald" ? "text-emerald-600" : color === "amber" ? "text-amber-600" : color === "red" ? "text-red-600" : "text-violet-600"}`} />
+          <Icon className={`h-5 w-5 ${iconColor ?? palette.icon}`} />
         </div>
       </div>
     </div>

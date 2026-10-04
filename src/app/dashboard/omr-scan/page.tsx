@@ -1,216 +1,1836 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
-import OMRScanner from "@/components/OMRScanner";
-import { Upload, Camera, X, ArrowRight } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
+import {
+  Upload,
+  Camera,
+  X,
+  ArrowRight,
+  CheckCircle,
+  AlertTriangle,
+  RefreshCw,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  RotateCcw,
+  RotateCcw as ResetIcon,
+  Maximize2,
+  Minimize2,
+  Download,
+  Eye,
+  Check,
+  ChevronDown,
+  Search,
+  User,
+  BookOpen,
+  Award,
+  Sparkles,
+  UserCheck,
+  AlertCircle,
+  FileImage,
+  Layers,
+  ArrowLeft,
+} from "lucide-react";
 
-/**
- * OMR Scan — the dedicated scan page. Their own route now (was the "New Scan"
- * tab on the OMR Assessments page). Landing on ?scan=1 (sidebar quick action)
- * opens the scanner dialog straight away; "Start Scanning" reopens it here too.
- */
-function OMRScaenPageContent() {
+interface Learner {
+  _id: string;
+  name: string;
+  section?: string;
+  gradeLevel?: number;
+  lrn?: string;
+}
+
+interface AnswerKeyItem {
+  id: string;
+  title: string;
+  subject: string;
+  items: number;
+  answers: string[];
+  modes?: string[];
+  writtenItems?: { index: number; prompt: string; max: number }[];
+}
+
+interface RecommendationItem {
+  id: string;
+  title: string;
+  description: string;
+  subject: string;
+  kind: string;
+}
+
+const COMPETENCIES = [
+  { label: "Numeracy", subject: "Math" },
+  { label: "Reading Comprehension", subject: "Reading" },
+  { label: "Science", subject: "Science" },
+];
+
+function getMasteryBand(percentage: number): {
+  label: string;
+  color: string;
+  border: string;
+  bg: string;
+} {
+  if (percentage >= 90) {
+    return {
+      label: "Proficient",
+      color: "text-emerald-700",
+      border: "border-emerald-300",
+      bg: "bg-emerald-50",
+    };
+  }
+  if (percentage >= 75) {
+    return {
+      label: "Approaching",
+      color: "text-blue-700",
+      border: "border-blue-300",
+      bg: "bg-blue-50",
+    };
+  }
+  if (percentage >= 50) {
+    return {
+      label: "Developing",
+      color: "text-amber-700",
+      border: "border-amber-300",
+      bg: "bg-amber-50",
+    };
+  }
+  return {
+    label: "Beginning",
+    color: "text-rose-700",
+    border: "border-rose-300",
+    bg: "bg-rose-50",
+  };
+}
+
+function OMRWorkstationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [showOMR, setShowOMR] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Arriving from the sidebar "OMR Scan" action (?scan=1) → open scanner now.
+  // ── Setup & Selector State ──
+  const [students, setStudents] = useState<Learner[]>([]);
+  const [answerKeys, setAnswerKeys] = useState<AnswerKeyItem[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState("all");
+  const [selectedSection, setSelectedSection] = useState("all");
+  const [selectedKeyId, setSelectedKeyId] = useState("");
+  const [competency, setCompetency] = useState("Numeracy");
+  const [assessmentTitle, setAssessmentTitle] = useState("Quarterly Diagnostic Exam");
+
+  // ── Dynamic Grade & Section Cohort Filtering ──
+  const availableGrades = useMemo(() => {
+    const set = new Set<number>();
+    students.forEach((s) => {
+      if (s.gradeLevel) set.add(Number(s.gradeLevel));
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [students]);
+
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      if (selectedGrade !== "all" && String(s.gradeLevel) !== String(selectedGrade)) {
+        return;
+      }
+      if (s.section && s.section.trim()) {
+        set.add(s.section.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [students, selectedGrade]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchGrade =
+        selectedGrade === "all" || String(s.gradeLevel) === String(selectedGrade);
+      const matchSection =
+        selectedSection === "all" ||
+        s.section?.trim().toLowerCase() === selectedSection.trim().toLowerCase();
+      return matchGrade && matchSection;
+    });
+  }, [students, selectedGrade, selectedSection]);
+
+  // Keep selected student in sync when filtered cohort changes
   useEffect(() => {
-    if (searchParams.get("scan") === "1") setShowOMR(true);
+    if (filteredStudents.length > 0) {
+      const isStillInList = filteredStudents.some((s) => s._id === selectedStudentId);
+      if (!isStillInList) {
+        setSelectedStudentId(filteredStudents[0]._id);
+      }
+    } else {
+      setSelectedStudentId("");
+    }
+  }, [filteredStudents, selectedStudentId]);
+
+  const handleGradeChange = (newGrade: string) => {
+    setSelectedGrade(newGrade);
+    if (newGrade !== "all") {
+      const sectionsInGrade = new Set(
+        students
+          .filter((s) => String(s.gradeLevel) === String(newGrade) && s.section)
+          .map((s) => s.section!.trim().toLowerCase())
+      );
+      if (
+        selectedSection !== "all" &&
+        !sectionsInGrade.has(selectedSection.trim().toLowerCase())
+      ) {
+        setSelectedSection("all");
+      }
+    }
+  };
+
+  // ── Student Combobox Search & Filter ──
+  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
+  const studentComboboxRef = useRef<HTMLDivElement>(null);
+
+  const searchedStudents = useMemo(() => {
+    const q = studentSearchQuery.trim().toLowerCase();
+    if (!q) return filteredStudents;
+    return filteredStudents.filter((s) => {
+      const nameMatch = s.name.toLowerCase().includes(q);
+      const lrnMatch = s.lrn ? s.lrn.toLowerCase().includes(q) : false;
+      const sectionMatch = s.section ? s.section.toLowerCase().includes(q) : false;
+      return nameMatch || lrnMatch || sectionMatch;
+    });
+  }, [filteredStudents, studentSearchQuery]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        studentComboboxRef.current &&
+        !studentComboboxRef.current.contains(event.target as Node)
+      ) {
+        setIsStudentDropdownOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && isStudentDropdownOpen) {
+        setIsStudentDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isStudentDropdownOpen]);
+
+  // ── Sheet & Scan State ──
+  const [sheetImage, setSheetImage] = useState<string | null>(null);
+  const [sheetFile, setSheetFile] = useState<File | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [assessmentId, setAssessmentId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
+
+  // ── Verification & Scoring State ──
+  const [detectedAnswers, setDetectedAnswers] = useState<(string | null)[]>([]);
+  const [verifiedAnswers, setVerifiedAnswers] = useState<(string | null)[]>([]);
+  const [keyAnswers, setKeyAnswers] = useState<string[]>([]);
+  const [keyModes, setKeyModes] = useState<string[]>([]);
+  const [writtenItems, setWrittenItems] = useState<{ index: number; prompt: string; max: number }[]>([]);
+  const [writtenScores, setWrittenScores] = useState<Record<number, number>>({});
+  const [teacherNotes, setTeacherNotes] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"all" | "flagged" | "incorrect">("all");
+  const [focusedQuestionIndex, setFocusedQuestionIndex] = useState<number | null>(null);
+
+  // ── Paper Viewer Controls ──
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const viewerContainerRef = useRef<HTMLDivElement>(null);
+  const questionRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  // ── Camera Modal State ──
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // ── Finalized Success & Intervention State ──
+  const [finalizedModal, setFinalizedModal] = useState<{
+    isOpen: boolean;
+    score: number;
+    masteryLevel: string;
+    studentName: string;
+    recommendations: RecommendationItem[];
+    assignedIds: string[];
+  }>({
+    isOpen: false,
+    score: 0,
+    masteryLevel: "Proficient",
+    studentName: "",
+    recommendations: [],
+    assignedIds: [],
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Map competency to subject
+  const currentSubject =
+    competency === "Reading Comprehension" ? "Reading" : competency === "Science" ? "Science" : "Math";
+
+  // ── 1. Fetch Students & Answer Keys ──
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [learnersRes, studentsRes, keysRes] = await Promise.all([
+          fetch("/api/teacher/learners").catch(() => null),
+          fetch("/api/teacher/students").catch(() => null),
+          fetch("/api/teacher/answer-keys").catch(() => null),
+        ]);
+
+        let loadedStudents: Learner[] = [];
+
+        if (learnersRes && learnersRes.ok) {
+          const lJson = await parseJsonResponse(learnersRes);
+          if (lJson.success && Array.isArray(lJson.data)) {
+            loadedStudents = lJson.data
+              .map((item: any) => ({
+                _id: String(item.studentId?._id || item.id || item._id),
+                name: item.studentId?.name || item.name || "Student",
+                section: item.section || "Rosal",
+                gradeLevel: item.gradeLevel || 7,
+                lrn: item.lrn || "",
+              }))
+              .filter((s: Learner) => Boolean(s._id));
+          }
+        }
+
+        // Fallback to /api/teacher/students if learners list is empty
+        if (loadedStudents.length === 0 && studentsRes && studentsRes.ok) {
+          const sJson = await parseJsonResponse(studentsRes);
+          if (sJson.success && Array.isArray(sJson.data)) {
+            loadedStudents = sJson.data.map((s: any, idx: number) => ({
+              _id: String(s._id),
+              name: s.name,
+              section: idx % 2 === 0 ? "Rosal" : "Sampaguita",
+              gradeLevel: 7,
+            }));
+          }
+        }
+
+        setStudents(loadedStudents);
+
+        if (loadedStudents.length > 0 && !selectedStudentId) {
+          const paramStudent = searchParams.get("studentId");
+          if (paramStudent && loadedStudents.some((s) => s._id === paramStudent)) {
+            setSelectedStudentId(paramStudent);
+          } else {
+            setSelectedStudentId(loadedStudents[0]._id);
+          }
+        }
+
+        if (keysRes && keysRes.ok) {
+          const kJson = await parseJsonResponse(keysRes);
+          if (kJson.success && Array.isArray(kJson.data)) {
+            setAnswerKeys(kJson.data);
+            const paramKey = searchParams.get("keyId");
+            if (paramKey && kJson.data.some((k: any) => k.id === paramKey)) {
+              setSelectedKeyId(paramKey);
+            } else if (kJson.data.length > 0 && !selectedKeyId) {
+              setSelectedKeyId(kJson.data[0].id);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load OMR workstation data:", err);
+      }
+    }
+    loadData();
   }, [searchParams]);
 
+  // When selected key changes, populate key answers and modes
+  useEffect(() => {
+    if (!selectedKeyId) return;
+    const key = answerKeys.find((k) => k.id === selectedKeyId);
+    if (key) {
+      if (key.answers && key.answers.length > 0) {
+        setKeyAnswers(key.answers);
+      }
+      if (key.modes) setKeyModes(key.modes);
+      if (key.writtenItems) setWrittenItems(key.writtenItems);
+      if (key.subject) {
+        if (key.subject === "Reading") setCompetency("Reading Comprehension");
+        else if (key.subject === "Science") setCompetency("Science");
+        else setCompetency("Numeracy");
+      }
+      setAssessmentTitle(key.title || "Quarterly Diagnostic Exam");
+    }
+  }, [selectedKeyId, answerKeys]);
+
+  // Clean up blob URLs on unmount
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (sheetImage && sheetImage.startsWith("blob:")) {
+        URL.revokeObjectURL(sheetImage);
+      }
     };
-  }, [previewUrl]);
+  }, [sheetImage]);
+
+  // ── Real-Time Calculated Metrics ──
+  const effectiveTotalItems = Math.max(keyAnswers.length, verifiedAnswers.length, 20);
+
+  // Multiple Choice scoring
+  let mcCorrectCount = 0;
+  let mcTotalCount = 0;
+  for (let i = 0; i < effectiveTotalItems; i++) {
+    const isWritten = keyModes[i] === "written";
+    if (!isWritten) {
+      mcTotalCount++;
+      const userAns = verifiedAnswers[i];
+      const correctAns = keyAnswers[i];
+      if (userAns && correctAns && userAns.toUpperCase() === correctAns.toUpperCase()) {
+        mcCorrectCount++;
+      }
+    }
+  }
+
+  // Written points scoring
+  let writtenPointsScored = 0;
+  let writtenPointsMax = 0;
+  writtenItems.forEach((item) => {
+    writtenPointsMax += item.max || 1;
+    writtenPointsScored += writtenScores[item.index] ?? 0;
+  });
+
+  const totalPointsAwarded = mcCorrectCount + writtenPointsScored;
+  const totalPointsPossible = mcTotalCount + writtenPointsMax || effectiveTotalItems;
+  const livePercentage =
+    totalPointsPossible > 0 ? Math.round((totalPointsAwarded / totalPointsPossible) * 100) : 0;
+  const liveMastery = getMasteryBand(livePercentage);
+
+  const hasUngradedWritten =
+    writtenItems.length > 0 &&
+    writtenItems.some((w) => writtenScores[w.index] === undefined || writtenScores[w.index] === null);
+  const liveGradingStatus = hasUngradedWritten ? "Needs Written Grading" : "Complete";
+
+  // Flagged ambiguities (blank or unshaded bubbles)
+  const flaggedIndices: number[] = [];
+  for (let i = 0; i < effectiveTotalItems; i++) {
+    if (keyModes[i] !== "written") {
+      const ans = verifiedAnswers[i];
+      if (!ans || !["A", "B", "C", "D"].includes(ans.toUpperCase())) {
+        flaggedIndices.push(i);
+      }
+    }
+  }
+
+  // ── Keyboard shortcuts for viewer ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        setScale((s) => Math.min(s + 0.25, 4));
+      } else if (e.key === "-") {
+        e.preventDefault();
+        setScale((s) => Math.max(s - 0.25, 0.5));
+      } else if (e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        setRotation((r) => (r + 90) % 360);
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setScale(1);
+        setRotation(0);
+        setPosition({ x: 0, y: 0 });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // ── Image Pan & Drag Handlers ──
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    setScale((s) => Math.min(Math.max(0.5, s + delta), 4));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const resetView = () => {
+    setScale(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  // ── File Selection & Scanning ──
+  const processUploadedImage = async (file: File) => {
+    setSheetFile(file);
+    const localUrl = URL.createObjectURL(file);
+    setSheetImage(localUrl);
+    setErrorMessage("");
+    setInfoMessage("");
+    setIsScanning(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("studentId", selectedStudentId || (students[0]?._id ?? ""));
+      formData.append("competency", competency);
+      formData.append("subject", currentSubject);
+      formData.append("title", assessmentTitle);
+      if (selectedKeyId) formData.append("answerKeyId", selectedKeyId);
+
+      const res = await fetch("/api/teacher/omr", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await parseJsonResponse(res);
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to process sheet.");
+      }
+
+      const data = json.data;
+      setAssessmentId(data.assessmentId || null);
+      if (data.omrSheetUrl) {
+        setSheetImage(data.omrSheetUrl);
+      }
+
+      const initialDetected: (string | null)[] = data.detectedAnswers || [];
+      setDetectedAnswers(initialDetected);
+      setVerifiedAnswers([...initialDetected]);
+
+      if (data.keyAnswers && Array.isArray(data.keyAnswers)) {
+        setKeyAnswers(data.keyAnswers);
+      }
+      if (data.keyModes && Array.isArray(data.keyModes)) {
+        setKeyModes(data.keyModes);
+      }
+      if (data.writtenItems && Array.isArray(data.writtenItems)) {
+        setWrittenItems(data.writtenItems);
+      }
+
+      setInfoMessage("Sheet scanned and initial marks detected. Review and adjust scores below.");
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to process OMR scan.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("image/")) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      processUploadedImage(file);
+    }
+    e.target.value = "";
+  };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) {
+        processUploadedImage(file);
+      }
+    },
+    [selectedStudentId, competency, currentSubject, assessmentTitle, selectedKeyId]
+  );
+
+  // ── Load Sample OMR Sheet for instant demonstration ──
+  const handleLoadSample = async () => {
+    try {
+      setIsScanning(true);
+      setErrorMessage("");
+      const res = await fetch("/uploads/omr/sample_sheet.png");
+      if (!res.ok) {
+        // Fallback: create a mock local canvas sheet
+        const canvas = document.createElement("canvas");
+        canvas.width = 800;
+        canvas.height = 1100;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, 800, 1100);
+          ctx.fillStyle = "#1e293b";
+          ctx.font = "bold 24px sans-serif";
+          ctx.fillText("DEPED ARAL DIAGNOSTIC ANSWER SHEET", 120, 80);
+          ctx.font = "16px sans-serif";
+          ctx.fillText("Student: " + (students.find((s) => s._id === selectedStudentId)?.name || "Sample Student"), 120, 120);
+          ctx.fillText("Subject: " + competency + " · Grade 7", 120, 150);
+          // Draw sample bubbles
+          for (let i = 0; i < 20; i++) {
+            const y = 200 + i * 40;
+            ctx.fillStyle = "#334155";
+            ctx.fillText(`Q${i + 1}`, 120, y + 15);
+            ["A", "B", "C", "D"].forEach((opt, oi) => {
+              const x = 200 + oi * 50;
+              ctx.beginPath();
+              ctx.arc(x, y + 10, 12, 0, Math.PI * 2);
+              if (oi === (i % 4)) {
+                ctx.fillStyle = "#1e293b";
+                ctx.fill();
+              } else {
+                ctx.strokeStyle = "#94a3b8";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+              }
+              ctx.fillStyle = oi === (i % 4) ? "#ffffff" : "#475569";
+              ctx.font = "12px sans-serif";
+              ctx.fillText(opt, x - 4, y + 14);
+            });
+          }
+        }
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const sampleFile = new File([blob], "sample_sheet.png", { type: "image/png" });
+            processUploadedImage(sampleFile);
+          }
+        }, "image/png");
+        return;
+      }
+      const blob = await res.blob();
+      const sampleFile = new File([blob], "sample_sheet.png", { type: "image/png" });
+      processUploadedImage(sampleFile);
+    } catch {
+      setErrorMessage("Could not load sample sheet.");
+      setIsScanning(false);
     }
   };
 
-  const handleRemoveFile = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setSelectedFile(null);
-    setPreviewUrl(null);
+  // ── Camera Feed Functions ──
+  const startCamera = async () => {
+    setIsCameraOpen(true);
+    setErrorMessage("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (e: any) {
+      setErrorMessage("Camera access denied or unavailable: " + (e.message || ""));
+      setIsCameraOpen(false);
+    }
   };
+
+  const stopCamera = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `camera-omr-${Date.now()}.jpg`, { type: "image/jpeg" });
+        stopCamera();
+        processUploadedImage(file);
+      }
+    }, "image/jpeg", 0.95);
+  };
+
+  // ── Bubble Override Handler ──
+  const handleBubbleOverride = (questionIndex: number, optionLetter: string | null) => {
+    setVerifiedAnswers((prev) => {
+      const next = [...prev];
+      // If clicking already selected letter, toggle to blank null
+      next[questionIndex] = next[questionIndex] === optionLetter ? null : optionLetter;
+      return next;
+    });
+    setFocusedQuestionIndex(questionIndex);
+  };
+
+  // ── Written Item Score Handler ──
+  const handleWrittenScoreChange = (itemIndex: number, points: number) => {
+    setWrittenScores((prev) => ({
+      ...prev,
+      [itemIndex]: points,
+    }));
+    setFocusedQuestionIndex(itemIndex);
+  };
+
+  // ── Cross-Reference Question & Focus ──
+  const handleFocusQuestion = (index: number) => {
+    setFocusedQuestionIndex(index);
+    const element = questionRefs.current[index];
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
+  // ── Jump to First Flagged Item ──
+  const handleReviewFlagged = () => {
+    setActiveFilter("flagged");
+    if (flaggedIndices.length > 0) {
+      handleFocusQuestion(flaggedIndices[0]);
+    }
+  };
+
+  // ── Save & Finalize Assessment ──
+  const handleSaveAndFinalize = async () => {
+    if (!selectedStudentId) {
+      setErrorMessage("Please select a student before finalizing.");
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage("");
+
+    try {
+      const studentObj = students.find((s) => s._id === selectedStudentId);
+
+      const payload = {
+        assessmentId: assessmentId || undefined,
+        studentId: selectedStudentId,
+        verifiedAnswers,
+        writtenScores,
+        notes: teacherNotes,
+        competency,
+        subject: currentSubject,
+        title: assessmentTitle,
+      };
+
+      const res = await fetch("/api/teacher/omr", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await parseJsonResponse(res);
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to save assessment.");
+      }
+
+      const savedData = json.data;
+      setFinalizedModal({
+        isOpen: true,
+        score: savedData.assessment?.score ?? livePercentage,
+        masteryLevel: savedData.assessment?.masteryLevel ?? liveMastery.label,
+        studentName: studentObj?.name || "Student",
+        recommendations: savedData.recommendations || [],
+        assignedIds: [],
+      });
+    } catch (err: any) {
+      setErrorMessage(err.message || "An error occurred while saving assessment.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ── 1-Click Assign ARAL Intervention ──
+  const handleAssignIntervention = async (recId: string) => {
+    try {
+      const res = await fetch("/api/teacher/recommendations/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recommendationId: recId,
+          studentId: selectedStudentId,
+        }),
+      });
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setFinalizedModal((prev) => ({
+          ...prev,
+          assignedIds: [...prev.assignedIds, recId],
+        }));
+      }
+    } catch {
+      console.error("Failed to assign recommendation");
+    }
+  };
+
+  // ── Next Student in Section (Batch Mode) ──
+  const handleNextStudent = () => {
+    if (filteredStudents.length === 0) return;
+
+    const currentIndex = filteredStudents.findIndex((s) => s._id === selectedStudentId);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % filteredStudents.length : 0;
+    const nextStudent = filteredStudents[nextIndex];
+
+    if (nextStudent) {
+      setSelectedStudentId(nextStudent._id);
+      // Reset sheet & scores while preserving answer key, competency, grade, and section configuration
+      setSheetImage(null);
+      setSheetFile(null);
+      setAssessmentId(null);
+      setDetectedAnswers([]);
+      setVerifiedAnswers([]);
+      setWrittenScores({});
+      setTeacherNotes("");
+      setFocusedQuestionIndex(null);
+      setErrorMessage("");
+      setFinalizedModal((prev) => ({ ...prev, isOpen: false }));
+      setInfoMessage(
+        `Ready to grade next student: ${nextStudent.name} (Grade ${nextStudent.gradeLevel || 7} - ${nextStudent.section || "General"}).`
+      );
+    }
+  };
+
+  // ── Discard / Re-scan current sheet ──
+  const handleDiscard = () => {
+    if (sheetImage && !confirm("Discard current scan and restart? Unsaved changes will be lost.")) {
+      return;
+    }
+    setSheetImage(null);
+    setSheetFile(null);
+    setAssessmentId(null);
+    setDetectedAnswers([]);
+    setVerifiedAnswers([]);
+    setWrittenScores({});
+    setTeacherNotes("");
+    setFocusedQuestionIndex(null);
+    setErrorMessage("");
+    setInfoMessage("Scan cleared. You can upload a new sheet or capture a photo.");
+  };
+
+  // Filtered questions list
+  const filteredQuestionIndices: number[] = [];
+  for (let i = 0; i < effectiveTotalItems; i++) {
+    const isWritten = keyModes[i] === "written";
+    const userAns = verifiedAnswers[i];
+    const correctAns = keyAnswers[i];
+    const isIncorrect = !isWritten && userAns && correctAns && userAns.toUpperCase() !== correctAns.toUpperCase();
+    const isFlagged = !isWritten && (!userAns || !["A", "B", "C", "D"].includes(userAns.toUpperCase()));
+
+    if (activeFilter === "flagged" && isFlagged) {
+      filteredQuestionIndices.push(i);
+    } else if (activeFilter === "incorrect" && isIncorrect) {
+      filteredQuestionIndices.push(i);
+    } else if (activeFilter === "all") {
+      filteredQuestionIndices.push(i);
+    }
+  }
+
+  const selectedStudentObj = students.find((s) => s._id === selectedStudentId);
 
   return (
     <>
-      <Header title="OMR Scan" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
-        {/* Title + back link */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">OMR Scan</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Scan a student&apos;s bubble sheet to auto-score it and record the
-              assessment.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/dashboard/omr-assessments")}
-            className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
-          >
-            Results &amp; History
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
+      <Header title="OMR Scan Workstation" />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-          {/* Upload Area — 3/5 */}
-          <div className="lg:col-span-3">
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h3 className="mb-1 text-base font-semibold text-gray-900">
-                Upload or Capture OMR Sheet
-              </h3>
-              <p className="mb-5 text-sm text-gray-400">
-                Upload a scanned OMR sheet image or take a photo directly.
-              </p>
-
-              {!previewUrl ? (
-                <>
-                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-16 transition-colors hover:border-blue-500/40 hover:bg-blue-50/20">
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
-                      <Upload className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-700">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      PNG, JPG or JPEG (max 10MB)
-                    </p>
-                  </label>
-
-                  <div className="mt-5 flex items-center gap-3">
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                      <Upload className="h-4 w-4" />
-                      Browse Files
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,.png"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                    <button className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                      <Camera className="h-4 w-4" />
-                      Use Camera
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center gap-4 rounded-xl border border-blue-200 bg-slate-50 p-6">
-                  <img
-                    src={previewUrl}
-                    alt="OMR Sheet Preview"
-                    className="max-h-56 w-auto rounded-lg border border-blue-200 bg-slate-50 object-contain shadow-sm"
-                  />
-                  <p className="max-w-full truncate text-sm font-medium text-gray-700">
-                    {selectedFile?.name}
-                  </p>
-                  <button
-                    onClick={handleRemoveFile}
-                    className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+      <main className="flex flex-1 flex-col overflow-hidden bg-slate-50">
+        {/* ── TOP SETUP & BATCH BAR ── */}
+        <section className="shrink-0 border-b border-slate-200 bg-white px-6 py-4 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Left: Title + Mode Indicator */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/omr-assessments")}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                title="Back to OMR Assessments"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-base font-bold text-slate-900 sm:text-lg">
+                    OMR Grading &amp; Verification Workstation
+                  </h1>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                      sheetImage
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-amber-200 bg-amber-50 text-amber-700"
+                    }`}
                   >
-                    <X className="h-4 w-4" />
-                    Remove / Retake
-                  </button>
+                    {sheetImage ? "Verification Active" : "Intake Ready"}
+                  </span>
                 </div>
+                <p className="text-xs text-slate-500">
+                  Inspect scanned bubble markings, override ambiguous items, and finalize official scores
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Batch Action Buttons */}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleNextStudent}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+                title="Keep answer key and advance to the next student in section"
+              >
+                <UserCheck className="h-4 w-4 text-red-800" />
+                <span>Next Student in Section</span>
+              </button>
+
+              {sheetImage && (
+                <button
+                  type="button"
+                  onClick={handleDiscard}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 active:scale-95"
+                  title="Discard current scan"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Re-scan</span>
+                </button>
               )}
             </div>
           </div>
 
-          {/* Assessment Details — 2/5 */}
-          <div className="lg:col-span-2">
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h3 className="mb-5 text-base font-semibold text-gray-900">
-                Assessment Details
-              </h3>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Assessment Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Diagnostic Test 1"
-                    className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Subject
-                  </label>
-                  <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                    <option>Select subject</option>
-                    <option>Numeracy</option>
-                    <option>Reading</option>
-                    <option>Science</option>
+          {/* Configuration Form: Clean 2-Row Layout */}
+          <div className="mt-4 space-y-3 pt-3 border-t border-slate-100">
+            {/* Row 1: Cohort Selection (Grade, Section, Searchable Student Combobox) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+              {/* 1. Grade Level */}
+              <div className="lg:col-span-3">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Grade Level
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedGrade}
+                    onChange={(e) => handleGradeChange(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  >
+                    <option value="all">All Grades</option>
+                    {availableGrades.map((g) => (
+                      <option key={g} value={String(g)}>
+                        Grade {g}
+                      </option>
+                    ))}
                   </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Grade Level
-                  </label>
-                  <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                    <option>Select grade</option>
-                    <option>Grade 7</option>
-                    <option>Grade 8</option>
-                    <option>Grade 9</option>
-                    <option>Grade 10</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Section
-                  </label>
-                  <select className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10">
-                    <option>Select section</option>
-                    <option>Rosal</option>
-                    <option>Sampaguita</option>
-                    <option>Ilang-Ilang</option>
-                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 </div>
               </div>
 
-              <button
-                onClick={() => setShowOMR(true)}
-                disabled={!selectedFile}
-                className="mt-6 w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              {/* 2. Section */}
+              <div className="lg:col-span-3">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Section
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedSection}
+                    onChange={(e) => setSelectedSection(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  >
+                    <option value="all">All Sections</option>
+                    {availableSections.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
+              {/* 3. Student Learner (Searchable Combobox) */}
+              <div ref={studentComboboxRef} className="relative lg:col-span-6">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">
+                    Student Learner
+                  </label>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600 shrink-0">
+                    {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"}
+                  </span>
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={
+                      isStudentDropdownOpen
+                        ? studentSearchQuery
+                        : selectedStudentObj
+                        ? `${selectedStudentObj.name} (Gr. ${selectedStudentObj.gradeLevel || 7} - ${selectedStudentObj.section || "General"})`
+                        : ""
+                    }
+                    onChange={(e) => {
+                      setStudentSearchQuery(e.target.value);
+                      if (!isStudentDropdownOpen) setIsStudentDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      setIsStudentDropdownOpen(true);
+                    }}
+                    placeholder={
+                      students.length === 0
+                        ? "No students assigned to you yet..."
+                        : selectedStudentObj
+                        ? `${selectedStudentObj.name}`
+                        : "Search learner by name or LRN..."
+                    }
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-12 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  />
+
+                  {/* Right actions: quick clear and dropdown toggle */}
+                  <div className="absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                    {studentSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStudentSearchQuery("");
+                        }}
+                        className="rounded p-0.5 text-slate-400 hover:text-slate-600"
+                        title="Clear search query"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStudentDropdownOpen(!isStudentDropdownOpen);
+                      }}
+                      className="text-slate-400 hover:text-slate-600"
+                      title={isStudentDropdownOpen ? "Close list" : "Open list"}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-150 ${
+                          isStudentDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Popover List */}
+                  {isStudentDropdownOpen && (
+                    <div className="absolute left-0 top-full z-50 mt-1 max-h-64 w-full min-w-[280px] sm:min-w-[340px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in-50 duration-100">
+                      {searchedStudents.length === 0 ? (
+                        <div className="px-3 py-5 text-center text-xs text-slate-400">
+                          <User className="mx-auto h-6 w-6 text-slate-300 mb-1" />
+                          <p className="font-semibold text-slate-600">
+                            {students.length === 0 ? "No assigned students" : "No students found"}
+                          </p>
+                          <p className="text-[11px] mt-0.5 text-slate-400">
+                            {students.length === 0
+                              ? "No students assigned to you yet. Please contact the ARAL Coordinator."
+                              : studentSearchQuery
+                              ? `No students found matching "${studentSearchQuery}"`
+                              : "No students in this cohort"}
+                          </p>
+                        </div>
+                      ) : (
+                        searchedStudents.map((s) => {
+                          const isSelected = s._id === selectedStudentId;
+
+                          return (
+                            <button
+                              key={s._id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedStudentId(s._id);
+                                setIsStudentDropdownOpen(false);
+                                setStudentSearchQuery("");
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
+                                isSelected
+                                  ? "bg-red-50 text-red-900 font-semibold"
+                                  : "hover:bg-slate-50 text-slate-800"
+                              }`}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate text-xs font-semibold text-slate-900">
+                                    {s.name}
+                                  </span>
+                                  {isSelected && (
+                                    <Check className="h-3.5 w-3.5 text-red-800 shrink-0" />
+                                  )}
+                                </div>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+                                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                                    Grade {s.gradeLevel || 7} - {s.section || "General"}
+                                  </span>
+                                  {s.lrn && (
+                                    <span className="font-mono text-slate-400">
+                                      LRN: {s.lrn}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Assessment Details (Answer Key, Competency, Assessment Title) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* 4. Exam Answer Key */}
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Exam Answer Key
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedKeyId}
+                    onChange={(e) => setSelectedKeyId(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  >
+                    <option value="">Auto-detect Exam Key</option>
+                    {answerKeys.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.title} — {k.subject} ({k.items} items)
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
+              {/* 5. Competency */}
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Competency
+                </label>
+                <div className="relative">
+                  <select
+                    value={competency}
+                    onChange={(e) => setCompetency(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  >
+                    {COMPETENCIES.map((c) => (
+                      <option key={c.label} value={c.label}>
+                        {c.label} ({c.subject})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
+              {/* 6. Assessment Title */}
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Assessment Title
+                </label>
+                <input
+                  type="text"
+                  value={assessmentTitle}
+                  onChange={(e) => setAssessmentTitle(e.target.value)}
+                  placeholder="e.g. Diagnostic Exam Q1"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Global Notifications */}
+        {errorMessage && (
+          <div className="flex shrink-0 items-center justify-between border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-700">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            <button onClick={() => setErrorMessage("")} className="text-red-400 hover:text-red-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {infoMessage && (
+          <div className="flex shrink-0 items-center justify-between border-b border-blue-200 bg-blue-50 px-5 py-2 text-xs text-blue-700">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 shrink-0 text-blue-600" />
+              <span>{infoMessage}</span>
+            </div>
+            <button onClick={() => setInfoMessage("")} className="text-blue-400 hover:text-blue-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {students.length === 0 && (
+          <div className="flex shrink-0 items-center justify-between border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-xs text-amber-800">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                <strong>No students assigned to you yet.</strong> Please contact your ARAL Coordinator to assign students to your roster before grading.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── WORKSTATION VIEWPORT ── */}
+        {!sheetImage ? (
+          /* ── INTAKE MODE (When no sheet is loaded) ── */
+          <div className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
+            <div className="mx-auto flex w-full max-w-2xl flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-10 text-center shadow-xs">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-800">
+                <Upload className="h-8 w-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">
+                Upload Scanned Sheet or Take Photo
+              </h2>
+              <p className="mt-1 max-w-md text-sm text-slate-500">
+                Drag and drop a student answer sheet, take a live camera photo, or test with our sample OMR document to begin score verification.
+              </p>
+
+              {/* Upload Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              {/* Primary Action Buttons */}
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isScanning}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-red-800 px-5 text-sm font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Browse Sheet Image</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  disabled={isScanning}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>Capture Photo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLoadSample}
+                  disabled={isScanning}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4 text-amber-600" />
+                  <span>Try Sample Sheet</span>
+                </button>
+              </div>
+
+              {/* Guide Footnote */}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
+                <span>&bull; Accepted formats: JPG, PNG, WEBP</span>
+                <span>&bull; Automatic OpenCV bubble detection</span>
+                <span>&bull; Real-time override and Phil-IRI sync</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── SPLIT-SCREEN WORKSTATION MODE ── */
+          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
+            {/* ══════════════════════════════════════════════════════
+                LEFT COLUMN (55%): High-Resolution Scanned Paper Viewer
+               ══════════════════════════════════════════════════════ */}
+            <div
+              ref={viewerContainerRef}
+              className="relative flex flex-col border-b border-gray-200 bg-slate-950 lg:w-[55%] lg:border-b-0 lg:border-r"
+            >
+              {/* Viewer Control Toolbar */}
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 text-white backdrop-blur-xs">
+                {/* Paper Info */}
+                <div className="flex items-center gap-2 text-xs">
+                  <FileImage className="h-4 w-4 text-blue-400" />
+                  <span className="font-semibold text-slate-200">
+                    {sheetFile?.name || "Scanned Paper Sheet"}
+                  </span>
+                  <span className="hidden sm:inline text-slate-500">
+                    &bull; {selectedStudentObj?.name || "Learner"}
+                  </span>
+                </div>
+
+                {/* Toolbar Buttons */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setScale((s) => Math.min(s + 0.25, 4))}
+                    title="Zoom In (+)"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setScale((s) => Math.max(s - 0.25, 0.5))}
+                    title="Zoom Out (-)"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="w-10 text-center font-mono text-[11px] text-slate-300">
+                    {Math.round(scale * 100)}%
+                  </span>
+                  <div className="h-4 w-px bg-slate-700" />
+                  <button
+                    onClick={() => setRotation((r) => (r - 90 + 360) % 360)}
+                    title="Rotate Left"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setRotation((r) => (r + 90) % 360)}
+                    title="Rotate Right (R)"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={resetView}
+                    title="Reset View (0)"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95"
+                  >
+                    <ResetIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <a
+                    href={sheetImage}
+                    download={sheetFile?.name || "omr-sheet.png"}
+                    title="Download Original Scanned Image"
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-blue-400 hover:bg-slate-700 active:scale-95"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Interactive Canvas */}
+              <div
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                className={`relative flex flex-1 items-center justify-center overflow-hidden select-none p-4 ${
+                  isDragging ? "cursor-grabbing" : "cursor-grab"
+                }`}
               >
-                Start Scanning
+                {/* Transformed Image Container */}
+                <div
+                  style={{
+                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                    transition: isDragging ? "none" : "transform 0.15s ease-out",
+                    transformOrigin: "center center",
+                  }}
+                  className="relative max-h-full max-w-full"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={sheetImage}
+                    alt="Scanned Student Answer Sheet"
+                    draggable={false}
+                    className="max-h-[82vh] w-auto rounded-lg shadow-2xl object-contain border border-slate-800"
+                  />
+                </div>
+
+                {/* Helper Instructions Pill */}
+                <div className="pointer-events-none absolute bottom-3 left-4 z-10 rounded-lg bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm shadow-sm">
+                  Scroll to zoom &bull; Drag to pan &bull; Press R to rotate &bull; Press 0 to reset
+                </div>
+              </div>
+            </div>
+
+            {/* ══════════════════════════════════════════════════════
+                RIGHT COLUMN (45%): Interactive Scoring & Override Panel
+               ══════════════════════════════════════════════════════ */}
+            <div className="flex flex-1 flex-col overflow-hidden bg-white lg:w-[45%]">
+              {/* ── LIVE SCORE HEADER ── */}
+              <div className="shrink-0 border-b border-gray-100 bg-slate-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                      Live Verified Score
+                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-gray-900">
+                        {totalPointsAwarded} / {totalPointsPossible}
+                      </span>
+                      <span className="text-sm font-bold text-gray-600">
+                        ({livePercentage}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {/* Mastery Badge */}
+                      <span
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${liveMastery.bg} ${liveMastery.border} ${liveMastery.color}`}
+                      >
+                        {liveMastery.label}
+                      </span>
+                      {/* Status Badge */}
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          hasUngradedWritten
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {liveGradingStatus}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-gray-400">
+                      MC: {mcCorrectCount}/{mcTotalCount} pts
+                      {writtenPointsMax > 0 && ` &bull; Written: ${writtenPointsScored}/${writtenPointsMax} pts`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Flagged Ambiguities Alert Banner */}
+                {flaggedIndices.length > 0 && (
+                  <div className="mt-3 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/80 p-2.5 text-xs text-amber-800">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span className="font-semibold">
+                        {flaggedIndices.length} {flaggedIndices.length === 1 ? "item" : "items"} require review
+                      </span>
+                      <span className="hidden sm:inline text-amber-600">
+                        (faint, blank or unshaded bubbles)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleReviewFlagged}
+                      className="rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-amber-700 active:scale-95"
+                    >
+                      Review Flagged
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── FILTER & QUESTION NAVIGATOR ── */}
+              <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-white px-4 py-2">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("all")}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      activeFilter === "all"
+                        ? "bg-slate-900 text-white"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    All ({effectiveTotalItems})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("flagged")}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      activeFilter === "flagged"
+                        ? "bg-amber-500 text-white"
+                        : "text-amber-700 hover:bg-amber-50"
+                    }`}
+                  >
+                    Flagged ({flaggedIndices.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("incorrect")}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      activeFilter === "incorrect"
+                        ? "bg-rose-600 text-white"
+                        : "text-rose-600 hover:bg-rose-50"
+                    }`}
+                  >
+                    Incorrect ({mcTotalCount - mcCorrectCount})
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-gray-400">
+                  Showing {filteredQuestionIndices.length} items
+                </span>
+              </div>
+
+              {/* ── ITEM-BY-ITEM OVERRIDE LIST ── */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                {filteredQuestionIndices.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+                    <CheckCircle className="h-8 w-8 text-emerald-500 mb-2" />
+                    <p className="text-sm font-semibold text-gray-700">No matching questions found</p>
+                    <p className="text-xs">All items are clear or match your current filter.</p>
+                  </div>
+                ) : (
+                  filteredQuestionIndices.map((qIdx) => {
+                    const isWritten = keyModes[qIdx] === "written";
+                    const correctKey = keyAnswers[qIdx] || null;
+                    const detectedVal = detectedAnswers[qIdx] || null;
+                    const currentVal = verifiedAnswers[qIdx] || null;
+                    const isOverridden = currentVal !== detectedVal;
+                    const isCorrect =
+                      !isWritten &&
+                      currentVal &&
+                      correctKey &&
+                      currentVal.toUpperCase() === correctKey.toUpperCase();
+                    const isFocused = focusedQuestionIndex === qIdx;
+                    const writtenDef = writtenItems.find((w) => w.index === qIdx);
+
+                    return (
+                      <div
+                        key={qIdx}
+                        ref={(el) => {
+                          questionRefs.current[qIdx] = el;
+                        }}
+                        className={`rounded-xl border p-3 transition-all ${
+                          isFocused
+                            ? "border-blue-400 bg-blue-50/30 ring-2 ring-blue-400/20 shadow-xs"
+                            : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
+                        {/* Question Row Header */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-800">
+                              Q{qIdx + 1}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-600">
+                              {isWritten ? "Written Response" : "Multiple Choice"}
+                            </span>
+
+                            {/* Overridden Badge */}
+                            {isOverridden && (
+                              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                                Overridden
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs">
+                            {/* Key and Machine Detection */}
+                            {!isWritten && (
+                              <>
+                                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                                  Key: {correctKey || "—"}
+                                </span>
+                                <span className="text-gray-400 text-[11px]">
+                                  Detected: {detectedVal || "Blank"}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Question Content: Either MC Bubble Chips or Written Rubric */}
+                        {!isWritten ? (
+                          <div className="flex items-center justify-between gap-1.5 pt-1">
+                            {/* Bubble Chips: A, B, C, D */}
+                            <div className="flex items-center gap-1.5">
+                              {["A", "B", "C", "D"].map((opt) => {
+                                const isSelected = currentVal === opt;
+                                const isMatchKey = opt === correctKey;
+
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => handleBubbleOverride(qIdx, opt)}
+                                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-black transition-all active:scale-95 ${
+                                      isSelected
+                                        ? isMatchKey
+                                          ? "bg-emerald-600 text-white shadow-xs"
+                                          : "bg-rose-600 text-white shadow-xs"
+                                        : "border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+                                    }`}
+                                    title={`Click to set answer for Q${qIdx + 1} to ${opt}`}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
+
+                              {/* Blank / Unshaded Chip */}
+                              <button
+                                type="button"
+                                onClick={() => handleBubbleOverride(qIdx, null)}
+                                className={`flex h-8 px-2 items-center justify-center rounded-lg text-[11px] font-bold transition-all active:scale-95 ${
+                                  currentVal === null
+                                    ? "bg-slate-700 text-white shadow-xs"
+                                    : "border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
+                                }`}
+                                title="Mark as unshaded / blank"
+                              >
+                                &mdash;
+                              </button>
+                            </div>
+
+                            {/* Scoring Status Indicator */}
+                            <div className="flex items-center gap-1 text-xs">
+                              {currentVal === null ? (
+                                <span className="text-amber-600 font-medium text-[11px]">Unshaded</span>
+                              ) : isCorrect ? (
+                                <span className="flex items-center gap-0.5 text-emerald-600 font-bold text-[11px]">
+                                  <Check className="h-3.5 w-3.5" /> 1 pt
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-0.5 text-rose-500 font-semibold text-[11px]">
+                                  <X className="h-3.5 w-3.5" /> 0 pt
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          /* Written Item Rubric Scoring */
+                          <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
+                            <p className="text-xs text-gray-700 font-medium">
+                              {writtenDef?.prompt || `Item ${qIdx + 1} open-ended response`}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-[11px] font-bold uppercase text-amber-800">
+                                Score Rubric (Max: {writtenDef?.max ?? 1} pts):
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {Array.from({ length: (writtenDef?.max ?? 1) + 1 }).map((_, pt) => {
+                                  const isSelected = (writtenScores[qIdx] ?? 0) === pt;
+                                  return (
+                                    <button
+                                      key={pt}
+                                      type="button"
+                                      onClick={() => handleWrittenScoreChange(qIdx, pt)}
+                                      className={`h-7 px-2.5 rounded-md text-xs font-bold transition-colors ${
+                                        isSelected
+                                          ? "bg-amber-600 text-white shadow-xs"
+                                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"
+                                      }`}
+                                    >
+                                      {pt} pt{pt !== 1 ? "s" : ""}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+
+                {/* ── TEACHER QUALITATIVE REMARKS ── */}
+                <div className="mt-4 rounded-xl border border-gray-200 bg-slate-50 p-3.5">
+                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                    Teacher Remarks &amp; Diagnostics Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={teacherNotes}
+                    onChange={(e) => setTeacherNotes(e.target.value)}
+                    placeholder="e.g. Student confused quotient with remainder in Q14; recommended for fraction review..."
+                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                  />
+                </div>
+              </div>
+
+              {/* ── BOTTOM ACTION FOOTER ── */}
+              <div className="shrink-0 border-t border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDiscard}
+                    disabled={isSaving}
+                    className="flex-1 h-11 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 active:scale-95 disabled:opacity-50"
+                  >
+                    Discard / Retake
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveAndFinalize}
+                    disabled={isSaving}
+                    className="flex-[2] inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Finalizing Assessment...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        <span>Save &amp; Finalize Assessment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* ── CAMERA CAPTURE MODAL ── */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3 text-white">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Camera className="h-4 w-4 text-blue-400" />
+                <span>Capture Student Answer Sheet</span>
+              </div>
+              <button onClick={stopCamera} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="relative aspect-4/3 w-full bg-black overflow-hidden flex items-center justify-center">
+              <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+              {/* Corner guide overlay */}
+              <div className="pointer-events-none absolute inset-8 rounded-xl border-2 border-dashed border-white/40" />
+            </div>
+
+            <div className="flex items-center justify-between bg-slate-900 px-5 py-4">
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-500 active:scale-95"
+              >
+                <Camera className="h-4 w-4" />
+                <span>Capture &amp; Grade</span>
               </button>
             </div>
           </div>
         </div>
-      </main>
+      )}
 
-      {/* OMR Scanner Modal */}
-      <OMRScanner isOpen={showOMR} onClose={() => setShowOMR(false)} />
+      {/* ── FINALIZED SUCCESS & TARGETED ARAL INTERVENTIONS MODAL ── */}
+      {finalizedModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="relative flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-gray-100">
+            {/* Header with celebration */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
+              <div className="flex items-center gap-2 text-emerald-100 text-xs font-bold uppercase tracking-wider">
+                <CheckCircle className="h-4 w-4" />
+                <span>Assessment Finalized &amp; Synced</span>
+              </div>
+              <h2 className="mt-1 text-xl font-black">
+                {finalizedModal.studentName} scored {finalizedModal.score}%
+              </h2>
+              <p className="mt-0.5 text-xs text-emerald-100">
+                Mastery Band: <strong>{finalizedModal.masteryLevel}</strong> &bull; LearnerRecord &amp; Phil-IRI Diagnostics Updated
+              </p>
+            </div>
+
+            {/* Targeted Interventions Section */}
+            <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    Targeted ARAL Intervention Recommendations
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Remediate weak competencies identified in this assessment
+                  </p>
+                </div>
+              </div>
+
+              {finalizedModal.recommendations.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center text-xs text-gray-500">
+                  Learner demonstrates proficient mastery. No immediate remedial intervention required.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {finalizedModal.recommendations.map((rec) => {
+                    const isAssigned = finalizedModal.assignedIds.includes(rec.id);
+
+                    return (
+                      <div
+                        key={rec.id}
+                        className="flex items-center justify-between rounded-xl border border-gray-200 p-3.5 hover:border-blue-300 transition-colors"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
+                            {rec.kind || "Activity"} &bull; {rec.subject}
+                          </span>
+                          <h4 className="mt-1 text-xs font-bold text-gray-900 truncate">
+                            {rec.title}
+                          </h4>
+                          <p className="text-[11px] text-gray-500 line-clamp-1">
+                            {rec.description}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAssignIntervention(rec.id)}
+                          disabled={isAssigned}
+                          className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                            isAssigned
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
+                              : "bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
+                          }`}
+                        >
+                          {isAssigned ? "Assigned ✓" : "1-Click Assign"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/omr-assessments")}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100"
+              >
+                View History &amp; Results
+              </button>
+
+              <button
+                type="button"
+                onClick={handleNextStudent}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 active:scale-95"
+              >
+                <UserCheck className="h-4 w-4" />
+                <span>Grade Next Student in Section</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-export default function OMRScaenPage() {
+export default function OMRScanPage() {
   return (
     <Suspense fallback={null}>
-      <OMRScaenPageContent />
+      <OMRWorkstationContent />
     </Suspense>
   );
 }

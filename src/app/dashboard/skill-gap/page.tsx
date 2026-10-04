@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   BarChart,
   Bar,
@@ -71,7 +72,7 @@ export default function SkillGapPage() {
         if (gradeFilter) params.set("grade", gradeFilter);
         if (sectionFilter) params.set("section", sectionFilter);
         const res = await fetch(`/api/teacher/skill-gap?${params.toString()}`);
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setData(json.data);
       } catch (e) {
         console.error("Failed to fetch skill gaps:", e);
@@ -88,25 +89,24 @@ export default function SkillGapPage() {
   return (
     <>
       <Header title="Skill Gap" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
         {/* Title + Filters */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
               Skill Gap Analytics
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Competencies where class mastery falls below 75% — computed live
-              from assessment data.
+            <p className="mt-1 text-xs text-slate-500 md:text-sm">
+              Competencies where class mastery falls below 75% &bull; computed live from assessment data.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
-              <option value="">Grade Level</option>
+              <option value="">All Grades</option>
               <option>Grade 7</option>
               <option>Grade 8</option>
               <option>Grade 9</option>
@@ -115,9 +115,9 @@ export default function SkillGapPage() {
             <select
               value={sectionFilter}
               onChange={(e) => setSectionFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
-              <option value="">Section</option>
+              <option value="">All Sections</option>
               <option>Rosal</option>
               <option>Sampaguita</option>
               <option>Ilang-Ilang</option>
@@ -126,32 +126,31 @@ export default function SkillGapPage() {
         </div>
 
         {/* Bar Chart */}
-        <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div className="mb-1">
-            <h3 className="text-base font-semibold text-gray-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="mb-2">
+            <h3 className="text-base font-bold text-slate-900">
               Competency Mastery by Class
             </h3>
-            <p className="mt-0.5 text-sm text-gray-400">
-              Each bar represents the percentage of assessments where learners
-              met mastery (≥ 75%).
+            <p className="mt-0.5 text-xs text-slate-500">
+              Each bar represents the percentage of assessments where learners met mastery (&ge; 75%).
             </p>
           </div>
           {/* Legend */}
-          <div className="mb-4 flex items-center gap-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> &lt; 60%
+          <div className="mb-6 flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> &lt; 60% Critical
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> 60-75%
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> 60-75% Developing
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> &gt; 75%
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" /> &gt; 75% Proficient
             </span>
           </div>
 
           {loading ? (
             <div className="flex h-80 items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-red-800"></div>
             </div>
           ) : (
             <div className="h-80">
@@ -178,7 +177,9 @@ export default function SkillGapPage() {
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f9fafb" }} />
                   <Bar dataKey="below60" name="< 60%" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
                   <Bar dataKey="between60_75" name="60-75%" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                  <Bar dataKey="above75" name="> 75%" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="below60" name="< 60%" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="between60_75" name="60-75%" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="above75" name="> 75%" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={50} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -188,32 +189,32 @@ export default function SkillGapPage() {
         {/* Competency Breakdown */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {skillGaps.length === 0 && !loading ? (
-            <div className="rounded-xl border border-gray-100 bg-white p-6 text-sm text-gray-400 shadow-sm lg:col-span-3">
-              No competency data yet.
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400 shadow-xs lg:col-span-3">
+              No competency data available for selected filters.
             </div>
           ) : (
             skillGaps.map((group) => (
               <div
                 key={group.subject}
-                className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm"
+                className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs"
               >
-                <h3 className="mb-4 text-sm font-semibold text-gray-900">
+                <h3 className="mb-4 text-sm font-bold text-slate-900">
                   {group.subject} Competencies
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {group.competencies.map((c) => {
                     const cfg = levelConfig[c.level] ?? levelConfig["Below"];
                     return (
                       <div key={c.name}>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm text-gray-700">{c.name}</span>
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-800">{c.name}</span>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cfg.bg} ${cfg.text}`}
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.text}`}
                           >
                             {c.mastery}%
                           </span>
                         </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                           <div
                             className={`h-full rounded-full ${cfg.bar} transition-all duration-500`}
                             style={{ width: `${c.mastery}%` }}

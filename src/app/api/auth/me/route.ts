@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       name: profile.name,
       role: profile.role,
       specialization: profile.specialization || 'all-subjects',
+      assignedSubject: profile.assignedSubject || (profile.specialization === 'reading' ? 'Reading' : 'All'),
       email: profile.email || null,
       active: profile.active ?? true,
       createdAt: profile.createdAt ? new Date(profile.createdAt).toISOString() : null,

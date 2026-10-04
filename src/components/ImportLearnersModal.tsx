@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   X,
   Upload,
@@ -90,7 +91,7 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (!res.ok || !json.success) throw new Error(json.error || "Preview failed.");
       setPreview(json.data);
       setStep("preview");
@@ -112,7 +113,7 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (!res.ok || !json.success) throw new Error(json.error || "Import failed.");
       setResult(json.data);
       setStep("done");

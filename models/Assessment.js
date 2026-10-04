@@ -55,6 +55,8 @@ const AssessmentSchema = new mongoose.Schema({
   writtenScore: { type: Number, default: 0 }, // points the teacher awarded on written items
   gradingStatus: { type: String, enum: ['complete', 'partial'], default: 'complete' },
   answerKeyRef: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
+  assessmentCategory: { type: String, enum: ['quiz', 'exam'], default: 'quiz' },
+  topics: { type: [String], default: [] },
   writtenItems: { type: [{ index: Number, prompt: String, max: Number }], default: [] },
   // ── OMR Scanned Sheet Image & Detected Answers ──
   omrSheetUrl: { type: String, default: null },

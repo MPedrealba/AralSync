@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { legacyBadge as badgeMap } from "@/lib/ui";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface OMRRow {
   title: string;
@@ -28,8 +29,8 @@ export default function OMRAssessmentsPage() {
       setError("");
       try {
         const res = await fetch("/api/student/assessments?type=OMR");
-        const json = await res.json();
-        if (json.success) setRows(json.data.assessments);
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data?.assessments) setRows(json.data.assessments);
         else setError(json.error || "Failed to load OMR results.");
       } catch {
         setError("Failed to load OMR results.");

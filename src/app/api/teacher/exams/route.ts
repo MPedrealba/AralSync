@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const { title, subject, gradeLevel, items } = body;
+    const { title, subject, gradeLevel, items, assessmentType, topics, answerKeyId } = body;
 
     if (!title || !subject || !gradeLevel || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -62,14 +62,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const resolvedType = assessmentType || (title.toLowerCase().includes('exam') ? 'exam' : 'quiz');
+    const resolvedTopics = Array.isArray(topics) ? topics : [];
+
     // Normalize and validate items
-    const normalizedItems = items.map((it: any, i: number) => ({
-      index: i,
-      prompt: String(it.prompt || ''),
-      choices: Array.isArray(it.choices) ? it.choices.slice(0, 4) : [],
-      correctAnswer: it.mode === 'written' ? null : (it.correctAnswer || 'A'),
-      mode: (it.mode === 'written' ? 'written' : 'mc') as 'mc' | 'written',
-    }));
+    const normalizedItems = items.map((it: any, i: number) => {
+      let rawAns = it.correctAnswer;
+      if (typeof rawAns === "object" && rawAns !== null) {
+        rawAns = rawAns.correctKey || rawAns.letter || "A";
+      }
+      return {
+        index: i,
+        prompt: String(it.prompt || ''),
+        choices: Array.isArray(it.choices) ? it.choices.slice(0, 4) : [],
+        correctAnswer: it.mode === 'written' ? null : String(rawAns || 'A'),
+        mode: (it.mode === 'written' ? 'written' : 'mc') as 'mc' | 'written',
+      };
+    });
 
     const modes = normalizedItems.map((it) => it.mode);
     const answers = normalizedItems.map((it) => it.correctAnswer || 'A');
@@ -77,27 +86,60 @@ export async function POST(req: NextRequest) {
       .filter((it) => it.mode === 'written')
       .map((it) => ({ index: it.index, prompt: it.prompt, max: 1 }));
 
-    // Create AnswerKey
-    const answerKey = await AnswerKey.create({
-      title,
-      subject,
-      items: normalizedItems.length,
-      answers,
-      modes,
-      writtenItems,
-      created: new Date(),
-    });
+    // Find existing or create new AnswerKey
+    let answerKey = null;
+    if (answerKeyId) {
+      answerKey = await AnswerKey.findById(answerKeyId);
+    }
+
+    if (answerKey) {
+      answerKey.title = title || answerKey.title;
+      answerKey.subject = subject || answerKey.subject;
+      answerKey.assessmentType = resolvedType;
+      if (resolvedTopics.length > 0) {
+        answerKey.topics = resolvedTopics;
+        answerKey.topic = resolvedTopics[0];
+      }
+      answerKey.items = normalizedItems.length;
+      answerKey.answers = answers;
+      answerKey.modes = modes;
+      answerKey.questions = normalizedItems;
+      if (writtenItems.length > 0) answerKey.writtenItems = writtenItems;
+      if (!answerKey.teacherId) answerKey.teacherId = teacher.id;
+      answerKey.markModified('answers');
+      answerKey.markModified('modes');
+      answerKey.markModified('questions');
+      await answerKey.save();
+    } else {
+      answerKey = await AnswerKey.create({
+        title,
+        subject,
+        assessmentType: resolvedType,
+        topics: resolvedTopics,
+        topic: resolvedTopics[0] || '',
+        items: normalizedItems.length,
+        answers,
+        modes,
+        writtenItems,
+        questions: normalizedItems,
+        teacherId: teacher.id,
+        created: new Date(),
+      });
+    }
 
     // Create CustomExam
     const exam = await CustomExam.create({
       teacherId: teacher.id,
       title,
       subject,
-      gradeLevel,
+      gradeLevel: Number(gradeLevel) || 7,
       items: normalizedItems,
       totalItems: normalizedItems.length,
       writtenCount: writtenItems.length,
+      assessmentType: resolvedType,
+      topics: resolvedTopics,
       answerKeyRef: answerKey._id,
+      answerKeyId: answerKey._id,
     });
 
     return NextResponse.json({
@@ -107,6 +149,8 @@ export async function POST(req: NextRequest) {
         title: exam.title,
         subject: exam.subject,
         gradeLevel: exam.gradeLevel,
+        assessmentType: exam.assessmentType,
+        topics: exam.topics,
         totalItems: exam.totalItems,
         writtenCount: exam.writtenCount,
         answerKey: { id: String(answerKey._id), title: answerKey.title, items: answerKey.items },

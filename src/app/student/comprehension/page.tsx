@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
 import { legacyBadge as badgeMap } from "@/lib/ui";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Subskill {
   name: string;
@@ -41,8 +42,8 @@ export default function ComprehensionCheckPage() {
       setError("");
       try {
         const res = await fetch("/api/student/assessments?type=COMPREHENSION");
-        const json = await res.json();
-        if (json.success) setRows(json.data.assessments);
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data?.assessments) setRows(json.data.assessments);
         else setError(json.error || "Failed to load comprehension results.");
       } catch {
         setError("Failed to load comprehension results.");

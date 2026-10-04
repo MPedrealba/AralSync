@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(req, ['teacher']);
+    const actor = await requireAuth(req, ['teacher']);
 
     await connectDB();
 
@@ -38,6 +38,10 @@ export async function GET(
 
     if (!record) {
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
+    }
+
+    if (record.assignedTeacherId && record.assignedTeacherId.toString() !== actor.id) {
+      return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
     const studentId = record.studentId;
@@ -158,6 +162,10 @@ export async function PATCH(
     }
     if (!record) {
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
+    }
+
+    if (record.assignedTeacherId && record.assignedTeacherId.toString() !== actor.id) {
+      return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
     const RISK = ['Low Risk', 'Moderate Risk', 'High Risk'];

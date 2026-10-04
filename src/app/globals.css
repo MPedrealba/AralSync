@@ -13,26 +13,23 @@
 }
 
 :root {
-  --background: #f4f6fb;
-  --foreground: #172033;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
-/* ── ARAL Brand Palette ──
-   Re-maps the Tailwind blue scale to the ARAL Program's signature
-   crimson red (the "A" letter in the ARAL logo). Gold accents
-   (#f5b041 family) stay reserved for highlights and the sidebar bar. */
+/* ── AralSync Brand Palette (DepEd Crimson / Maroon #800000) ── */
 @theme {
-  --color-blue-50: #fff1f2;
-  --color-blue-100: #ffe4e6;
-  --color-blue-200: #fecdd3;
-  --color-blue-300: #fda4af;
-  --color-blue-400: #fb7185;
-  --color-blue-500: #f43f5e;
-  --color-blue-600: #e11d48;
-  --color-blue-700: #be123c;
-  --color-blue-800: #9f1239;
-  --color-blue-900: #881337;
-  --color-blue-950: #4c0519;
+  --color-brand-50: #fdf2f2;
+  --color-brand-100: #fde8e8;
+  --color-brand-200: #fbd5d5;
+  --color-brand-300: #f8b4b4;
+  --color-brand-400: #f98080;
+  --color-brand-500: #e02424;
+  --color-brand-600: #c81e1e;
+  --color-brand-700: #9b1c1c;
+  --color-brand-800: #800000;
+  --color-brand-900: #660000;
+  --color-brand-950: #450000;
 }
 
 * {
@@ -46,27 +43,27 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100%;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Selection & focus polish — ARAL Red */
+/* Selection & focus polish — AralSync Maroon */
 ::selection {
-  background: rgb(225 29 72 / 0.15);
-  color: #e11d48;
+  background: rgba(128, 0, 0, 0.15);
+  color: #800000;
 }
 
 :focus-visible {
-  outline: 2px solid rgb(225 29 72 / 0.6);
+  outline: 2px solid rgba(128, 0, 0, 0.7);
   outline-offset: 2px;
 }
 
 /* Custom scrollbar — refined */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {

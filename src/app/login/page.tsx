@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Lock, Eye, EyeOff, Users, ChevronDown, LogIn } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,9 +37,9 @@ export default function LoginPage() {
         body: JSON.stringify({ username: username.trim(), password, role }),
       });
 
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
-      if (!res.ok) {
+      if (!res.ok || !data.success) {
         setError(data.error || "Invalid credentials. Please try again.");
         setIsLoading(false);
         return;

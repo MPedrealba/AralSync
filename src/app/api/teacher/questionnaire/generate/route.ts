@@ -135,7 +135,11 @@ export async function POST(req: NextRequest) {
       }));
 
     const itemCount = questions.length;
-    const title = `${subject} Grade ${gradeLevel} Auto-Questionnaire (${itemCount} items)`;
+    const autoTitle = `${subject} Grade ${gradeLevel} Auto-Questionnaire (${itemCount} items)`;
+    const title =
+      typeof body?.title === "string" && body.title.trim().length > 0
+        ? body.title.trim()
+        : autoTitle;
 
     const answerKey = await AnswerKey.create({
       title,

@@ -9,16 +9,34 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     const keys = await AnswerKey.find().sort({ created: -1 }).lean();
-    const formatted = keys.map((k: any) => ({
-      id: String(k._id),
-      title: k.title,
-      subject: k.subject || "—",
-      items: k.items ?? k.answers?.length ?? 0,
-      answers: k.answers ?? [],
-      modes: k.modes ?? [],
-      writtenItems: k.writtenItems ?? [],
-      created: k.created,
-    }));
+    const formatted = keys.map((k: any) => {
+      // Normalize answers: extract correctKey if stored as an object { itemNumber, correctKey }
+      const rawAnswers = Array.isArray(k.answers) ? k.answers : (k.answerLetters || []);
+      const normalizedAnswers = rawAnswers.map((a: any) => {
+        if (!a) return "";
+        if (typeof a === "string") return a;
+        if (typeof a === "object" && a.correctKey) return String(a.correctKey);
+        if (typeof a === "object" && a.letter) return String(a.letter);
+        return String(a);
+      });
+
+      return {
+        id: String(k._id),
+        title: k.title,
+        assessmentType: k.assessmentType || (k.title?.toLowerCase().includes("exam") ? "exam" : "quiz"),
+        topic: k.topic || "",
+        topics: Array.isArray(k.topics) && k.topics.length > 0 ? k.topics : (k.topic ? [k.topic] : []),
+        subject: k.subject || "—",
+        items: k.items ?? normalizedAnswers.length ?? 0,
+        answers: normalizedAnswers,
+        modes: k.modes ?? [],
+        writtenItems: k.writtenItems ?? [],
+        questions: k.questions ?? [],
+        passageTitle: k.passageTitle || "",
+        passageText: k.passageText || "",
+        created: k.created,
+      };
+    });
 
     return NextResponse.json({ success: true, data: formatted });
   } catch (e: any) {
@@ -32,7 +50,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const { title, subject, items, answers } = body;
+    const { title, subject, items, answers, assessmentType, topic, topics } = body;
 
     if (!title) {
       return NextResponse.json(
@@ -41,11 +59,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const resolvedType = assessmentType || (title.toLowerCase().includes("exam") ? "exam" : "quiz");
+    const resolvedTopics = Array.isArray(topics) ? topics : (topic ? [topic] : []);
+
+    const rawAnswers = Array.isArray(answers) ? answers : [];
+    const normalizedAnswers = rawAnswers.map((a: any) => {
+      if (!a) return "";
+      if (typeof a === "string") return a;
+      if (typeof a === "object" && a.correctKey) return String(a.correctKey);
+      if (typeof a === "object" && a.letter) return String(a.letter);
+      return String(a);
+    });
+
     const key = await AnswerKey.create({
       title,
       subject: subject || undefined,
-      items: items ?? answers?.length ?? 0,
-      answers: answers ?? [],
+      assessmentType: resolvedType,
+      topic: topic || (resolvedTopics.length === 1 ? resolvedTopics[0] : ""),
+      topics: resolvedTopics,
+      items: items ?? normalizedAnswers.length ?? 0,
+      answers: normalizedAnswers,
+      answerLetters: normalizedAnswers,
       created: new Date(),
     });
 
@@ -54,8 +88,12 @@ export async function POST(req: NextRequest) {
       data: {
         id: String(key._id),
         title: key.title,
+        assessmentType: key.assessmentType,
+        topic: key.topic,
+        topics: key.topics,
         subject: key.subject,
         items: key.items,
+        answers: key.answers,
         created: key.created,
       },
     });

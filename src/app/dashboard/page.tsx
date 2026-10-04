@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import StatCard from "@/components/StatCard";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Users,
   AlertTriangle,
@@ -55,17 +56,21 @@ const CustomTooltip = ({
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/teacher/dashboard");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
+        } else {
+          setErrorMsg(json.error || "Failed to load dashboard data.");
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch teacher dashboard data:", error);
+        setErrorMsg("Network error. Please check your connection.");
       } finally {
         setLoading(false);
       }
@@ -77,8 +82,8 @@ export default function DashboardPage() {
     return (
       <>
         <Header title="Home" />
-        <main className="flex h-[80vh] items-center justify-center bg-gray-50">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+        <main className="flex h-[80vh] items-center justify-center bg-slate-50">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-red-800"></div>
         </main>
       </>
     );
@@ -88,9 +93,9 @@ export default function DashboardPage() {
     return (
       <>
         <Header title="Home" />
-        <main className="h-screen bg-gray-50 p-8">
-          <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-sm font-medium text-red-600">
-            Failed to load dashboard data.
+        <main className="h-screen bg-slate-50 p-8">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700">
+            {errorMsg || "Failed to load dashboard data."}
           </div>
         </main>
       </>
@@ -117,32 +122,32 @@ export default function DashboardPage() {
     <>
       <Header title="Home" />
 
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6 sm:space-y-8">
         {/* ── A. Welcome Header ── */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             Welcome back, Teacher!
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-500">
             Here is your ARAL Program learning recovery overview for Grade 7 &amp; 8 cohorts.
           </p>
         </div>
 
         {/* ── B. Quick Stat Cards ── */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             title="Total Learners"
             value={overview.totalLearners.toString()}
             icon={Users}
-            color="blue"
+            color="red"
             subtext="Across your cohorts"
           />
           <StatCard
             title="Flagged for Intervention"
             value={overview.highRiskCount.toString()}
             icon={AlertTriangle}
-            color="red"
-            valueColor="text-red-600"
+            color="rose"
+            valueColor="text-rose-600"
             subtext="High risk learners"
           />
           <StatCard
@@ -164,17 +169,17 @@ export default function DashboardPage() {
         {/* ── C. Middle Section: Chart + Alerts ── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Chart Card */}
-          <div className="col-span-1 rounded-xl border border-gray-100/80 bg-white p-6 shadow-card lg:col-span-2">
+          <div className="col-span-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs lg:col-span-2">
             <div className="mb-6 flex items-start justify-between">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-bold text-slate-900">
                   Mastery Progress by Subject
                 </h3>
-                <p className="mt-0.5 text-sm text-gray-400">
+                <p className="mt-0.5 text-xs text-slate-500">
                   Live weekly class averages computed from real assessment data
                 </p>
               </div>
-              <span className="hidden rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 sm:inline-flex">
+              <span className="hidden rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 sm:inline-flex">
                 This Week
               </span>
             </div>
@@ -187,17 +192,17 @@ export default function DashboardPage() {
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="#eef2f7"
+                    stroke="#f1f5f9"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="name"
-                    tick={{ fontSize: 12, fill: "#9ca3af" }}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 12, fill: "#9ca3af" }}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
                     axisLine={false}
                     tickLine={false}
                     domain={[0, 100]}
@@ -205,7 +210,7 @@ export default function DashboardPage() {
                   />
                   <Tooltip
                     content={<CustomTooltip />}
-                    cursor={{ fill: "#f9fafb" }}
+                    cursor={{ fill: "#f8fafc" }}
                   />
                   <Legend
                     iconType="circle"
@@ -214,19 +219,19 @@ export default function DashboardPage() {
                   />
                   <Bar
                     dataKey="Numeracy"
-                    fill="#e11d48"
+                    fill="#991b1b"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />
                   <Bar
                     dataKey="Reading"
-                    fill="#7c3aed"
+                    fill="#2563eb"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />
                   <Bar
                     dataKey="Science"
-                    fill="#f59e0b"
+                    fill="#d97706"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
                   />
@@ -236,17 +241,17 @@ export default function DashboardPage() {
           </div>
 
           {/* Intervention Alerts Card */}
-          <div className="col-span-1 flex flex-col rounded-xl border border-gray-100/80 bg-white p-6 shadow-card">
+          <div className="col-span-1 flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-50">
-                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                  <AlertTriangle className="h-3.5 w-3.5" />
                 </span>
                 Priority Intervention Alerts
               </h3>
               <Link
                 href="/dashboard/interventions"
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="text-xs font-bold text-red-800 hover:text-red-900 transition-colors"
               >
                 View All
               </Link>
@@ -254,35 +259,33 @@ export default function DashboardPage() {
 
             <div className="flex-1 space-y-3">
               {alerts.length === 0 ? (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-700">
-                  <span className="mr-1.5">🎉</span>No high risk alerts at this time.
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800">
+                  No high risk alerts at this time.
                 </div>
               ) : (
                 alerts.map((alert: any, i: number) => (
                   <div
                     key={i}
-                    className="group relative overflow-hidden rounded-lg border border-gray-100 bg-gradient-to-r from-red-50/80 to-gray-50/60 p-4 transition-colors hover:bg-red-50/60"
+                    className="group relative overflow-hidden rounded-xl border border-slate-200 border-l-4 border-l-rose-500 bg-slate-50/70 p-4 transition-colors hover:bg-slate-100/70"
                   >
-                    {/* Left accent */}
-                    <span className="absolute inset-y-0 left-0 w-1 bg-red-400" />
-                    <div className="flex items-start justify-between gap-3 pl-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">
+                        <p className="text-sm font-bold text-slate-900">
                           {alert.name}
                         </p>
-                        <p className="mt-0.5 text-xs text-gray-400">
+                        <p className="mt-0.5 text-xs text-slate-500 font-mono">
                           LRN: {alert.lrn}
                         </p>
                       </div>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${alert.badgeStyle}`}
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold border ${alert.badgeStyle || "border-rose-200 bg-rose-50 text-rose-700"}`}
                       >
                         {alert.badge}
                       </span>
                     </div>
                     <Link
                       href={alert.learnerId ? `/dashboard/learners/${alert.learnerId}` : "#"}
-                      className="mt-3 inline-flex items-center gap-1 pl-2 text-xs font-medium text-blue-600 group-hover:text-blue-700"
+                      className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-red-800 hover:text-red-900 transition-colors"
                     >
                       {alert.action}
                       <ExternalLink className="h-3 w-3" />
@@ -295,45 +298,45 @@ export default function DashboardPage() {
         </div>
 
         {/* ── D. Recent OMR Diagnostic Scans ── */}
-        <div className="rounded-xl border border-gray-100/80 bg-white shadow-card">
-          <div className="border-b border-gray-100 px-6 py-4">
-            <h3 className="text-base font-semibold text-gray-900">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          <div className="border-b border-slate-200 bg-slate-50/80 px-6 py-4">
+            <h3 className="text-base font-bold text-slate-900">
               Recent OMR Diagnostic Scans
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <tr className="border-b border-slate-200 bg-slate-50/60">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Date Scanned
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Assessment Title
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Subject
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Cohort / Section
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Class Average
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Action
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-slate-100">
                 {recentScansTable.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
-                      className="px-6 py-10 text-center text-sm text-gray-400"
+                      className="px-6 py-10 text-center text-sm text-slate-400"
                     >
                       No OMR scans recorded yet.
                     </td>
@@ -342,27 +345,27 @@ export default function DashboardPage() {
                   recentScansTable.map((scan, i) => (
                   <tr
                     key={i}
-                    className="transition-colors hover:bg-gray-50/60"
+                    className="transition-colors hover:bg-slate-50/70"
                   >
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-500">
                       {scan.date}
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-800">
+                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">
                       {scan.title}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                      <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                         {scan.subject}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-slate-600">
                       {scan.cohort}
                     </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-800">
+                    <td className="px-6 py-4 text-sm font-bold text-slate-900">
                       {scan.average}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         {scan.status}
                       </span>
@@ -370,10 +373,10 @@ export default function DashboardPage() {
                     <td className="px-6 py-4">
                       <Link
                         href="/dashboard/omr-assessments"
-                        className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-red-800 transition-colors hover:text-red-900"
                       >
                         View Analytics
-                        <ExternalLink className="h-3.5 w-3.5" />
+                        <ExternalLink className="h-3 w-3" />
                       </Link>
                     </td>
                   </tr>

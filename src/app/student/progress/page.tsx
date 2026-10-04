@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Row {
   title: string;
@@ -33,8 +34,8 @@ export default function ProgressPage() {
       setError("");
       try {
         const res = await fetch("/api/student/assessments");
-        const json = await res.json();
-        if (json.success) setRows(json.data.assessments);
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data?.assessments) setRows(json.data.assessments);
         else setError(json.error || "Failed to load progress.");
       } catch {
         setError("Failed to load progress.");

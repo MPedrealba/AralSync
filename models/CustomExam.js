@@ -20,7 +20,13 @@ const CustomExamSchema = new mongoose.Schema(
     },
     totalItems: { type: Number, required: true },
     writtenCount: { type: Number, default: 0 },
+    assessmentType: { type: String, enum: ['quiz', 'exam'], default: 'quiz' },
+    topics: { type: [String], default: [] },
     answerKeyRef: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
+    answerKeyId: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
+    documentUrl: { type: String, default: null },
+    documentOriginalFilename: { type: String, default: null },
+    answerKeySheetUrl: { type: String, default: null },
   },
   { timestamps: true }
 );

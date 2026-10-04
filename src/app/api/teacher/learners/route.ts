@@ -13,7 +13,7 @@ import Assessment from '../../../../../models/Assessment';
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const teacher = await requireAuth(req, ['teacher']);
 
     await connectDB();
 
@@ -23,7 +23,9 @@ export async function GET(req: NextRequest) {
     const section = searchParams.get('section');
     const risk = searchParams.get('risk');
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      assignedTeacherId: teacher.id,
+    };
     if (grade) {
       const g = Number(grade.replace(/\D/g, ''));
       if (!Number.isNaN(g)) filter.gradeLevel = g;

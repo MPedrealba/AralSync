@@ -441,7 +441,7 @@ export function computeFluencyMetrics(opts: {
 
   let transcript = opts.transcriptInput;
   let segments = opts.segmentsInput;
-  let simulation = simulate;
+  const simulation = simulate;
 
   if (simulate) {
     // Demo fallback: read ~97% of the passage so it lands at Independent.
@@ -550,4 +550,85 @@ export function computeFluencyMetrics(opts: {
     hesitations,
     longestPause,
   };
+}
+
+/**
+ * Interface for OpenAI-generated reading comprehension questions.
+ */
+export interface LLMGeneratedQuestion {
+  questionText: string;
+  options: { A: string; B: string; C: string; D: string };
+  correctAnswer: 'A' | 'B' | 'C' | 'D';
+  strand?: string;
+  questionType?: 'Literal' | 'Inferential' | 'Vocabulary';
+}
+
+/**
+ * Generate exactly `count` DepEd-aligned reading comprehension questions via OpenAI.
+ */
+export async function generateReadingQuestionsOpenAI(
+  passageTitle: string,
+  passageText: string,
+  count: number
+): Promise<LLMGeneratedQuestion[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured');
+  }
+
+  const systemPrompt = `You are an expert DepEd reading assessment specialist. Generate exactly ${count} multiple-choice reading comprehension questions based on the provided passage. 
+Ensure options A, B, C, and D are distinct and plausible, with answers evenly distributed across choices.
+Return strictly valid JSON with this shape:
+{
+  "questions": [
+    {
+      "questionText": "string",
+      "options": { "A": "string", "B": "string", "C": "string", "D": "string" },
+      "correctAnswer": "A" | "B" | "C" | "D",
+      "strand": "Reading Comprehension",
+      "questionType": "Literal" | "Inferential" | "Vocabulary"
+    }
+  ]
+}`;
+
+  const userPrompt = `Passage Title: ${passageTitle}\n\nPassage Content:\n${passageText}\n\nGenerate exactly ${count} questions.`;
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+    signal: AbortSignal.timeout(60000), // 60s timeout
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`OpenAI API error (${res.status}): ${errText}`);
+  }
+
+  const json = await res.json();
+  const textContent = json.choices?.[0]?.message?.content;
+  if (!textContent) {
+    throw new Error('No content returned from OpenAI');
+  }
+
+  const parsed = JSON.parse(textContent);
+  const questions: LLMGeneratedQuestion[] = Array.isArray(parsed?.questions) ? parsed.questions : [];
+
+  if (questions.length < count) {
+    throw new Error(`OpenAI returned ${questions.length} questions, expected ${count}`);
+  }
+
+  return questions.slice(0, count);
 }

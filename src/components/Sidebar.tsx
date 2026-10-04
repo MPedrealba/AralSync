@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   LayoutDashboard,
   Users,
@@ -73,9 +74,9 @@ export default function Sidebar() {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((r) => r.json())
+      .then((r) => parseJsonResponse(r))
       .then((json) => {
-        if (json.data?.specialization) setSpecialization(json.data.specialization);
+        if (json.success && json.data?.specialization) setSpecialization(json.data.specialization);
       })
       .catch(() => /* ignore — default to all-subjects */ {});
   }, []);
@@ -106,9 +107,9 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-gray-200/80 bg-white">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-200 bg-white shadow-xs">
       {/* Brand Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#be123c] via-[#9f1239] to-[#881337] px-5 py-5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#800000] via-[#6e0000] to-[#590000] px-5 py-5">
         <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-xl" />
         <div className="relative flex items-center gap-2.5">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
@@ -120,12 +121,12 @@ export default function Sidebar() {
           </div>
           <span className="text-xl font-bold tracking-tight text-white">
             AralSync
-            <span className="block text-[10px] font-medium uppercase tracking-widest text-[#fecdd3]">
+            <span className="block text-[10px] font-semibold uppercase tracking-widest text-amber-200/90">
               {portalLabel} Portal
             </span>
           </span>
         </div>
-        {/* Gold accent bar — matches the ARAL logo's gold ring */}
+        {/* Gold accent bar — DepEd theme */}
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-[#f5b041] via-[#e6a817] to-[#c8860d]" />
       </div>
 
@@ -133,7 +134,7 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {navSections.map((section) => (
           <div key={section.label} className="mb-4">
-            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
               {section.label}
             </p>
             <ul className="space-y-0.5">
@@ -146,22 +147,22 @@ export default function Sidebar() {
                   <li key={item.name}>
                     <Link
                       href={item.href}
-                      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
+                      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-150 ${
                         isActive
-                          ? "bg-[#e11d48]/10 font-semibold text-[#be123c]"
-                          : "font-normal text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                          ? "bg-red-50 font-semibold text-red-900"
+                          : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`}
                     >
                       <span
-                        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#e11d48] transition-all duration-150 ${
+                        className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-red-800 transition-all duration-150 ${
                           isActive ? "opacity-100" : "opacity-0"
                         }`}
                       />
                       <item.icon
                         className={`h-[18px] w-[18px] flex-shrink-0 ${
                           isActive
-                            ? "text-[#e11d48]"
-                            : "text-gray-400 group-hover:text-gray-500"
+                            ? "text-red-800"
+                            : "text-slate-400 group-hover:text-slate-600"
                         }`}
                       />
                       {item.name}
@@ -175,18 +176,18 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom Utility */}
-      <div className="border-t border-gray-100 px-3 py-3">
+      <div className="border-t border-slate-200 px-3 py-3">
         <Link
           href="/dashboard/profile"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
         >
-          <User className="h-[18px] w-[18px] text-gray-400" />
+          <User className="h-[18px] w-[18px] text-slate-400" />
           My Profile
         </Link>
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-800"
         >
           <LogOut className="h-[18px] w-[18px]" />
           Logout

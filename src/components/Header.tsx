@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Bell,
   CheckCircle2,
@@ -58,6 +59,7 @@ const markRead = async (ids: string[]) => {
 
 export default function Header({ title }: HeaderProps) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notif[]>([]);
   const [unread, setUnread] = useState(0);
@@ -67,8 +69,8 @@ export default function Header({ title }: HeaderProps) {
     if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/notifications");
-      const json = await res.json();
-      if (!json.success) return;
+      const json = await parseJsonResponse(res);
+      if (!json.success || !json.data) return;
       const list: Notif[] = json.data.items || [];
       setItems(list);
       setUnread(json.data.unread ?? list.filter((n) => !n.read).length);
@@ -81,6 +83,7 @@ export default function Header({ title }: HeaderProps) {
 
   // Initial load, then poll so new activity appears without a refresh.
   useEffect(() => {
+    setMounted(true);
     fetchNotifs(false);
     const t = setInterval(() => fetchNotifs(true), 30000);
     const onFocus = () => fetchNotifs(true);
@@ -110,9 +113,9 @@ export default function Header({ title }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200/80 bg-white/90 px-8 backdrop-blur-sm">
+    <header suppressHydrationWarning className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-8 backdrop-blur-sm">
       {/* Left: Page Title */}
-      <h2 className="text-xl font-semibold tracking-tight text-gray-900">{title}</h2>
+      <h2 className="text-xl font-bold tracking-tight text-slate-900">{title}</h2>
 
       {/* Right: Notification Bell */}
       <div className="flex items-center gap-3">
@@ -121,12 +124,15 @@ export default function Header({ title }: HeaderProps) {
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="group relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            className="group relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
-            {unread > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+            {mounted && unread > 0 && (
+              <span
+                suppressHydrationWarning
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-800 px-1 text-[10px] font-bold text-white ring-2 ring-white"
+              >
                 {unread > 9 ? "9+" : unread}
               </span>
             )}
@@ -141,27 +147,27 @@ export default function Header({ title }: HeaderProps) {
                 onClick={() => setOpen(false)}
                 aria-label="Close notifications"
               />
-              <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <p className="text-sm font-semibold text-gray-900">Notifications</p>
+              <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">Notifications</p>
                   <button
                     type="button"
                     onClick={markAllRead}
                     disabled={unread === 0}
-                    className="text-xs font-medium text-blue-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-300"
+                    className="text-xs font-semibold text-red-800 hover:text-red-900 hover:underline disabled:cursor-not-allowed disabled:text-slate-300"
                   >
                     Mark all read
                   </button>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
                   {loading && items.length === 0 ? (
-                    <p className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-gray-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                    <p className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin text-red-800" />
                       Loading…
                     </p>
                   ) : items.length === 0 ? (
-                    <p className="px-4 py-8 text-center text-sm text-gray-400">
+                    <p className="px-4 py-8 text-center text-sm text-slate-400">
                       No notifications yet.
                     </p>
                   ) : (
@@ -173,29 +179,29 @@ export default function Header({ title }: HeaderProps) {
                           key={n.id}
                           type="button"
                           onClick={() => openNotif(n)}
-                          className="flex w-full items-start gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-gray-50"
+                          className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
                         >
                           <span
-                            className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${s.bg}`}
+                            className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${s.bg}`}
                           >
                             <Icon className={`h-3.5 w-3.5 ${s.fg}`} />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span
                               className={`block text-[13px] leading-snug ${
-                                n.read ? "text-gray-500" : "font-medium text-gray-800"
+                                n.read ? "text-slate-500" : "font-medium text-slate-900"
                               }`}
                             >
                               {n.text}
                             </span>
-                            <span className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
-                              {timeAgo(n.createdAt)}
+                            <span suppressHydrationWarning className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                              <span suppressHydrationWarning>{timeAgo(n.createdAt)}</span>
                               {!n.read && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                <span className="h-1.5 w-1.5 rounded-full bg-red-800" />
                               )}
                             </span>
                           </span>
-                          <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-gray-300" />
+                          <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-300" />
                         </button>
                       );
                     })

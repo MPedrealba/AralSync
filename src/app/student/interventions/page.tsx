@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ArrowLeft, Play, FileText, Check, Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Intervention {
   id: string;
@@ -66,7 +67,7 @@ export default function InterventionsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "In Progress" }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setInterventions((prev) =>
           prev.map((i) =>
@@ -90,14 +91,14 @@ export default function InterventionsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "Completed" }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         // update detail view immediately
         setSelected((prev) => prev ? { ...prev, status: "Completed" } : null);
         // refresh list in background
         const listRes = await fetch("/api/student/interventions");
-        const listJson = await listRes.json();
-        if (listJson.success) setInterventions(listJson.data.interventions);
+        const listJson = await parseJsonResponse(listRes);
+        if (listJson.success && listJson.data?.interventions) setInterventions(listJson.data.interventions);
       }
     } catch { /* silent — user can retry */ }
     finally { setMarkingDone(false); }
@@ -109,8 +110,8 @@ export default function InterventionsPage() {
       setError("");
       try {
         const res = await fetch("/api/student/interventions");
-        const json = await res.json();
-        if (json.success) setInterventions(json.data.interventions);
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data?.interventions) setInterventions(json.data.interventions);
         else setError(json.error || "Failed to load interventions.");
       } catch {
         setError("Failed to load interventions.");

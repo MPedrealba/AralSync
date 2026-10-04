@@ -9,8 +9,12 @@ import {
   Loader2,
   ChevronDown,
   Eye,
+  ZoomIn,
+  Maximize2,
+  RefreshCw,
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface OMRScannerProps {
   isOpen: boolean;
@@ -49,7 +53,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
     const fetchStudents = async () => {
       try {
         const res = await fetch("/api/teacher/students");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setStudents(json.data);
       } catch {
         console.error("Failed to fetch students");
@@ -64,7 +68,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
     const fetchKeys = async () => {
       try {
         const res = await fetch("/api/teacher/answer-keys");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setAnswerKeys(json.data);
       } catch {
         console.error("Failed to fetch answer keys");
@@ -73,9 +77,21 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
     fetchKeys();
   }, [isOpen]);
 
+  // Clean up object URLs on unmount or preview change
+  useEffect(() => {
+    return () => {
+      if (preview && preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
+
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
+      if (preview && preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
       setFile(null);
       setPreview(null);
       setStudentId("");
@@ -123,6 +139,8 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
       setResult(null);
       setError("");
     }
+    // Clear value so re-selecting same file triggers onChange
+    e.target.value = "";
   };
 
   const handleSubmit = async () => {
@@ -148,9 +166,9 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
         body: formData,
       });
 
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
 
-      if (!res.ok) {
+      if (!res.ok || !json.success) {
         setError(json.error || "Failed to process OMR scan.");
         return;
       }
@@ -180,9 +198,9 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="relative mx-4 w-full max-w-lg rounded-2xl border border-gray-100 bg-white shadow-2xl">
+      <div className="relative mx-4 flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900">OMR Diagnostic Scanner</h2>
             <p className="text-sm text-gray-400">Upload and auto-grade a scanned answer sheet</p>
@@ -196,7 +214,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
         </div>
 
         {/* Body */}
-        <div className="space-y-5 p-6">
+        <div className="space-y-5 overflow-y-auto p-6">
           {/* Dropdowns */}
           <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -262,13 +280,13 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
+            onClick={!preview ? () => fileInputRef.current?.click() : undefined}
+            className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-all duration-200 ${
               isDragging
                 ? "border-blue-400 bg-blue-50"
                 : file
-                ? "border-green-300 bg-green-50/30"
-                : "border-gray-200 bg-gray-50/50 hover:border-blue-300 hover:bg-blue-50/30"
+                ? "border-green-300 bg-green-50/20"
+                : "cursor-pointer border-gray-200 bg-gray-50/50 hover:border-blue-300 hover:bg-blue-50/30"
             }`}
           >
             <input
@@ -280,17 +298,98 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
             />
 
             {preview ? (
-              <div className="flex flex-col items-center gap-3">
-                <img
-                  src={preview}
-                  alt="OMR Preview"
-                  className="h-32 w-auto rounded-lg border border-gray-200 object-contain shadow-sm"
-                />
-                <div className="flex items-center gap-2 text-sm text-green-700">
-                  <FileImage className="h-4 w-4" />
-                  <span className="font-medium">{file?.name}</span>
+              <div className="flex w-full flex-col items-center gap-3">
+                {/* 1. Clickable Image Preview with Hover/Zoom Overlay */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowViewer(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowViewer(true);
+                    }
+                  }}
+                  className="group relative flex max-h-56 w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-slate-950/5 shadow-sm transition-all duration-200 hover:border-blue-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  title="Click to view full size sheet"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={preview}
+                    alt="Scanned Answer Sheet Preview"
+                    className="max-h-48 w-auto max-w-full rounded-lg object-contain transition-transform duration-200 group-hover:scale-[1.02]"
+                  />
+
+                  {/* Zoom/Inspect Hover Overlay */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 p-4 text-white opacity-0 backdrop-blur-[2px] transition-opacity duration-200 group-hover:opacity-100">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white shadow-sm backdrop-blur-md">
+                      <ZoomIn className="h-5 w-5" />
+                    </div>
+                    <span className="text-xs font-bold tracking-wide">
+                      Click to View Full Size
+                    </span>
+                    <span className="text-[11px] text-white/80">
+                      Zoom, pan &amp; inspect markings
+                    </span>
+                  </div>
+
+                  {/* Corner Badge Indicator (fades on hover) */}
+                  <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1.5 rounded-md bg-black/70 px-2 py-1 text-[11px] font-medium text-white shadow backdrop-blur-sm transition-opacity group-hover:opacity-0">
+                    <Eye className="h-3 w-3" />
+                    <span>Click to zoom</span>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400">Click or drop to replace</p>
+
+                {/* 3. Dedicated Actions & File Details Bar */}
+                <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 px-1">
+                  {/* File Information */}
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs text-green-700">
+                    <FileImage className="h-4 w-4 shrink-0 text-green-600" />
+                    <span className="truncate font-semibold max-w-[170px] sm:max-w-[210px]" title={file?.name}>
+                      {file?.name}
+                    </span>
+                    {file?.size && (
+                      <span className="shrink-0 text-[11px] text-gray-400">
+                        ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dedicated Action Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Full Size Lightbox Trigger */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowViewer(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-100 active:scale-95"
+                      title="Inspect paper in full size"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      <span>Full Size</span>
+                    </button>
+
+                    {/* Dedicated Change / Replace Image Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-gray-900 active:scale-95"
+                      title="Upload a different image file"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 text-gray-500" />
+                      <span>Change Image</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
               <>
@@ -298,10 +397,10 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
                   <Upload className="h-6 w-6 text-blue-600" />
                 </div>
                 <p className="text-sm font-medium text-gray-700">
-                  Drag & drop your scanned OMR sheet
+                  Drag &amp; drop your scanned OMR sheet
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  or click to browse · JPG, PNG accepted
+                  or click to browse &middot; JPG, PNG accepted
                 </p>
               </>
             )}
@@ -355,7 +454,17 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
 
           {/* Submit Button */}
           <button
-            onClick={handleSubmit}
+            onClick={() => {
+              if (result) {
+                setFile(null);
+                setPreview(null);
+                setResult(null);
+                setError("");
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              } else {
+                handleSubmit();
+              }
+            }}
             disabled={isProcessing || !file}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -369,7 +478,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
             ) : (
               <>
                 <Upload className="h-4 w-4" />
-                Scan & Grade
+                Scan &amp; Grade
               </>
             )}
           </button>
@@ -395,6 +504,17 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
                 mcTotal: result.total,
                 scoredItems: result.score,
                 writtenItems: result.writtenItems || [],
+              }
+            : preview
+            ? {
+                id: "preview-sheet",
+                title: competency ? `${competency} Diagnostic Sheet` : "Answer Sheet Inspection",
+                studentName: students.find((s) => s._id === studentId)?.name || "Uploaded Sheet",
+                gradeSection: "Pre-scan inspection",
+                omrSheetUrl: preview,
+                omrOriginalFilename: file?.name || "sheet.png",
+                detectedAnswers: [],
+                totalItems: 0,
               }
             : null
         }

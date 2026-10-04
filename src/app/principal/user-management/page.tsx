@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { useSearch } from "@/components/SearchContext";
 import { UserPlus, MoreVertical, Shield, Loader2, AlertCircle, X } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface UserRow {
   id: string;
@@ -61,7 +62,7 @@ export default function UserManagementPage() {
     setError("");
     try {
       const res = await fetch("/api/principal/user-management");
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setUsers(json.data.users);
         setStats(json.data.stats);
@@ -80,9 +81,9 @@ export default function UserManagementPage() {
   // Principals keep read-only access to user management — account creation is coordinator-owned.
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((r) => r.json())
+      .then((r) => parseJsonResponse(r))
       .then((json) => {
-        if (json.data?.role === "principal") setCanManage(false);
+        if (json.success && json.data?.role === "principal") setCanManage(false);
       })
       .catch(() => /* ignore — default to manage */ {});
   }, []);
@@ -100,7 +101,7 @@ export default function UserManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, username, password, role, specialization, email: email || undefined }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setUsers((prev) => [{ ...json.data, status: "Active", lastLogin: "—", avatar: name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() }, ...prev]);
         setStats((s) => ({ total: s.total + 1, active: s.active + 1, inactive: s.inactive }));

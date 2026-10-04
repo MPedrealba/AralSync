@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { Play, FileText, Puzzle, BookOpen, CheckCircle2 } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 const tabs = ["Videos", "Quizzes", "Activities", "Modules"] as const;
 type Tab = (typeof tabs)[number];
@@ -41,8 +42,8 @@ export default function RecommendationsPage() {
           fetch("/api/teacher/recommendations"),
           fetch("/api/teacher/learners"),
         ]);
-        const recJson = await recRes.json();
-        const stuJson = await stuRes.json();
+        const recJson = await parseJsonResponse(recRes);
+        const stuJson = await parseJsonResponse(stuRes);
         if (recJson.success) setData(recJson.data);
         if (stuJson.success) {
           setStudents(
@@ -69,7 +70,7 @@ export default function RecommendationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recommendationId: item.id, studentId: selectedStudent }),
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setMessage(`Assigned "${item.title}" successfully.`);
       } else {
@@ -90,44 +91,46 @@ export default function RecommendationsPage() {
   return (
     <>
       <Header title="Recommendations" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
         {/* Title */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Recommendation Library
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+            ARAL Intervention &amp; Recommendation Library
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Browse and assign targeted interventions based on learner needs.
+          <p className="mt-1 text-xs text-slate-500 md:text-sm">
+            Browse and assign targeted learning interventions based on learner diagnostic needs.
           </p>
         </div>
 
         {/* Learner picker */}
-        <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-medium text-gray-700">
-            Assign to learner:
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Assign to Target Learner:
           </p>
-          <select
-            value={selectedStudent}
-            onChange={(e) => setSelectedStudent(e.target.value)}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 sm:min-w-[240px]"
-          >
-            <option value="">Select a learner…</option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {message && (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-              <CheckCircle2 className="h-4 w-4" />
-              {message}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedStudent}
+              onChange={(e) => setSelectedStudent(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 sm:min-w-[260px]"
+            >
+              <option value="">Select a learner…</option>
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {message && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                <CheckCircle2 className="h-4 w-4" />
+                {message}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm w-fit">
+        <div className="flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
           {tabs.map((tab) => (
             <button
               key={tab}
@@ -135,10 +138,10 @@ export default function RecommendationsPage() {
                 setActiveTab(tab);
                 setMessage("");
               }}
-              className={`rounded-lg px-5 py-2 text-sm font-medium transition-all ${
+              className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
                 activeTab === tab
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  ? "bg-red-800 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
               {tab}
@@ -148,10 +151,10 @@ export default function RecommendationsPage() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-red-800"></div>
           </div>
         ) : itemsByTab[activeTab].length === 0 ? (
-          <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-xs text-slate-400">
             No {activeTab.toLowerCase()} in the library yet.
           </div>
         ) : (
@@ -159,29 +162,29 @@ export default function RecommendationsPage() {
             {itemsByTab[activeTab].map((item) => (
               <div
                 key={item.id}
-                className="flex flex-col rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
+                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:border-slate-300"
               >
                 <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-                    {activeTab === "Videos" && <Play className="h-5 w-5 text-blue-600" />}
-                    {activeTab === "Quizzes" && <FileText className="h-5 w-5 text-purple-600" />}
-                    {activeTab === "Activities" && <Puzzle className="h-5 w-5 text-amber-600" />}
-                    {activeTab === "Modules" && <BookOpen className="h-5 w-5 text-emerald-600" />}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    {activeTab === "Videos" && <Play className="h-5 w-5 text-red-800" />}
+                    {activeTab === "Quizzes" && <FileText className="h-5 w-5 text-red-800" />}
+                    {activeTab === "Activities" && <Puzzle className="h-5 w-5 text-red-800" />}
+                    {activeTab === "Modules" && <BookOpen className="h-5 w-5 text-red-800" />}
                   </div>
-                  <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
                     {item.subject}
                   </span>
                   {item.keyStage && (
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
-                      ARAL {item.keyStage} {item.programLevel ? `• ${item.programLevel}` : ''}
+                    <span className="rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
+                      ARAL {item.keyStage} {item.programLevel ? `&bull; ${item.programLevel}` : ''}
                     </span>
                   )}
                 </div>
-                <h3 className="text-sm font-semibold text-gray-900">{item.title}</h3>
-                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-gray-500">
+                <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500">
                   {item.description}
                 </p>
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-2 text-xs font-medium text-slate-400">
                   {activeTab === "Videos" && (item.meta.duration || "Video")}
                   {activeTab === "Quizzes" && item.meta.items
                     ? `${item.meta.items} questions`
@@ -192,15 +195,16 @@ export default function RecommendationsPage() {
 
                 {/* ARAL PDF Quick Access */}
                 {(item.workbookUrl || item.tutorGuideUrl) && (
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-2.5">
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                     {item.workbookUrl && (
                       <a
                         href={item.workbookUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50/70 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors"
                       >
-                        📘 Learner Workbook (PDF)
+                        <FileText className="h-3.5 w-3.5 text-red-800" />
+                        <span>Learner Workbook (PDF)</span>
                       </a>
                     )}
                     {item.tutorGuideUrl && (
@@ -208,17 +212,19 @@ export default function RecommendationsPage() {
                         href={item.tutorGuideUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors"
                       >
-                        🎓 Tutor's Guide (PDF)
+                        <BookOpen className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Tutor&apos;s Guide (PDF)</span>
                       </a>
                     )}
                   </div>
                 )}
 
                 <button
+                  type="button"
                   onClick={() => assign(item)}
-                  className="mt-3 w-full rounded-lg bg-blue-600 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 active:scale-[0.98]"
+                  className="mt-4 h-10 w-full inline-flex items-center justify-center rounded-xl bg-red-800 px-4 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
                 >
                   Assign to Learner
                 </button>

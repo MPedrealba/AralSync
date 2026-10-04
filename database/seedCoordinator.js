@@ -5,16 +5,21 @@ const bcrypt = require('bcryptjs');
 
 const run = async () => {
   await connectDB();
+  const hashed = await bcrypt.hash('password123', 10);
   const existing = await User.findOne({ username: 'coordinator1' });
   if (existing) {
-    console.log('coordinator1 already exists ->', existing.name, '| role:', existing.role);
+    existing.name = 'Coordinator Sarah';
+    existing.password = hashed;
+    existing.role = 'coordinator';
+    existing.active = true;
+    await existing.save();
+    console.log('coordinator1 updated ->', existing.name, '| role:', existing.role);
     process.exit(0);
   }
-  const hashed = await bcrypt.hash('123456', 10);
   const created = await User.create({
     username: 'coordinator1',
     password: hashed,
-    name: 'ARAL Coordinator',
+    name: 'Coordinator Sarah',
     role: 'coordinator',
     active: true,
   });

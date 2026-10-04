@@ -159,7 +159,7 @@ function OMRSheetViewerDialog({
   const totalQuestions = assessment.totalItems || Math.max(detected.length, 20);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4">
       <div
         ref={containerRef}
         className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-gray-100"
@@ -189,7 +189,9 @@ function OMRSheetViewerDialog({
               <p className="text-xs text-gray-500">
                 {assessment.studentName || "Student"} &middot;{" "}
                 {assessment.gradeSection || "Assessed sheet"}
-                {assessment.date && ` &middot; ${new Date(assessment.date).toLocaleDateString()}`}
+                {assessment.date && (
+                  <span suppressHydrationWarning> &middot; {new Date(assessment.date).toLocaleDateString()}</span>
+                )}
               </p>
             </div>
           </div>
@@ -407,18 +409,27 @@ function OMRSheetViewerDialog({
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {/* Summary Box */}
-                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
-                    <span className="text-gray-400">Total Items</span>
-                    <p className="text-sm font-bold text-gray-800">{totalQuestions}</p>
+                {assessment.scoredItems != null || detected.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                      <span className="text-gray-400">Total Items</span>
+                      <p className="text-sm font-bold text-gray-800">{totalQuestions}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                      <span className="text-gray-400">MC Scored</span>
+                      <p className="text-sm font-bold text-emerald-600">
+                        {assessment.scoredItems ?? "—"}/{assessment.mcTotal ?? totalQuestions}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
-                    <span className="text-gray-400">MC Scored</span>
-                    <p className="text-sm font-bold text-emerald-600">
-                      {assessment.scoredItems ?? "—"}/{assessment.mcTotal ?? totalQuestions}
+                ) : (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-700">
+                    <p className="font-semibold">Pre-Scan Inspection</p>
+                    <p className="mt-1 text-[11px] text-blue-600">
+                      Bubble detection and scoring will appear here once the sheet is scanned and graded.
                     </p>
                   </div>
-                </div>
+                )}
 
                 {/* Multiple Choice Answers */}
                 <div>

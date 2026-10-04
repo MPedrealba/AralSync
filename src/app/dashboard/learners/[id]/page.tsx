@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import { ArrowLeft, ShieldCheck, FileCheck2, Eye } from "lucide-react";
 import OMRSheetViewerModal, { OMRSheetViewerItem } from "@/components/OMRSheetViewerModal";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface OMRRow {
   id: string;
@@ -57,7 +58,7 @@ export default function LearnerViewPage() {
     const fetchLearner = async () => {
       try {
         const res = await fetch(`/api/teacher/learners/${learnerId}`);
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
         } else {

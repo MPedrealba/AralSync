@@ -74,58 +74,58 @@ export default function AtRiskLearnersPage() {
 
   return (
     <>
-      <PrincipalHeader title="Principal At-Risk Learners" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <PrincipalHeader title="At-Risk Learners" />
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6 sm:space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-red-600">At-Risk Learners</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">At-Risk Learners</h1>
+          <p className="mt-1 text-sm text-slate-500">
             Students flagged with Frustration reading level or Fail in Science/Math on their latest assessment.
           </p>
         </div>
 
         {/* 4 Stat Cards */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-          <div className="rounded-xl border-2 border-red-200 bg-white p-6 shadow-sm text-center" aria-label={`Total Flags: ${stats.totalFlags}, across all subjects`}>
-            <p className="text-sm font-medium text-gray-500">Total Flags</p>
-            <p className="mt-2 text-3xl font-bold text-red-600">{stats.totalFlags}</p>
-            <p className="mt-1 text-xs text-gray-400">Across all subjects</p>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs" aria-label={`Total Flags: ${stats.totalFlags}, across all subjects`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Flags</p>
+            <p className="mt-1 text-2xl font-extrabold text-rose-600">{stats.totalFlags}</p>
+            <p className="mt-1 text-xs text-slate-400">Across all subjects</p>
           </div>
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm text-center" aria-label={`Reading: ${stats.reading}, at Frustration level`}>
-            <p className="text-sm font-medium text-gray-500">Reading</p>
-            <p className="mt-2 text-3xl font-bold text-blue-600">{stats.reading}</p>
-            <p className="mt-1 text-xs text-gray-400">At Frustration level</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs" aria-label={`Reading: ${stats.reading}, at Frustration level`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Reading</p>
+            <p className="mt-1 text-2xl font-extrabold text-blue-600">{stats.reading}</p>
+            <p className="mt-1 text-xs text-slate-400">At Frustration level</p>
           </div>
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm text-center" aria-label={`Science: ${stats.science}, failing latest assessment`}>
-            <p className="text-sm font-medium text-gray-500">Science</p>
-            <p className="mt-2 text-3xl font-bold text-emerald-600">{stats.science}</p>
-            <p className="mt-1 text-xs text-gray-400">Failing latest assessment</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs" aria-label={`Science: ${stats.science}, failing latest assessment`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Science</p>
+            <p className="mt-1 text-2xl font-extrabold text-emerald-600">{stats.science}</p>
+            <p className="mt-1 text-xs text-slate-400">Failing latest assessment</p>
           </div>
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm text-center" aria-label={`Mathematics: ${stats.math}, failing latest assessment`}>
-            <p className="text-sm font-medium text-gray-500">Mathematics</p>
-            <p className="mt-2 text-3xl font-bold text-amber-600">{stats.math}</p>
-            <p className="mt-1 text-xs text-gray-400">Failing latest assessment</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs" aria-label={`Mathematics: ${stats.math}, failing latest assessment`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Mathematics</p>
+            <p className="mt-1 text-2xl font-extrabold text-amber-600">{stats.math}</p>
+            <p className="mt-1 text-xs text-slate-400">Failing latest assessment</p>
           </div>
         </div>
 
         {/* Flagged Table */}
-        <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-500" />
-                <h3 className="text-base font-semibold text-gray-900">
+                <AlertTriangle className="h-4 w-4 text-rose-600" />
+                <h3 className="text-base font-bold text-slate-900">
                   {filteredFlags.length} learners flagged
                 </h3>
               </div>
-              <p className="mt-0.5 text-xs text-gray-400">
+              <p className="mt-0.5 text-xs text-slate-500">
                 Sorted by urgency — Frustration first, then lowest score. Requires immediate intervention.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <select
                 value={gradeFilter}
                 onChange={(e) => setGradeFilter(e.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
               >
                 <option value="">All Grades</option>
                 <option>Grade 7</option>
@@ -136,7 +136,7 @@ export default function AtRiskLearnersPage() {
               <select
                 value={subjectFilter}
                 onChange={(e) => setSubjectFilter(e.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
               >
                 <option value="">All Subjects</option>
                 <option>Reading</option>
@@ -148,51 +148,51 @@ export default function AtRiskLearnersPage() {
 
           {loading ? (
             <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <Loader2 className="h-6 w-6 animate-spin text-red-800" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-sm text-red-600">
+            <div className="flex flex-col items-center gap-3 py-12 text-sm font-semibold text-rose-600">
               <AlertCircle className="h-5 w-5" />
               <p>{error}</p>
             </div>
           ) : filteredFlags.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">
+            <div className="py-12 text-center text-sm text-slate-400">
               No flags for the current filters.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Grade & Section</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Subject</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Last Assessed</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Urgency</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-6 py-3.5 text-left">Learner</th>
+                    <th className="px-6 py-3.5 text-left">Grade & Section</th>
+                    <th className="px-6 py-3.5 text-left">Subject</th>
+                    <th className="px-6 py-3.5 text-left">Status</th>
+                    <th className="px-6 py-3.5 text-left">Score</th>
+                    <th className="px-6 py-3.5 text-left">Last Assessed</th>
+                    <th className="px-6 py-3.5 text-left">Urgency</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-slate-100">
                   {filteredFlags.map((s, i) => {
                     const Icon = subjIcon(s.subject);
                     return (
-                      <tr key={i} className="hover:bg-gray-50/60">
-                        <td className="px-6 py-3.5 text-sm font-medium text-gray-800">{s.name}</td>
-                        <td className="px-6 py-3.5 text-sm text-gray-600">{s.grade}</td>
+                      <tr key={i} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-6 py-3.5 text-sm font-bold text-slate-900">{s.name}</td>
+                        <td className="px-6 py-3.5 text-xs text-slate-600">{s.grade}</td>
                         <td className="px-6 py-3.5">
-                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
-                            <Icon className="h-3.5 w-3.5 text-gray-400" /> {s.subject}
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                            <Icon className="h-3.5 w-3.5 text-slate-400" /> {s.subject}
                           </span>
                         </td>
                         <td className="px-6 py-3.5">
-                          <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${s.statusStyle}`}>
+                          <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${s.statusStyle}`}>
                             {s.status}
                           </span>
                         </td>
-                        <td className="px-6 py-3.5 text-sm font-semibold text-gray-800">{s.score}</td>
-                        <td className="px-6 py-3.5 text-sm text-gray-500">{s.lastAssessed}</td>
-                        <td className={`px-6 py-3.5 text-sm ${s.urgencyStyle}`}>{s.urgency}</td>
+                        <td className="px-6 py-3.5 text-sm font-bold text-slate-900">{s.score}</td>
+                        <td className="px-6 py-3.5 text-xs text-slate-500">{s.lastAssessed}</td>
+                        <td className={`px-6 py-3.5 text-xs font-semibold ${s.urgencyStyle}`}>{s.urgency}</td>
                       </tr>
                     );
                   })}

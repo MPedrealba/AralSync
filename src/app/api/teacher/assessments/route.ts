@@ -48,6 +48,8 @@ export async function GET(req: NextRequest) {
         id: String(a._id),
         title: a.title || a.type || "Untitled",
         type: a.type,
+        assessmentCategory: a.assessmentCategory || (a.title?.toLowerCase().includes("exam") ? "exam" : "quiz"),
+        topics: Array.isArray(a.topics) ? a.topics : [],
         subject: a.subject || "—",
         studentName: name,
         studentId: String(a.studentId),

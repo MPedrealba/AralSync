@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { Download } from "lucide-react";
 import DataState from "@/components/DataState";
+import { parseJsonResponse } from "@/lib/safeFetch";
 import type {
   NationalDashboardData,
   RmaPayload,
@@ -213,7 +214,7 @@ export default function NationalDashboard({ role }: NationalDashboardProps) {
       const qs = new URLSearchParams({ period });
       if (grade !== "all") qs.set("grade", String(grade));
       const res = await fetch(`/api/${role}/reports/dashboard?${qs.toString()}`);
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setData(json.data);
         setStatus("ready");

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2, AlertCircle, Mic, Square, CheckCircle2 } from "lucide-react";
 import { legacyBadge as levelBadge } from "@/lib/ui";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface PassageOption {
   id: string;
@@ -97,8 +98,8 @@ export default function ReadingFluencyPage() {
     setError("");
     try {
       const res = await fetch("/api/student/assessments?type=READING_FLUENCY");
-      const json = await res.json();
-      if (json.success) setRows(json.data.assessments);
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data?.assessments) setRows(json.data.assessments);
       else setError(json.error || "Failed to load fluency results.");
     } catch {
       setError("Failed to load fluency results.");
@@ -112,8 +113,8 @@ export default function ReadingFluencyPage() {
     (async () => {
       try {
         const res = await fetch("/api/teacher/reading/passages");
-        const json = await res.json();
-        if (json.success && json.data.length > 0) {
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data && json.data.length > 0) {
           setPassages(json.data);
           setPassageTitle(json.data[0].title);
           setPassageText(json.data[0].text || "");
@@ -196,7 +197,7 @@ export default function ReadingFluencyPage() {
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) {
         setResult(json.data);
         await load(); // refresh history immediately
