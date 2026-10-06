@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Dist {
   name: string;
@@ -52,7 +53,7 @@ export default function ReadingLevelsPage() {
       setError("");
       try {
         const res = await fetch("/api/principal/reading-levels");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setData(json.data);
         else setError(json.error || "Failed to load reading levels.");
       } catch {

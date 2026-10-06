@@ -168,7 +168,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
-    const RISK = ['Low Risk', 'Moderate Risk', 'High Risk'];
+    const RISK = ['Low Risk', 'Moderate Risk', 'High Risk', 'Pending Assessment'];
     const MASTERY = ['Beginning', 'Developing', 'Approaching', 'Proficient'];
 
     if (body.riskLevel !== undefined && !RISK.includes(body.riskLevel)) {

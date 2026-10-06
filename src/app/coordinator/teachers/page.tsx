@@ -52,6 +52,7 @@ const riskStyles: Record<string, { bg: string; text: string; border: string }> =
   "High Risk": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
   "Moderate Risk": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   "Low Risk": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  "Pending Assessment": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
 
 const readingStyles: Record<string, { bg: string; text: string; border: string }> = {

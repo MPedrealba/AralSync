@@ -7,6 +7,7 @@ import {
   BarChart, Bar,
 } from "recharts";
 import { Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Data {
   trendData: Array<{ month: string; Reading: number; Science: number; Math: number }>;
@@ -28,7 +29,7 @@ export default function ProgressTrendsPage() {
       setError("");
       try {
         const res = await fetch("/api/coordinator/progress-trends");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) setData(json.data);
         else setError(json.error || "Failed to load trends.");
       } catch {

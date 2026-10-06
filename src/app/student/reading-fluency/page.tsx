@@ -86,6 +86,7 @@ export default function ReadingFluencyPage() {
   const [recTime, setRecTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingSim, setAnalyzingSim] = useState(false);
   const [recordError, setRecordError] = useState("");
@@ -130,12 +131,20 @@ export default function ReadingFluencyPage() {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
     };
   }, []);
 
   const startRecording = async () => {
     setRecordError("");
     setResult(null);
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
     setAudioUrl(null);
     setAudioBlob(null);
     try {
@@ -148,7 +157,9 @@ export default function ReadingFluencyPage() {
       mr.onstop = () => {
         const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        setAudioUrl(url);
         stream.getTracks().forEach((t) => t.stop());
       };
       mr.start();
@@ -413,7 +424,7 @@ export default function ReadingFluencyPage() {
         </div>
         <div className="card" style={{ textAlign: "center" }} aria-label={`Last assessed: ${latest ? fmtDate(latest.date) : "not yet assessed"}`}>
           <div className="card-title">LAST ASSESSED</div>
-          <div className="card-value" style={{ fontSize: "1.5rem", marginTop: "0.4rem" }}>
+          <div className="card-value" style={{ fontSize: "1.5rem", marginTop: "0.4rem" }} suppressHydrationWarning>
             {latest ? fmtDate(latest.date) : "—"}
           </div>
         </div>
@@ -500,7 +511,7 @@ export default function ReadingFluencyPage() {
               ) : (
                 rows.map((r, i) => (
                   <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{fmtDate(r.date)}</td>
+                    <td style={{ fontWeight: 600 }} suppressHydrationWarning>{fmtDate(r.date)}</td>
                     <td>{r.title}</td>
                     <td style={{ fontWeight: 600 }}>{r.wpm ?? "—"}</td>
                     <td style={{ fontWeight: 600 }}>{r.accuracy != null ? `${r.accuracy}%` : "—"}</td>

@@ -3,16 +3,24 @@ import connectDB from '../../../../../database/db';
 import CustomExam from '../../../../../models/CustomExam';
 import AnswerKey from '../../../../../models/AnswerKey';
 import { requireAuth, authErrorResponse } from '@/lib/auth';
+import { getTeacherSubject } from '@/lib/teacherScope';
 
 /**
  * GET /api/teacher/exams
- * List all exams uploaded by the logged-in teacher.
+ * List all exams uploaded by the logged-in teacher, scoped to their subject.
  */
 export async function GET(req: NextRequest) {
   try {
     const teacher = await requireAuth(req, ['teacher']);
     await connectDB();
-    const exams = await CustomExam.find({ teacherId: teacher.id })
+
+    const teacherSubject = await getTeacherSubject(teacher);
+    const filter: Record<string, any> = { teacherId: teacher.id };
+    if (teacherSubject !== 'All') {
+      filter.subject = teacherSubject;
+    }
+
+    const exams = await CustomExam.find(filter)
       .sort({ createdAt: -1 })
       .lean();
     return NextResponse.json({
@@ -45,10 +53,13 @@ export async function POST(req: NextRequest) {
     const teacher = await requireAuth(req, ['teacher']);
     await connectDB();
 
+    const teacherSubject = await getTeacherSubject(teacher);
+
     const body = await req.json();
     const { title, subject, gradeLevel, items, assessmentType, topics, answerKeyId } = body;
+    const finalSubject = teacherSubject !== 'All' ? teacherSubject : subject;
 
-    if (!title || !subject || !gradeLevel || !Array.isArray(items) || items.length === 0) {
+    if (!title || !finalSubject || !gradeLevel || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
         { success: false, error: 'title, subject, gradeLevel, and items[] are required.' },
         { status: 400 }
@@ -94,7 +105,7 @@ export async function POST(req: NextRequest) {
 
     if (answerKey) {
       answerKey.title = title || answerKey.title;
-      answerKey.subject = subject || answerKey.subject;
+      answerKey.subject = finalSubject || answerKey.subject;
       answerKey.assessmentType = resolvedType;
       if (resolvedTopics.length > 0) {
         answerKey.topics = resolvedTopics;
@@ -113,7 +124,7 @@ export async function POST(req: NextRequest) {
     } else {
       answerKey = await AnswerKey.create({
         title,
-        subject,
+        subject: finalSubject,
         assessmentType: resolvedType,
         topics: resolvedTopics,
         topic: resolvedTopics[0] || '',
@@ -131,7 +142,7 @@ export async function POST(req: NextRequest) {
     const exam = await CustomExam.create({
       teacherId: teacher.id,
       title,
-      subject,
+      subject: finalSubject,
       gradeLevel: Number(gradeLevel) || 7,
       items: normalizedItems,
       totalItems: normalizedItems.length,

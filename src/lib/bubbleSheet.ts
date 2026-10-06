@@ -65,3 +65,26 @@ export function getSubjectBubbleSheet(
 
   return BUBBLE_SHEETS.Math;
 }
+
+/**
+ * Constructs the URL to stream the authentic school PDF with the custom
+ * quiz/exam title and item count dynamically stamped onto the official header.
+ */
+export function getStampedBubbleSheetUrl(params: {
+  subject?: string | null;
+  title?: string;
+  items?: number;
+  gradeLevel?: number;
+  teacherName?: string;
+  download?: boolean;
+}): string {
+  const query = new URLSearchParams();
+  if (params.subject) query.set("subject", params.subject);
+  if (params.title) query.set("title", params.title);
+  if (params.items) query.set("items", String(params.items));
+  if (params.gradeLevel) query.set("gradeLevel", String(params.gradeLevel));
+  if (params.teacherName) query.set("teacherName", params.teacherName);
+  if (params.download) query.set("download", "1");
+  return `/api/teacher/bubble-sheet/print?${query.toString()}`;
+}
+

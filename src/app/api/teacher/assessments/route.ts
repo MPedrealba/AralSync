@@ -4,18 +4,27 @@ import Assessment from "../../../../../models/Assessment";
 import LearnerRecord from "../../../../../models/LearnerRecord";
 import User from "../../../../../models/User";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { getTeacherSubject } from "@/lib/teacherScope";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ["teacher"]);
+    const authUser = await requireAuth(req, ["teacher"]);
     await connectDB();
 
+    const teacherSubject = await getTeacherSubject(authUser);
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type"); // OMR | READING_FLUENCY | COMPREHENSION
+    const reqSubject = searchParams.get("subject");
 
-    const filter: Record<string, string> = {};
+    const filter: Record<string, any> = {};
     if (type && ["OMR", "READING_FLUENCY", "COMPREHENSION"].includes(type)) {
       filter.type = type;
+    }
+
+    if (teacherSubject !== "All") {
+      filter.subject = teacherSubject;
+    } else if (reqSubject && ["Reading", "Math", "Science"].includes(reqSubject)) {
+      filter.subject = reqSubject;
     }
 
     // Fetch assessments + join student info + learner record

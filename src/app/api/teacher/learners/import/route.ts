@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
           guardian: data.guardian || undefined,
           contact: data.contact || undefined,
           address: data.address || undefined,
-          riskLevel: 'Low Risk',
+          riskLevel: 'Pending Assessment',
           masteryStatus: 'Beginning',
         });
         existingLrns.add(lrnKey); // guard against duplicate LRNs within the same file

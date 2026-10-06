@@ -5,6 +5,7 @@ import connectDB from '../../../../../database/db';
 import Assessment from '../../../../../models/Assessment';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import mongoose from 'mongoose';
+import { getTeacherSubject } from '@/lib/teacherScope';
 
 const SUBJECT_ORDER = ['Numeracy', 'Science', 'Reading'];
 const SUBJECT_MAP: Record<string, string> = {
@@ -17,13 +18,15 @@ const SUBJECT_MAP: Record<string, string> = {
  * GET /api/teacher/skill-gap
  * Competency mastery: rank distribution per subject (bar chart) and an
  * averaged competency breakdown grouped by subject (skill-gap cards).
- * Optional filters: grade, section.
+ * Optional filters: grade, section. Scoped to teacher's assigned subject.
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     const { searchParams } = new URL(req.url);
     const grade = searchParams.get('grade');
@@ -43,6 +46,9 @@ export async function GET(req: NextRequest) {
 
     const match: Record<string, unknown> = { score: { $exists: true, $ne: null } };
     if (studentIds && studentIds.length > 0) match.studentId = { $in: studentIds };
+    if (teacherSubject !== 'All') {
+      match.subject = teacherSubject;
+    }
 
     // Bucket counts per subject → percentage bars.
     const bucketAgg = await Assessment.aggregate([
@@ -66,14 +72,19 @@ export async function GET(req: NextRequest) {
       bucketAgg.map((b: any) => [
         b._id,
         {
-          below60: Math.round((b.below60 / b.total) * 100),
-          between60_75: Math.round((b.between60_75 / b.total) * 100),
-          above75: Math.round((b.above75 / b.total) * 100),
+          below60: b.total > 0 ? Math.round((b.below60 / b.total) * 100) : 0,
+          between60_75: b.total > 0 ? Math.round((b.between60_75 / b.total) * 100) : 0,
+          above75: b.total > 0 ? Math.round((b.above75 / b.total) * 100) : 0,
         },
       ])
     );
 
-    const competencyData = SUBJECT_ORDER.map((name) => ({
+    const relevantOrder =
+      teacherSubject !== 'All'
+        ? [teacherSubject === 'Math' ? 'Numeracy' : teacherSubject]
+        : SUBJECT_ORDER;
+
+    const competencyData = relevantOrder.map((name) => ({
       name,
       below60: bucketMap.get(name === 'Numeracy' ? 'Math' : name)?.below60 ?? 0,
       between60_75: bucketMap.get(name === 'Numeracy' ? 'Math' : name)?.between60_75 ?? 0,
@@ -126,7 +137,7 @@ export async function GET(req: NextRequest) {
       bySubject[display].push({ name: key.competency, mastery: avg, level });
     }
 
-    const skillGaps = SUBJECT_ORDER.map((subject) => ({
+    const skillGaps = relevantOrder.map((subject) => ({
       subject,
       competencies: bySubject[subject] || [],
     })).filter((g) => g.competencies.length > 0);

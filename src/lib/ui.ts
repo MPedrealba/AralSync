@@ -4,9 +4,9 @@
  * nearly every page.
  */
 
-/** Score (0-100) → OMR/comprehension mastery label. */
+/** Score (0-100) → OMR/comprehension mastery label (DepEd RMA standards). */
 export const masteryFromScore = (score: number) =>
-  score < 60 ? "Beginning" : score < 70 ? "Developing" : score < 80 ? "Approaching Proficiency" : "Proficient";
+  score >= 90 ? "Proficient" : score >= 75 ? "Approaching" : score >= 50 ? "Developing" : "Beginning";
 
 /** Reading-fluency WPM/accuracy-% → level label. */
 export const levelFromScore = (score: number) =>

@@ -51,6 +51,7 @@ interface AnswerKeyItem {
   answers: string[];
   modes?: string[];
   writtenItems?: { index: number; prompt: string; max: number }[];
+  questions?: { correctAnswer?: string; answer?: string; [key: string]: any }[];
 }
 
 interface RecommendationItem {
@@ -296,7 +297,7 @@ function OMRWorkstationContent() {
           if (lJson.success && Array.isArray(lJson.data)) {
             loadedStudents = lJson.data
               .map((item: any) => ({
-                _id: String(item.studentId?._id || item.id || item._id),
+                _id: String(item.studentId?._id || item.studentId || item.id || item._id),
                 name: item.studentId?.name || item.name || "Student",
                 section: item.section || "Rosal",
                 gradeLevel: item.gradeLevel || 7,
@@ -353,20 +354,52 @@ function OMRWorkstationContent() {
   useEffect(() => {
     if (!selectedKeyId) return;
     const key = answerKeys.find((k) => k.id === selectedKeyId);
-    if (key) {
-      if (key.answers && key.answers.length > 0) {
-        setKeyAnswers(key.answers);
-      }
-      if (key.modes) setKeyModes(key.modes);
-      if (key.writtenItems) setWrittenItems(key.writtenItems);
-      if (key.subject) {
-        if (key.subject === "Reading") setCompetency("Reading Comprehension");
-        else if (key.subject === "Science") setCompetency("Science");
-        else setCompetency("Numeracy");
-      }
-      setAssessmentTitle(key.title || "Quarterly Diagnostic Exam");
+    if (!key) return;
+
+    const newAnswers: string[] =
+      key.answers && key.answers.length > 0 && key.answers.some(Boolean)
+        ? key.answers
+        : (key.questions || []).map((q: any) => q.correctAnswer || q.answer || "A");
+
+    // Update all key states unconditionally
+    setKeyAnswers(newAnswers);
+    setKeyModes(
+      Array.isArray(key.modes) && key.modes.length === newAnswers.length
+        ? key.modes
+        : newAnswers.map(() => "mc")
+    );
+    setWrittenItems(key.writtenItems || []);
+
+    if (key.subject) {
+      if (key.subject === "Reading") setCompetency("Reading Comprehension");
+      else if (key.subject === "Science") setCompetency("Science");
+      else setCompetency("Numeracy");
     }
-  }, [selectedKeyId, answerKeys]);
+    if (key.title) {
+      setAssessmentTitle(key.title);
+    }
+
+    // Adjust verifiedAnswers and detectedAnswers length to match new key's total items
+    if (newAnswers.length > 0) {
+      setVerifiedAnswers((prev) => {
+        if (prev.length === 0) {
+          return sheetImage ? Array(newAnswers.length).fill(null) : [];
+        }
+        if (prev.length === newAnswers.length) return prev;
+        if (prev.length > newAnswers.length) return prev.slice(0, newAnswers.length);
+        return [...prev, ...Array(newAnswers.length - prev.length).fill(null)];
+      });
+
+      setDetectedAnswers((prev) => {
+        if (prev.length === 0) return [];
+        if (prev.length === newAnswers.length) return prev;
+        if (prev.length > newAnswers.length) return prev.slice(0, newAnswers.length);
+        return [...prev, ...Array(newAnswers.length - prev.length).fill(null)];
+      });
+
+      setFocusedQuestionIndex((prev) => (prev !== null && prev >= newAnswers.length ? null : prev));
+    }
+  }, [selectedKeyId, answerKeys, sheetImage]);
 
   // Clean up blob URLs on unmount
   useEffect(() => {
@@ -378,7 +411,12 @@ function OMRWorkstationContent() {
   }, [sheetImage]);
 
   // ── Real-Time Calculated Metrics ──
-  const effectiveTotalItems = Math.max(keyAnswers.length, verifiedAnswers.length, 20);
+  const effectiveTotalItems =
+    keyAnswers.length > 0
+      ? keyAnswers.length
+      : verifiedAnswers.length > 0
+      ? verifiedAnswers.length
+      : 20;
 
   // Multiple Choice scoring
   let mcCorrectCount = 0;
@@ -453,9 +491,11 @@ function OMRWorkstationContent() {
 
   // ── Image Pan & Drag Handlers ──
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.15 : -0.15;
-    setScale((s) => Math.min(Math.max(0.5, s + delta), 4));
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      setScale((s) => Math.min(Math.max(0.5, s + delta), 4));
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -479,9 +519,17 @@ function OMRWorkstationContent() {
 
   // ── File Selection & Scanning ──
   const processUploadedImage = async (file: File) => {
+    const studentToUse = selectedStudentId || (students[0]?._id ?? "");
+    if (!studentToUse) {
+      setErrorMessage("Please select a student from your assigned roster before scanning.");
+      return;
+    }
+    if (!selectedStudentId && students[0]?._id) {
+      setSelectedStudentId(students[0]._id);
+    }
+
     setSheetFile(file);
     const localUrl = URL.createObjectURL(file);
-    setSheetImage(localUrl);
     setErrorMessage("");
     setInfoMessage("");
     setIsScanning(true);
@@ -489,7 +537,7 @@ function OMRWorkstationContent() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("studentId", selectedStudentId || (students[0]?._id ?? ""));
+      formData.append("studentId", studentToUse);
       formData.append("competency", competency);
       formData.append("subject", currentSubject);
       formData.append("title", assessmentTitle);
@@ -508,9 +556,7 @@ function OMRWorkstationContent() {
 
       const data = json.data;
       setAssessmentId(data.assessmentId || null);
-      if (data.omrSheetUrl) {
-        setSheetImage(data.omrSheetUrl);
-      }
+      setSheetImage(data.omrSheetUrl || localUrl);
 
       const initialDetected: (string | null)[] = data.detectedAnswers || [];
       setDetectedAnswers(initialDetected);
@@ -528,6 +574,16 @@ function OMRWorkstationContent() {
 
       setInfoMessage("Sheet scanned and initial marks detected. Review and adjust scores below.");
     } catch (err: any) {
+      try {
+        URL.revokeObjectURL(localUrl);
+      } catch {
+        // ignore
+      }
+      setSheetImage(null);
+      setSheetFile(null);
+      setAssessmentId(null);
+      setDetectedAnswers([]);
+      setVerifiedAnswers([]);
       setErrorMessage(err.message || "Failed to process OMR scan.");
     } finally {
       setIsScanning(false);
@@ -601,6 +657,9 @@ function OMRWorkstationContent() {
           if (blob) {
             const sampleFile = new File([blob], "sample_sheet.png", { type: "image/png" });
             processUploadedImage(sampleFile);
+          } else {
+            setIsScanning(false);
+            setErrorMessage("Could not generate canvas sample sheet.");
           }
         }, "image/png");
         return;
@@ -702,6 +761,11 @@ function OMRWorkstationContent() {
       return;
     }
 
+    if (!assessmentId) {
+      setErrorMessage("No valid assessment record exists to finalize. Please re-scan the sheet.");
+      return;
+    }
+
     setIsSaving(true);
     setErrorMessage("");
 
@@ -711,6 +775,7 @@ function OMRWorkstationContent() {
       const payload = {
         assessmentId: assessmentId || undefined,
         studentId: selectedStudentId,
+        answerKeyId: selectedKeyId || undefined,
         verifiedAnswers,
         writtenScores,
         notes: teacherNotes,
@@ -838,7 +903,7 @@ function OMRWorkstationContent() {
     <>
       <Header title="OMR Scan Workstation" />
 
-      <main className="flex flex-1 flex-col overflow-hidden bg-slate-50">
+      <main className="flex flex-1 flex-col overflow-y-auto min-h-0 pb-12 bg-slate-50">
         {/* ── TOP SETUP & BATCH BAR ── */}
         <section className="shrink-0 border-b border-slate-200 bg-white px-6 py-4 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1185,14 +1250,32 @@ function OMRWorkstationContent() {
           <div className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
             <div className="mx-auto flex w-full max-w-2xl flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-10 text-center shadow-xs">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-800">
-                <Upload className="h-8 w-8" />
+                {isScanning ? (
+                  <RefreshCw className="h-8 w-8 animate-spin text-red-800" />
+                ) : (
+                  <Upload className="h-8 w-8" />
+                )}
               </div>
               <h2 className="text-xl font-bold text-slate-900">
-                Upload Scanned Sheet or Take Photo
+                {isScanning ? "Processing Answer Sheet..." : "Upload Scanned Sheet or Take Photo"}
               </h2>
               <p className="mt-1 max-w-md text-sm text-slate-500">
-                Drag and drop a student answer sheet, take a live camera photo, or test with our sample OMR document to begin score verification.
+                {isScanning
+                  ? "Running computer vision fiducial alignment and bubble detection algorithms..."
+                  : "Drag and drop a student answer sheet, take a live camera photo, or test with our sample OMR document to begin score verification."}
               </p>
+
+              {errorMessage && (
+                <div className="mt-4 w-full max-w-md rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-left shadow-xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-bold text-rose-900">OMR Scan Failed</h4>
+                      <p className="mt-0.5 text-xs text-rose-700 leading-relaxed">{errorMessage}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Upload Input */}
               <input
@@ -1246,7 +1329,7 @@ function OMRWorkstationContent() {
           </div>
         ) : (
           /* ── SPLIT-SCREEN WORKSTATION MODE ── */
-          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
+          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-[750px] lg:min-h-[calc(100vh-280px)]">
             {/* ══════════════════════════════════════════════════════
                 LEFT COLUMN (55%): High-Resolution Scanned Paper Viewer
                ══════════════════════════════════════════════════════ */}
@@ -1326,7 +1409,7 @@ function OMRWorkstationContent() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                className={`relative flex flex-1 items-center justify-center overflow-hidden select-none p-4 ${
+                className={`relative flex flex-1 items-start justify-center overflow-y-auto select-none p-6 ${
                   isDragging ? "cursor-grabbing" : "cursor-grab"
                 }`}
               >
@@ -1335,23 +1418,23 @@ function OMRWorkstationContent() {
                   style={{
                     transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
                     transition: isDragging ? "none" : "transform 0.15s ease-out",
-                    transformOrigin: "center center",
+                    transformOrigin: "top center",
                   }}
-                  className="relative max-h-full max-w-full"
+                  className="relative my-2 max-w-full"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={sheetImage}
                     alt="Scanned Student Answer Sheet"
                     draggable={false}
-                    className="max-h-[82vh] w-auto rounded-lg shadow-2xl object-contain border border-slate-800"
+                    className="h-auto w-auto max-w-full rounded-lg shadow-2xl border border-slate-800"
                   />
                 </div>
+              </div>
 
-                {/* Helper Instructions Pill */}
-                <div className="pointer-events-none absolute bottom-3 left-4 z-10 rounded-lg bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm shadow-sm">
-                  Scroll to zoom &bull; Drag to pan &bull; Press R to rotate &bull; Press 0 to reset
-                </div>
+              {/* Helper Instructions Pill */}
+              <div className="pointer-events-none absolute bottom-3 left-4 z-10 rounded-lg bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm shadow-sm">
+                Scroll to view &bull; Ctrl+Scroll to zoom &bull; Drag to pan &bull; Press R to rotate &bull; Press 0 to reset
               </div>
             </div>
 
@@ -1421,6 +1504,16 @@ function OMRWorkstationContent() {
                     >
                       Review Flagged
                     </button>
+                  </div>
+                )}
+
+                {/* Unsaved / Error Banner if assessmentId is missing */}
+                {!assessmentId && (
+                  <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                    <span className="font-semibold">
+                      Assessment record was not created or saved. Finalizing is disabled.
+                    </span>
                   </div>
                 )}
               </div>
@@ -1661,8 +1754,8 @@ function OMRWorkstationContent() {
                   <button
                     type="button"
                     onClick={handleSaveAndFinalize}
-                    disabled={isSaving}
-                    className="flex-[2] inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
+                    disabled={isSaving || !assessmentId || !selectedStudentId}
+                    className="flex-[2] inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? (
                       <>

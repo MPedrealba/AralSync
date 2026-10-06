@@ -141,8 +141,9 @@ export default function Header({ title }: HeaderProps) {
           {/* Panel + click-away */}
           {open && (
             <>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={-1}
                 className="fixed inset-0 z-40 cursor-default"
                 onClick={() => setOpen(false)}
                 aria-label="Close notifications"

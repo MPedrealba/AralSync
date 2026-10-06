@@ -53,8 +53,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Account creation is coordinator-owned; principal keeps read-only access.
-    await requireAuth(req, ['coordinator']);
+    await requireAuth(req, ['principal', 'coordinator']);
     await connectDB();
 
     const body = await req.json();

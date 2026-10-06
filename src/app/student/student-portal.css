@@ -273,6 +273,8 @@
 .student-portal .badge-frustration { background: var(--badge-beginning-bg); color: var(--badge-beginning-text); }
 .student-portal .badge-risk { background: var(--badge-risk-bg); color: var(--badge-risk-text); }
 .student-portal .badge-completed { background: var(--badge-completed-bg); color: var(--badge-completed-text); }
+.student-portal .badge-reviewed { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+.student-portal .badge-submitted { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
 .student-portal .badge-inprogress { background: var(--badge-inprogress-bg); color: var(--badge-inprogress-text); }
 .student-portal .badge-notstarted { background: var(--badge-notstarted-bg); color: var(--badge-notstarted-text); }
 

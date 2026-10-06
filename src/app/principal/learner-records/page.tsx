@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { useSearch } from "@/components/SearchContext";
-import { Search, Eye, Loader2, AlertCircle } from "lucide-react";
+import { Search, Eye, Loader2, AlertCircle, X, BookOpen, GraduationCap, ShieldAlert, Award } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface LearnerRow {
   name: string;
@@ -28,6 +29,7 @@ const statusStyle: Record<string, string> = {
 
 export default function PrincipalLearnerRecordsPage() {
   const [learners, setLearners] = useState<LearnerRow[]>([]);
+  const [selectedLearner, setSelectedLearner] = useState<LearnerRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { query: search, setQuery: setSearch } = useSearch();
@@ -41,8 +43,8 @@ export default function PrincipalLearnerRecordsPage() {
       if (search) params.set("search", search);
       if (gradeFilter) params.set("grade", gradeFilter);
       const res = await fetch(`/api/principal/learner-records?${params.toString()}`);
-      const json = await res.json();
-      if (json.success) setLearners(json.data);
+      const json = await parseJsonResponse(res);
+      if (json.success && Array.isArray(json.data)) setLearners(json.data);
       else setError(json.error || "Failed to load records.");
     } catch {
       setError("Failed to load records.");
@@ -122,7 +124,11 @@ export default function PrincipalLearnerRecordsPage() {
                       <td className="px-6 py-3.5"><span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${readingStyle[l.reading] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>{l.reading}</span></td>
                       <td className="px-6 py-3.5"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle[l.status] ?? ""}`}>{l.status}</span></td>
                       <td className="px-6 py-3.5">
-                        <button className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLearner(l)}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                        >
                           <Eye className="h-3.5 w-3.5" /> View
                         </button>
                       </td>
@@ -130,6 +136,68 @@ export default function PrincipalLearnerRecordsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Learner Detail Modal */}
+        {selectedLearner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setSelectedLearner(null)}
+            />
+            <div className="relative z-10 w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200">
+                    <GraduationCap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">{selectedLearner.name}</h3>
+                    <p className="text-xs text-gray-500">LRN: {selectedLearner.lrn}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLearner(null)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-4 text-xs">
+                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3.5">
+                  <p className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Academic Placement</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{selectedLearner.grade} &bull; {selectedLearner.section}</p>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3.5">
+                  <p className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">At-Risk Status</p>
+                  <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle[selectedLearner.status] ?? ""}`}>
+                    {selectedLearner.status}
+                  </span>
+                </div>
+                <div className="col-span-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3.5">
+                  <p className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Phil-IRI Reading Level</p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-600" />
+                    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${readingStyle[selectedLearner.reading] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                      {selectedLearner.reading}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLearner(null)}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import mongoose from 'mongoose';
 import { NextResponse, NextRequest } from 'next/server';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
@@ -9,7 +10,7 @@ import AnswerKey from '../../../../../models/AnswerKey';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Recommendation from '../../../../../models/Recommendation';
 import { logAudit } from '@/lib/audit';
-import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
+import { syncLearnerPhilIriMetrics, calculateRiskLevelFromScore } from '@/lib/philIriSync';
 
 /* ──────────────────────────────────────────────────────────────
  *  OMR Processing — OpenCV via Python microservice
@@ -96,17 +97,52 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    /* ── Verify student is assigned to this teacher ── */
-    const learnerAssigned = await LearnerRecord.findOne({
-      studentId,
-      assignedTeacherId: teacher.id,
-    });
-    if (!learnerAssigned) {
+    /* ── Verify student is assigned to this teacher or their cohort ── */
+    const learnerQuery: any = {
+      $or: [
+        { studentId: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : studentId },
+        { _id: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : null },
+        { lrn: studentId },
+      ].filter((q) => q._id !== null),
+    };
+
+    const learner = await LearnerRecord.findOne(learnerQuery);
+    if (!learner) {
       return NextResponse.json(
-        { error: 'Forbidden: This student is not assigned to you.' },
+        { error: 'Forbidden: Student record was not found in the database.' },
+        { status: 404 }
+      );
+    }
+
+    const teacherIdStr = teacher.id.toString();
+    const isDirectlyAssigned =
+      learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr;
+
+    // Allow teachers to scan for students in their assigned sections/cohorts
+    let isSectionAssigned = false;
+    if (!isDirectlyAssigned && learner.section) {
+      const teacherIdObj = mongoose.isValidObjectId(teacher.id)
+        ? new mongoose.Types.ObjectId(teacher.id)
+        : teacher.id;
+      const sectionMatch = await LearnerRecord.exists({
+        assignedTeacherId: teacherIdObj,
+        section: learner.section,
+        ...(learner.gradeLevel ? { gradeLevel: learner.gradeLevel } : {}),
+      });
+      if (sectionMatch) {
+        isSectionAssigned = true;
+      }
+    }
+
+    if (!isDirectlyAssigned && !isSectionAssigned) {
+      return NextResponse.json(
+        { error: 'Forbidden: This student is not assigned to you or your cohorts.' },
         { status: 403 }
       );
     }
+
+    // Normalize studentId to the student's User ObjectId for Assessments and Phil-IRI
+    const actualStudentId = learner.studentId ? learner.studentId.toString() : studentId;
 
     /* ── Load answer key (if provided) ── */
     let keyDoc: any = null;
@@ -179,7 +215,7 @@ export async function POST(req: NextRequest) {
 
     /* ── Save assessment ── */
     const assessment = await Assessment.create({
-      studentId,
+      studentId: actualStudentId,
       type: 'OMR',
       subject,
       title,
@@ -204,15 +240,17 @@ export async function POST(req: NextRequest) {
       date: new Date(),
     });
 
-    if (subject === 'Reading' && status === 'approved') {
-      await syncLearnerPhilIriMetrics(studentId);
+    const calculatedRisk = calculateRiskLevelFromScore(percentage);
+
+    if (actualStudentId) {
+      await LearnerRecord.findOneAndUpdate(
+        { studentId: actualStudentId },
+        { masteryStatus: mastery, riskLevel: calculatedRisk }
+      ).catch(() => {});
     }
 
-    if (studentId) {
-      await LearnerRecord.findOneAndUpdate(
-        { studentId },
-        { masteryStatus: mastery }
-      ).catch(() => {});
+    if (subject === 'Reading' && status === 'approved') {
+      await syncLearnerPhilIriMetrics(actualStudentId);
     }
 
     await logAudit({
@@ -222,7 +260,7 @@ export async function POST(req: NextRequest) {
       action: 'omr_sheet_uploaded',
       targetType: 'Assessment',
       meta: {
-        studentId,
+        studentId: actualStudentId,
         subject,
         title,
         mcCorrect,
@@ -276,6 +314,7 @@ export async function PUT(req: NextRequest) {
       competency,
       subject,
       title,
+      answerKeyId,
     } = body;
 
     if (!assessmentId) {
@@ -289,33 +328,88 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
     }
 
-    /* ── Verify student is assigned to this teacher ── */
-    const actualStudentId = studentId || assessment.studentId;
+    /* ── Verify student is assigned to this teacher or their cohort ── */
+    let actualStudentId = studentId || assessment.studentId;
     if (actualStudentId) {
-      const learnerAssigned = await LearnerRecord.findOne({
-        studentId: actualStudentId,
-        assignedTeacherId: teacher.id,
-      });
-      if (!learnerAssigned) {
+      const learnerQuery: any = {
+        $or: [
+          { studentId: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : actualStudentId },
+          { _id: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : null },
+          { lrn: actualStudentId },
+        ].filter((q) => q._id !== null),
+      };
+
+      const learner = await LearnerRecord.findOne(learnerQuery);
+      if (!learner) {
         return NextResponse.json(
-          { error: 'Forbidden: This student is not assigned to you.' },
+          { error: 'Forbidden: Student record was not found.' },
+          { status: 404 }
+        );
+      }
+
+      const teacherIdStr = teacher.id.toString();
+      const isDirectlyAssigned =
+        learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr;
+
+      let isSectionAssigned = false;
+      if (!isDirectlyAssigned && learner.section) {
+        const teacherIdObj = mongoose.isValidObjectId(teacher.id)
+          ? new mongoose.Types.ObjectId(teacher.id)
+          : teacher.id;
+        const sectionMatch = await LearnerRecord.exists({
+          assignedTeacherId: teacherIdObj,
+          section: learner.section,
+          ...(learner.gradeLevel ? { gradeLevel: learner.gradeLevel } : {}),
+        });
+        if (sectionMatch) {
+          isSectionAssigned = true;
+        }
+      }
+
+      if (!isDirectlyAssigned && !isSectionAssigned) {
+        return NextResponse.json(
+          { error: 'Forbidden: This student is not assigned to you or your cohorts.' },
           { status: 403 }
         );
       }
+
+      actualStudentId = learner.studentId ? learner.studentId.toString() : actualStudentId;
     }
 
-    // Load answer key if attached
+    // Load answer key if attached or explicitly specified
     let keyDoc: any = null;
-    if (assessment.answerKeyRef) {
-      keyDoc = await AnswerKey.findById(assessment.answerKeyRef).lean();
+    const targetKeyId = answerKeyId || assessment.answerKeyRef;
+    if (targetKeyId && mongoose.isValidObjectId(targetKeyId)) {
+      keyDoc = await AnswerKey.findById(targetKeyId).lean();
     }
     if (!keyDoc && (subject || assessment.subject)) {
       keyDoc = await AnswerKey.findOne({ subject: subject || assessment.subject }).sort({ created: -1 }).lean();
     }
 
-    const keyAnswers: string[] = keyDoc?.answers ?? [];
-    const keyModes: string[] = keyDoc?.modes ?? [];
+    const rawKeyAnswers = Array.isArray(keyDoc?.answers) ? keyDoc.answers : (keyDoc?.answerLetters || []);
+    const normalizedKeyAnswers = rawKeyAnswers.map((a: any) => {
+      if (!a) return "";
+      if (typeof a === "string") return a;
+      if (typeof a === "object" && a.correctKey) return String(a.correctKey);
+      if (typeof a === "object" && a.letter) return String(a.letter);
+      return String(a);
+    });
+    const keyAnswers: string[] =
+      normalizedKeyAnswers.length > 0 && normalizedKeyAnswers.some(Boolean)
+        ? normalizedKeyAnswers
+        : (keyDoc?.questions || []).map((q: any) => q.correctAnswer || q.answer || 'A');
+
+    const keyModes: string[] =
+      Array.isArray(keyDoc?.modes) && keyDoc.modes.length === keyAnswers.length
+        ? keyDoc.modes
+        : keyAnswers.map(() => 'mc');
+
     const totalItems = keyAnswers.length || assessment.totalItems || 20;
+
+    if (keyDoc?._id) {
+      assessment.answerKeyRef = keyDoc._id;
+    }
+    assessment.totalItems = totalItems;
 
     const answersToGrade = Array.isArray(verifiedAnswers)
       ? verifiedAnswers
@@ -366,11 +460,13 @@ export async function PUT(req: NextRequest) {
 
     await assessment.save();
 
+    const calculatedRisk = calculateRiskLevelFromScore(percentage);
+
     // ── Sync LearnerRecord ──
     if (actualStudentId) {
       await LearnerRecord.findOneAndUpdate(
         { studentId: actualStudentId },
-        { masteryStatus: finalMastery }
+        { masteryStatus: finalMastery, riskLevel: calculatedRisk }
       ).catch(() => {});
 
       // Sync Phil-IRI metrics if Reading

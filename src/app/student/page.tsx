@@ -54,6 +54,8 @@ export default function StudentDashboardPage() {
       return "bg-red-50 text-red-700 ring-red-200";
     if (risk === "Moderate Risk")
       return "bg-amber-50 text-amber-700 ring-amber-200";
+    if (risk === "Pending Assessment")
+      return "bg-slate-100 text-slate-700 ring-slate-200";
     return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   };
 
@@ -170,7 +172,7 @@ export default function StudentDashboardPage() {
               )}`}
             >
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {learnerRecord?.riskLevel || "Low Risk"}
+              {learnerRecord?.riskLevel || "Pending Assessment"}
             </span>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-gray-500">
@@ -278,7 +280,7 @@ export default function StudentDashboardPage() {
                   >
                     {intervention.type}
                   </span>
-                  <div className="mt-3 text-xs text-gray-400">
+                  <div className="mt-3 text-xs text-gray-400" suppressHydrationWarning>
                     Assigned {formatDate(intervention.assignedDate)}
                   </div>
                 </div>

@@ -5,7 +5,11 @@ const LearnerRecordSchema = new mongoose.Schema({
   lrn: { type: String, required: true, unique: true },
   gradeLevel: { type: Number },
   section: { type: String },
-  riskLevel: { type: String, enum: ['Low Risk', 'Moderate Risk', 'High Risk'] },
+  riskLevel: {
+    type: String,
+    enum: ['Low Risk', 'Moderate Risk', 'High Risk', 'Pending Assessment'],
+    default: 'Pending Assessment'
+  },
   masteryStatus: { type: String, enum: ['Beginning', 'Developing', 'Approaching', 'Proficient'] },
   guardian: { type: String },
   contact: { type: String },
@@ -46,7 +50,7 @@ const LearnerRecordSchema = new mongoose.Schema({
 
 LearnerRecordSchema.index({ assignedTeacherId: 1 });
 
-if (mongoose.models.LearnerRecord && !mongoose.models.LearnerRecord.schema.paths.assignedTeacherId) {
+if (mongoose.models.LearnerRecord && (!mongoose.models.LearnerRecord.schema.paths.assignedTeacherId || !mongoose.models.LearnerRecord.schema.paths.riskLevel?.enumValues?.includes('Pending Assessment'))) {
   delete mongoose.models.LearnerRecord;
 }
 

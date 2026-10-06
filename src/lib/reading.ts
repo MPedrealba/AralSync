@@ -406,10 +406,10 @@ export async function transcribeGroq(
     throw new Error('Speech-to-text service failed. Try again or use Simulate.');
   }
 
-  const groqJson = await groqRes.json();
+  const groqJson = await groqRes.json().catch(() => ({}));
   return {
-    text: groqJson.text || '',
-    segments: Array.isArray(groqJson.segments) ? groqJson.segments : [],
+    text: groqJson?.text || '',
+    segments: Array.isArray(groqJson?.segments) ? groqJson.segments : [],
   };
 }
 
@@ -617,13 +617,19 @@ Return strictly valid JSON with this shape:
     throw new Error(`OpenAI API error (${res.status}): ${errText}`);
   }
 
-  const json = await res.json();
-  const textContent = json.choices?.[0]?.message?.content;
+  const json = await res.json().catch(() => ({}));
+  const textContent = json?.choices?.[0]?.message?.content;
   if (!textContent) {
     throw new Error('No content returned from OpenAI');
   }
 
-  const parsed = JSON.parse(textContent);
+  let parsed: any = null;
+  try {
+    const cleaned = textContent.replace(/```json\s*|```/g, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new Error('Failed to parse AI generated questions.');
+  }
   const questions: LLMGeneratedQuestion[] = Array.isArray(parsed?.questions) ? parsed.questions : [];
 
   if (questions.length < count) {

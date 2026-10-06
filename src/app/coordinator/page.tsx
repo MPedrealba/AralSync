@@ -158,7 +158,7 @@ export default function CoordinatorDashboardPage() {
                         <p className="text-[11px] capitalize text-slate-400">{l.role}</p>
                       </div>
                     </div>
-                    <span className="text-[11px] text-slate-400 font-medium">{fmtTime(l.time)}</span>
+                    <span className="text-[11px] text-slate-400 font-medium" suppressHydrationWarning>{fmtTime(l.time)}</span>
                   </li>
                 ))}
               </ul>

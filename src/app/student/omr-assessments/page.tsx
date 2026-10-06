@@ -140,7 +140,7 @@ export default function OMRAssessmentsPage() {
                   <td>
                     <span className={`badge ${badgeMap[row.masteryLevel] || "badge-beginning"}`}>{row.masteryLevel}</span>
                   </td>
-                  <td style={{ fontWeight: 600, fontSize: "0.85rem" }}>{fmtDate(row.date)}</td>
+                  <td style={{ fontWeight: 600, fontSize: "0.85rem" }} suppressHydrationWarning>{fmtDate(row.date)}</td>
                 </tr>
               ))
             )}

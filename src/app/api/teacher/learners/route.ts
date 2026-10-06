@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
@@ -23,8 +24,26 @@ export async function GET(req: NextRequest) {
     const section = searchParams.get('section');
     const risk = searchParams.get('risk');
 
+    const teacherIdObj = mongoose.Types.ObjectId.isValid(teacher.id)
+      ? new mongoose.Types.ObjectId(teacher.id)
+      : teacher.id;
+
+    // Discover any sections taught by or assigned to this teacher
+    const teacherSections = await LearnerRecord.distinct('section', {
+      $or: [{ assignedTeacherId: teacher.id }, { assignedTeacherId: teacherIdObj }],
+      section: { $ne: null, $exists: true },
+    });
+
+    const teacherMatchConditions: any[] = [
+      { assignedTeacherId: teacher.id },
+      { assignedTeacherId: teacherIdObj },
+    ];
+    if (teacherSections.length > 0) {
+      teacherMatchConditions.push({ section: { $in: teacherSections } });
+    }
+
     const filter: Record<string, unknown> = {
-      assignedTeacherId: teacher.id,
+      $or: teacherMatchConditions,
     };
     if (grade) {
       const g = Number(grade.replace(/\D/g, ''));

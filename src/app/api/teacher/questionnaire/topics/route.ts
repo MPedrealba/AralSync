@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     await connectDB();
 
     // 1. Get teacher profile for subject assignment
-    const user = await User.findById(authUser.userId)
+    const user = await User.findById(authUser.id)
       .select('assignedSubject specialization')
       .lean();
     const assignedSubject =
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     // 3. Find topics this specific teacher has already generated an assessment for
     const teacherAnswerKeys = await AnswerKey.find({
-      teacherId: authUser.userId,
+      teacherId: authUser.id,
       topic: { $exists: true, $ne: '' },
     })
       .select('topic title created')

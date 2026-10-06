@@ -48,6 +48,7 @@ const riskStyles: Record<string, { bg: string; text: string; border: string }> =
   "High Risk": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
   "Moderate Risk": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   "Low Risk": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  "Pending Assessment": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
 
 function CoordinatorLearnersContent() {
@@ -154,7 +155,7 @@ function CoordinatorLearnersContent() {
         setUnassignedCount(json.unassignedCount ?? 0);
         setTotalCount(json.totalCount ?? 0);
         if (Array.isArray(json.allGrades) && json.allGrades.length > 0) {
-          setAllGrades(json.allGrades);
+          setAllGrades(json.allGrades.map(String));
         }
         if (Array.isArray(json.allSections) && json.allSections.length > 0) {
           setAllSections(json.allSections);
@@ -180,8 +181,7 @@ function CoordinatorLearnersContent() {
 
   // Sorted list of all available grades
   const sortedGrades = useMemo(() => {
-    const set = new Set<string>(allGrades);
-    ["7", "8", "9", "10"].forEach((g) => set.add(g));
+    const set = new Set<string>([...(allGrades || []).map(String), "7", "8", "9", "10"]);
     return Array.from(set).sort((a, b) => Number(a) - Number(b));
   }, [allGrades]);
 
@@ -458,7 +458,7 @@ function CoordinatorLearnersContent() {
                   className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                 >
                   {sortedGrades.map((g) => (
-                    <option key={g} value={g}>
+                    <option key={`grade-${g}`} value={String(g)}>
                       Grade {g}
                     </option>
                   ))}
@@ -565,7 +565,7 @@ function CoordinatorLearnersContent() {
                 >
                   <option value="all">All Grades</option>
                   {sortedGrades.map((g) => (
-                    <option key={g} value={String(g)}>
+                    <option key={`grade-${g}`} value={String(g)}>
                       Grade {g}
                     </option>
                   ))}
@@ -741,7 +741,7 @@ function CoordinatorLearnersContent() {
                 ) : (
                   learners.map((learner) => {
                     const risk = riskStyles[learner.riskLevel] || {
-                      bg: "bg-slate-50",
+                      bg: "bg-slate-100",
                       text: "text-slate-700",
                       border: "border-slate-200",
                     };
@@ -782,7 +782,7 @@ function CoordinatorLearnersContent() {
                           <span
                             className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${risk.bg} ${risk.text} ${risk.border}`}
                           >
-                            {learner.riskLevel}
+                            {learner.riskLevel || "Pending Assessment"}
                           </span>
                         </td>
 
@@ -839,30 +839,34 @@ function CoordinatorLearnersContent() {
       </main>
 
       {/* Add Learner Modal */}
-      <AddLearnerModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onCreated={() => {
-          loadLearners();
-          loadTeachers();
-          setFeedbackMessage({ text: "Learner successfully enrolled!", type: "success" });
-        }}
-        teachers={teachers}
-        gradeSectionsMap={gradeSectionsMap}
-        availableSections={allSections}
-      />
+      {isAddModalOpen && (
+        <AddLearnerModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onCreated={() => {
+            loadLearners();
+            loadTeachers();
+            setFeedbackMessage({ text: "Learner successfully enrolled!", type: "success" });
+          }}
+          teachers={teachers}
+          gradeSectionsMap={gradeSectionsMap}
+          availableSections={allSections}
+        />
+      )}
 
       {/* Bulk Import Modal */}
-      <CoordinatorImportLearnersModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImported={() => {
-          loadLearners();
-          loadTeachers();
-          setFeedbackMessage({ text: "Learners successfully imported!", type: "success" });
-        }}
-        teachers={teachers}
-      />
+      {isImportModalOpen && (
+        <CoordinatorImportLearnersModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={() => {
+            loadLearners();
+            loadTeachers();
+            setFeedbackMessage({ text: "Learners successfully imported!", type: "success" });
+          }}
+          teachers={teachers}
+        />
+      )}
     </>
   );
 }

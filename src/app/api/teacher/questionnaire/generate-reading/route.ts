@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const allowRetake = Boolean(body?.allowRetake);
 
     // 1. Check teacher's assigned subject
-    const user = await User.findById(authUser.userId).select('assignedSubject specialization').lean();
+    const user = await User.findById(authUser.id).select('assignedSubject specialization').lean();
     const assignedSubject = (user as any)?.assignedSubject;
     if (assignedSubject && assignedSubject !== 'Reading' && assignedSubject !== 'All') {
       return NextResponse.json(
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
         if (!allowRetake) {
           for (const t of requestedTopics) {
             const priorKey = await AnswerKey.findOne({
-              teacherId: authUser.userId,
+              teacherId: authUser.id,
               $or: [{ topic: t }, { topics: t }],
               assessmentType: 'quiz',
             }).select('title created').lean();
@@ -270,7 +270,7 @@ export async function POST(req: NextRequest) {
       assessmentType,
       topic: finalTopic,
       topics: finalTopicsList,
-      teacherId: authUser.userId,
+      teacherId: authUser.id,
       items: itemCount,
       totalItems: itemCount,
       examId: null,

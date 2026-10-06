@@ -21,9 +21,9 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body || {};
 
-    const allowedStatuses = ['Not Started', 'In Progress', 'Completed'];
+    const allowedStatuses = ['Not Started', 'In Progress', 'Submitted', 'Completed'];
     if (!status || !allowedStatuses.includes(status)) {
-      return fail('status must be Not Started, In Progress, or Completed', 400);
+      return fail('status must be Not Started, In Progress, Submitted, or Completed', 400);
     }
 
     await connectDB();
@@ -35,6 +35,10 @@ export async function PATCH(
 
     if (intervention.studentId.toString() !== userId) {
       return fail('You can only update your own interventions', 403);
+    }
+
+    if (intervention.status === 'Reviewed' || intervention.status === 'Completed') {
+      return fail('This assignment has already been graded and cannot be modified', 400);
     }
 
     const updated = await Intervention.findByIdAndUpdate(

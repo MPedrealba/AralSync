@@ -5,6 +5,7 @@ import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
+import { getTeacherSubject, getInterventionSubjectFilter } from '@/lib/teacherScope';
 
 const TYPE_LABEL: Record<string, string> = {
   OMR: 'OMR Assessment',
@@ -17,12 +18,15 @@ const TYPE_LABEL: Record<string, string> = {
  * Merged assessment + intervention timeline for one learner, plus the
  * intervention-completion donut and overall assessment improvement %.
  * learner defaults to the first learner if omitted.
+ * Scoped to teacher's assigned subject.
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     const { searchParams } = new URL(req.url);
     const learnerId = searchParams.get('learner');
@@ -60,9 +64,12 @@ export async function GET(req: NextRequest) {
       }
 
       const studentIds = scopedRecords.map((r: any) => r.studentId?._id).filter(Boolean);
-      const allInterventions = await Intervention.find({
-        studentId: { $in: studentIds },
-      });
+      const intQuery: Record<string, any> = { studentId: { $in: studentIds } };
+      if (teacherSubject !== 'All') {
+        const subFilter = getInterventionSubjectFilter(teacherSubject);
+        Object.assign(intQuery, subFilter);
+      }
+      const allInterventions = await Intervention.find(intQuery);
 
       const recordByStudent = new Map(
         scopedRecords.map((r: any) => [r.studentId?._id?.toString(), r])
@@ -142,9 +149,17 @@ export async function GET(req: NextRequest) {
       'name'
     );
 
+    const singleAssessQuery: Record<string, any> = { studentId: learnerId };
+    const singleIntQuery: Record<string, any> = { studentId: learnerId };
+    if (teacherSubject !== 'All') {
+      singleAssessQuery.subject = teacherSubject;
+      const subFilter = getInterventionSubjectFilter(teacherSubject);
+      Object.assign(singleIntQuery, subFilter);
+    }
+
     const [assessments, interventions] = await Promise.all([
-      Assessment.find({ studentId: learnerId }).sort({ date: 1 }),
-      Intervention.find({ studentId: learnerId }).sort({ assignedDate: -1 }),
+      Assessment.find(singleAssessQuery).sort({ date: 1 }),
+      Intervention.find(singleIntQuery).sort({ assignedDate: -1 }),
     ]);
 
     // Per-type two-point improvement.

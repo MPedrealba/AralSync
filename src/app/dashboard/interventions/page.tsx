@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
-import { BookOpen, Calculator, FlaskConical, Wand2 } from "lucide-react";
+import { BookOpen, Calculator, FlaskConical, Wand2, Eye } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Intervention {
@@ -18,28 +19,26 @@ interface Intervention {
   created: string;
   status: string;
   reviewed: boolean;
+  submissionText?: string;
+  submissionFileUrl?: string | null;
+  submittedAt?: string | null;
+  teacherRemarks?: string;
+  gradeScore?: string | number | null;
+  instructions?: string;
+  dueDate?: string | null;
 }
 
 const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
-  Completed: {
-    bg: "bg-emerald-50",
-    text: "text-emerald-700",
-    border: "border-emerald-200",
-  },
-  "In Progress": {
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    border: "border-amber-200",
-  },
-  "Not Started": {
-    bg: "bg-gray-50",
-    text: "text-gray-600",
-    border: "border-gray-200",
-  },
+  Completed: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  Reviewed: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+  Submitted: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+  "In Progress": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+  "Not Started": { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200" },
 };
 
 export default function InterventionsPage() {
   const [interventions, setInterventions] = useState<Intervention[]>([]);
+  const [assignedSubject, setAssignedSubject] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [learnerFilter, setLearnerFilter] = useState("");
@@ -52,8 +51,15 @@ export default function InterventionsPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/teacher/interventions");
+      const [res, meRes] = await Promise.all([
+        fetch("/api/teacher/interventions"),
+        fetch("/api/auth/me"),
+      ]);
       const json = await parseJsonResponse(res);
+      const meJson = await parseJsonResponse(meRes);
+      if (meJson.success && meJson.data?.assignedSubject) {
+        setAssignedSubject(meJson.data.assignedSubject);
+      }
       if (json.success) setInterventions(json.data);
       else setError(json.error || "Failed to load interventions.");
     } catch (e) {
@@ -136,11 +142,29 @@ export default function InterventionsPage() {
   const learners = Array.from(new Set(interventions.map((i) => i.learner)));
   const grades = Array.from(new Set(interventions.map((i) => i.gradeSection)));
 
+  const matchesSubject = (item: Intervention, subj: string) => {
+    if (subj === "All") return true;
+    const cat = (item.category || "").toLowerCase();
+    const weak = (item.weakness || "").toLowerCase();
+    const title = (item.title || "").toLowerCase();
+    if (subj === "Reading") {
+      return /reading|comprehension|english|filipino|literacy/.test(`${cat} ${weak} ${title}`);
+    }
+    if (subj === "Math") {
+      return /math|numeracy|multiplication|addition|fraction/.test(`${cat} ${weak} ${title}`);
+    }
+    if (subj === "Science") {
+      return /science|ecosystem|matter|energy|force/.test(`${cat} ${weak} ${title}`);
+    }
+    return true;
+  };
+
   const filtered = interventions.filter((item) => {
     const matchLearner = learnerFilter ? item.learner === learnerFilter : true;
     const matchGrade = gradeFilter ? item.gradeSection.includes(gradeFilter) : true;
     const matchSection = sectionFilter ? item.gradeSection.includes(sectionFilter) : true;
-    return matchLearner && matchGrade && matchSection;
+    const matchSubject = assignedSubject !== "All" ? matchesSubject(item, assignedSubject) : true;
+    return matchLearner && matchGrade && matchSection && matchSubject;
   });
 
   return (
@@ -150,9 +174,16 @@ export default function InterventionsPage() {
         {/* Title + Filters */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Interventions</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Interventions</h1>
+              {assignedSubject !== "All" && (
+                <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-800 border border-red-200">
+                  {assignedSubject} Only
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm text-slate-500">
-              Assign and track personalized learning materials.
+              Assign and track personalized learning materials for {assignedSubject !== "All" ? assignedSubject : "all subjects"}.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -298,7 +329,17 @@ export default function InterventionsPage() {
                       {item.gradeSection || item.type}
                     </span>
                     <div className="flex items-center gap-2">
-                      {item.status !== "Completed" && (
+                      {(item.submissionText || item.submissionFileUrl || item.status === "Submitted") && (
+                        <Link
+                          href="/dashboard/recommendations"
+                          className="inline-flex items-center gap-1 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-2xs transition-all hover:bg-blue-100 hover:text-blue-800 active:scale-[0.98]"
+                          title="View what the student submitted"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-blue-600" />
+                          <span>View Work</span>
+                        </Link>
+                      )}
+                      {item.status !== "Completed" && item.status !== "Submitted" && (
                         <button
                           onClick={() => markComplete(item.id)}
                           className="rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"

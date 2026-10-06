@@ -194,6 +194,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [recTime, setRecTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
 
@@ -267,12 +268,20 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
     };
   }, []);
 
   const startRecording = async () => {
     setError("");
     setResult(null);
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
     setAudioUrl(null);
     setAudioBlob(null);
     try {
@@ -285,7 +294,9 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       mr.onstop = () => {
         const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        setAudioUrl(url);
         stream.getTracks().forEach((t) => t.stop());
       };
       mr.start();

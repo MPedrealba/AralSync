@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AlertTriangle, Clock } from "lucide-react";
 
 interface Alert {
@@ -112,9 +113,12 @@ export default function InterventionAlerts() {
         })}
       </div>
 
-      <button className="mt-4 w-full rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900">
+      <Link
+        href="/dashboard/interventions"
+        className="mt-4 block w-full rounded-lg border border-gray-200 py-2 text-center text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+      >
         View All Interventions
-      </button>
+      </Link>
     </div>
   );
 }

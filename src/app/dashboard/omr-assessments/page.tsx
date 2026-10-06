@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 import { parseJsonResponse } from "@/lib/safeFetch";
-import { getSubjectBubbleSheet } from "@/lib/bubbleSheet";
+import { getSubjectBubbleSheet, getStampedBubbleSheetUrl } from "@/lib/bubbleSheet";
 
 /* ──── Tab names ──── */
 const tabs = ["Results/History", "Generate Questionnaire", "Exam Library"] as const;
@@ -71,8 +71,10 @@ interface AnswerKeyRow {
   items: number;
   answers?: (string | null)[];
   modes?: string[];
+  writtenItems?: any[];
   questions?: Array<{
-    number: number;
+    number?: number;
+    index?: number;
     prompt: string;
     choices?: string[];
     mode?: "mc" | "written";
@@ -102,6 +104,28 @@ const fmtShort = (d: string) => {
 
 export default function OMRAssessmentsPage() {
   const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
+  const [assignedSubject, setAssignedSubject] = useState<string>("All");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data) {
+          const raw = json.data.assignedSubject || "";
+          if (["Math", "Reading", "Science"].includes(raw)) {
+            setAssignedSubject(raw);
+          } else if (json.data.specialization === "reading") {
+            setAssignedSubject("Reading");
+          } else {
+            setAssignedSubject("All");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch teacher profile", err);
+      }
+    })();
+  }, []);
 
   return (
     <>
@@ -133,21 +157,21 @@ export default function OMRAssessmentsPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === "Results/History" && <ResultsTab />}
-        {activeTab === "Generate Questionnaire" && <GenerateTab />}
-        {activeTab === "Exam Library" && <AnswerKeysTab />}
+        {activeTab === "Results/History" && <ResultsTab assignedSubject={assignedSubject} />}
+        {activeTab === "Generate Questionnaire" && <GenerateTab assignedSubjectProp={assignedSubject} />}
+        {activeTab === "Exam Library" && <AnswerKeysTab assignedSubject={assignedSubject} />}
       </main>
     </>
   );
 }
 
 /* ━━━ TAB 2: RESULTS / HISTORY ━━━ */
-function ResultsTab() {
+function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
   const [results, setResults] = useState<AssessmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { query: search, setQuery: setSearch } = useSearch();
-  const [subjectFilter, setSubjectFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState(assignedSubject !== "All" ? assignedSubject : "");
   const [gradeFilter, setGradeFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"" | "quiz" | "exam">("");
   // Grading modal state
@@ -157,6 +181,12 @@ function ResultsTab() {
   const [gradeError, setGradeError] = useState("");
   // Sheet viewer modal state
   const [viewingSheet, setViewingSheet] = useState<AssessmentRow | null>(null);
+
+  useEffect(() => {
+    if (assignedSubject && assignedSubject !== "All") {
+      setSubjectFilter(assignedSubject);
+    }
+  }, [assignedSubject]);
 
   const load = async () => {
     setLoading(true);
@@ -248,12 +278,19 @@ function ResultsTab() {
         <select
           value={subjectFilter}
           onChange={(e) => setSubjectFilter(e.target.value)}
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+          disabled={assignedSubject !== "All"}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
         >
-          <option value="">All Subjects</option>
-          <option>Math</option>
-          <option>Reading</option>
-          <option>Science</option>
+          {assignedSubject === "All" ? (
+            <>
+              <option value="">All Subjects</option>
+              <option>Math</option>
+              <option>Reading</option>
+              <option>Science</option>
+            </>
+          ) : (
+            <option value={assignedSubject}>{assignedSubject}</option>
+          )}
         </select>
         <select
           value={gradeFilter}
@@ -509,7 +546,7 @@ function ResultsTab() {
 }
 
 /* ━━━ TAB 3: ANSWER KEYS ━━━ */
-function AnswerKeysTab() {
+function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
   const [keys, setKeys] = useState<AnswerKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -523,7 +560,7 @@ function AnswerKeysTab() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newAssessmentType, setNewAssessmentType] = useState<"quiz" | "exam">("quiz");
-  const [newSubject, setNewSubject] = useState("Math");
+  const [newSubject, setNewSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [newItems, setNewItems] = useState(20);
   const [answersText, setAnswersText] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -538,11 +575,18 @@ function AnswerKeysTab() {
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanTitle, setScanTitle] = useState("");
   const [scanAssessmentType, setScanAssessmentType] = useState<"quiz" | "exam">("quiz");
-  const [scanSubject, setScanSubject] = useState("Math");
+  const [scanSubject, setScanSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [scanItems, setScanItems] = useState(20);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [detected, setDetected] = useState<{ item: number; letter: string | null }[] | null>(null);
+
+  useEffect(() => {
+    if (assignedSubject && assignedSubject !== "All") {
+      setNewSubject(assignedSubject);
+      setScanSubject(assignedSubject);
+    }
+  }, [assignedSubject]);
 
   const load = async () => {
     setLoading(true);
@@ -626,7 +670,7 @@ function AnswerKeysTab() {
         setShowAddModal(false);
         setNewTitle("");
         setAnswersText("");
-        setNewSubject("Math");
+        setNewSubject(assignedSubject !== "All" ? assignedSubject : "Math");
         setNewAssessmentType("quiz");
         setNewItems(20);
       } else setSaveError("Failed to save the answer key.");
@@ -740,7 +784,7 @@ function AnswerKeysTab() {
         setDetected(null);
         setScanTitle("");
         setScanAssessmentType("quiz");
-        setScanSubject("Math");
+        setScanSubject(assignedSubject !== "All" ? assignedSubject : "Math");
         setScanItems(20);
       } else setSaveError("Failed to save the scanned answer key.");
     } finally {
@@ -759,7 +803,11 @@ function AnswerKeysTab() {
     const isExam = ak.assessmentType === "exam" || ak.title.toLowerCase().includes("exam");
     const matchesCategory =
       !keyCategoryFilter ? true : keyCategoryFilter === "exam" ? isExam : !isExam;
-    return matchesSearch && matchesCategory;
+    const matchesSubject =
+      assignedSubject && assignedSubject !== "All"
+        ? (ak.subject || "").toLowerCase() === assignedSubject.toLowerCase()
+        : true;
+    return matchesSearch && matchesCategory && matchesSubject;
   });
 
   return (
@@ -1011,11 +1059,18 @@ function AnswerKeysTab() {
                   <select
                     value={newSubject}
                     onChange={(e) => setNewSubject(e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                    disabled={assignedSubject !== "All"}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
-                    <option value="Math">Numeracy</option>
-                    <option value="Reading">Reading</option>
-                    <option value="Science">Science</option>
+                    {assignedSubject === "All" ? (
+                      <>
+                        <option value="Math">Numeracy</option>
+                        <option value="Reading">Reading</option>
+                        <option value="Science">Science</option>
+                      </>
+                    ) : (
+                      <option value={assignedSubject}>{assignedSubject === "Math" ? "Numeracy" : assignedSubject}</option>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -1109,11 +1164,18 @@ function AnswerKeysTab() {
                     <select
                       value={scanSubject}
                       onChange={(e) => setScanSubject(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+                      disabled={assignedSubject !== "All"}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     >
-                      <option value="Math">Numeracy</option>
-                      <option value="Reading">Reading</option>
-                      <option value="Science">Science</option>
+                      {assignedSubject === "All" ? (
+                        <>
+                          <option value="Math">Numeracy</option>
+                          <option value="Reading">Reading</option>
+                          <option value="Science">Science</option>
+                        </>
+                      ) : (
+                        <option value={assignedSubject}>{assignedSubject === "Math" ? "Numeracy" : assignedSubject}</option>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -1278,7 +1340,7 @@ function ExamViewerModal({
   examKey: AnswerKeyRow;
   onClose: () => void;
 }) {
-  const [printThis, setPrintThis] = useState<"questionnaire" | "bubble" | null>(null);
+  const [printThis, setPrintThis] = useState<"questionnaire" | null>(null);
   const activeBubbleSheet = getSubjectBubbleSheet(examKey.subject || "Reading");
   const isExam = examKey.assessmentType === "exam" || examKey.title.toLowerCase().includes("exam");
 
@@ -1295,7 +1357,11 @@ function ExamViewerModal({
 
   const hasFullQuestions = Array.isArray(examKey.questions) && examKey.questions.length > 0;
   const questionsList = hasFullQuestions
-    ? examKey.questions!
+    ? examKey.questions!.map((q, idx) => ({
+        ...q,
+        number: q.number ?? (q.index !== undefined ? q.index + 1 : idx + 1),
+        correctAnswer: q.correctAnswer || (examKey.answers ? examKey.answers[idx] : undefined),
+      }))
     : (examKey.answers || []).map((ans: any, idx) => {
         const val =
           typeof ans === "object" && ans !== null
@@ -1321,7 +1387,7 @@ function ExamViewerModal({
     topics: examKey.topics,
     itemCount: examKey.items || questionsList.length,
     writtenCount: examKey.writtenItems?.length || (examKey.modes || []).filter((m) => m === "written").length,
-    questions: questionsList,
+    questions: questionsList as any,
     answers: (examKey.answers || []).map((ans: any) =>
       typeof ans === "object" && ans !== null ? ans.correctKey || ans.letter || "" : String(ans || "")
     ),
@@ -1340,8 +1406,8 @@ function ExamViewerModal({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
         <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
           {/* Header */}
-          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="relative flex flex-col gap-4 border-b border-slate-200 bg-white px-6 py-5 pr-16 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 {isExam ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
@@ -1355,7 +1421,7 @@ function ExamViewerModal({
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                   <CheckCircle2 className="h-3 w-3" /> Saved in Exam Library
                 </span>
-                <h3 className="text-base font-bold text-slate-900">{examKey.title}</h3>
+                <h3 className="text-base font-bold text-slate-900 truncate">{examKey.title}</h3>
               </div>
               <p className="mt-1 text-xs text-slate-500">
                 {examKey.items} items • {examKey.subject} •{" "}
@@ -1364,10 +1430,10 @@ function ExamViewerModal({
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
               <Link
                 href={`/dashboard/omr-scan?keyId=${examKey.id}&subject=${encodeURIComponent(examKey.subject || "Reading")}`}
-                className="h-9 inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all"
+                className="h-9 inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all whitespace-nowrap"
                 title="Administered this test? Click here to start auto-grading student bubble sheets."
               >
                 <Camera className="h-3.5 w-3.5" />
@@ -1376,40 +1442,38 @@ function ExamViewerModal({
               <button
                 type="button"
                 onClick={() => setPrintThis("questionnaire")}
-                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] cursor-pointer"
+                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap"
               >
                 <Printer className="h-3.5 w-3.5 text-slate-500" />
                 <span>Print Questionnaire</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setPrintThis("bubble")}
-                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-900 shadow-2xs hover:bg-red-100 transition-all active:scale-[0.98] cursor-pointer"
-                title="Print authentic OMR bubble answer sheet with this test's title"
-              >
-                <FileText className="h-3.5 w-3.5 text-red-800" />
-                <span>Print Bubble Sheet</span>
-              </button>
               <a
-                href={activeBubbleSheet.url}
+                href={getStampedBubbleSheetUrl({
+                  subject: examKey.subject,
+                  title: examKey.title,
+                  items: examKey.items,
+                  gradeLevel: 7,
+                  download: true,
+                })}
                 target="_blank"
                 rel="noopener noreferrer"
-                download={`AralSync-${examKey.subject || activeBubbleSheet.subject}-Bubble-Sheet.pdf`}
-                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98]"
-                title="Download blank matching 50-item bubble sheet"
+                className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] whitespace-nowrap"
+                title="Download authentic official school bubble sheet PDF stamped with this test's title"
               >
                 <Download className="h-3.5 w-3.5 text-slate-500" />
-                <span>Blank Sheet</span>
+                <span>Download Bubble Sheet</span>
               </a>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-9 w-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-                title="Close modal"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
+
+            {/* Pinned Close (X) Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-5 right-5 h-9 w-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              title="Close modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Modal Body */}
@@ -1440,52 +1504,50 @@ function ExamViewerModal({
 
             {/* Questions list */}
             <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-              {questionsList.map((q) => (
-                <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
-                    {q.number}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
-                    {q.mode === "written" ? (
-                      <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
-                        Teacher graded
-                      </div>
-                    ) : (
-                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                        {(q.choices || []).map((c, i) => (
-                          <span key={i} className="text-xs text-slate-600">
-                            <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {q.competencyCode && (
-                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                          {q.competencyCode}
-                        </span>
-                      )}
-                      {q.difficulty && (
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
-                          {q.difficulty}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {examKey.answers && examKey.answers[q.number - 1] && (
-                    <span className="hidden shrink-0 items-center justify-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 sm:flex border border-slate-200">
-                      Key:{" "}
-                      {typeof examKey.answers[q.number - 1] === "object" && examKey.answers[q.number - 1] !== null
-                        ? (examKey.answers[q.number - 1] as any)?.correctKey ||
-                          (examKey.answers[q.number - 1] as any)?.letter ||
-                          "—"
-                        : String(examKey.answers[q.number - 1] ?? "—")}
+              {questionsList.map((q, idx) => {
+                const keyVal = q.correctAnswer || (examKey.answers && examKey.answers[(q.number || idx + 1) - 1]) || "";
+                return (
+                  <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
+                      {q.number}
                     </span>
-                  )}
-                </div>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
+                      {q.mode === "written" ? (
+                        <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
+                          Teacher graded
+                        </div>
+                      ) : (
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                          {(q.choices || []).map((c, i) => (
+                            <span key={i} className="text-xs text-slate-600">
+                              <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {q.competencyCode && (
+                          <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                            {q.competencyCode}
+                          </span>
+                        )}
+                        {q.difficulty && (
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                            {q.difficulty}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {keyVal && (
+                      <span className="flex shrink-0 items-center justify-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                        Key: {keyVal}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1501,7 +1563,7 @@ function ExamViewerModal({
             @page { size: portrait; margin: 0.8cm; } }
           `}</style>
           <div className="print-exam-modal-overlay fixed inset-0 z-[999] overflow-auto bg-white p-8 text-black">
-            {printThis === "questionnaire" ? (
+            {printThis === "questionnaire" && (
               <>
                 <div className="mb-6 border-b-2 border-black pb-3 text-center">
                   <h1 className="text-lg font-bold uppercase">AralSync — Official Assessment</h1>
@@ -1541,8 +1603,6 @@ function ExamViewerModal({
                   ))}
                 </div>
               </>
-            ) : (
-              <BubbleSheetPrint doc={viewerDoc} />
             )}
           </div>
         </>
@@ -1561,6 +1621,7 @@ interface GeneratedQuestion {
   competencyCode: string;
   competency: string;
   topic: string;
+  correctAnswer?: string;
 }
 
 interface GeneratedDoc {
@@ -1606,11 +1667,17 @@ function sanitizeDoc(d: any): GeneratedDoc {
   };
 }
 
-function GenerateTab() {
+function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: string }) {
   const [assessmentType, setAssessmentType] = useState<"quiz" | "exam">("quiz");
-  const [genType, setGenType] = useState<"aral" | "bank" | "reading" | "upload">("aral");
-  const [subject, setSubject] = useState("Reading");
-  const [assignedSubject, setAssignedSubject] = useState("Reading");
+  const [assignedSubject, setAssignedSubject] = useState(
+    assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
+  );
+  const [genType, setGenType] = useState<"aral" | "bank" | "reading" | "upload">(
+    assignedSubjectProp === "Math" || assignedSubjectProp === "Science" ? "bank" : "aral"
+  );
+  const [subject, setSubject] = useState(
+    assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
+  );
   const [grade, setGrade] = useState(7);
   const [count, setCount] = useState(10);
   const [writtenCount, setWrittenCount] = useState(0);
@@ -1629,7 +1696,7 @@ function GenerateTab() {
   const [customTitle, setCustomTitle] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
-  const [printMode, setPrintMode] = useState<"questionnaire" | "bubble" | null>(null);
+  const [printMode, setPrintMode] = useState<"questionnaire" | null>(null);
   const [swappingItem, setSwappingItem] = useState<number | null>(null);
   const [swapToast, setSwapToast] = useState<{ text: string; ok: boolean } | null>(null);
   const [isSavingExam, setIsSavingExam] = useState(false);
@@ -1640,6 +1707,16 @@ function GenerateTab() {
   const activeBubbleSheet = getSubjectBubbleSheet(
     doc?.subject || (genType === "reading" || genType === "aral" ? "Reading" : subject)
   );
+
+  useEffect(() => {
+    if (assignedSubjectProp && assignedSubjectProp !== "All") {
+      setAssignedSubject(assignedSubjectProp);
+      setSubject(assignedSubjectProp);
+      if (assignedSubjectProp === "Math" || assignedSubjectProp === "Science") {
+        setGenType("bank");
+      }
+    }
+  }, [assignedSubjectProp]);
 
   // Load official ARAL curriculum topics and used-topics state for this teacher
   useEffect(() => {
@@ -1657,6 +1734,9 @@ function GenerateTab() {
             setAssignedSubject(json.assignedSubject);
             if (json.assignedSubject !== "All") {
               setSubject(json.assignedSubject);
+              if (json.assignedSubject === "Math" || json.assignedSubject === "Science") {
+                setGenType("bank");
+              }
             }
           }
           // Default to the first unused topic if available
@@ -1971,19 +2051,21 @@ function GenerateTab() {
           </div>
 
           {/* Source toggle */}
-          <div className="mb-5 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setGenType("aral")}
-              className={`h-9 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                genType === "aral"
-                  ? "bg-white text-slate-900 shadow-xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <span>ARAL</span>
-              <span className="rounded bg-red-100 px-1 py-0.2 text-[9px] font-bold text-red-800">DepEd</span>
-            </button>
+          <div className={`mb-5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-2" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
+            {(assignedSubject === "All" || assignedSubject === "Reading") && (
+              <button
+                type="button"
+                onClick={() => setGenType("aral")}
+                className={`h-9 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  genType === "aral"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>ARAL</span>
+                <span className="rounded bg-red-100 px-1 py-0.2 text-[9px] font-bold text-red-800">DepEd</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setGenType("bank")}
@@ -1995,17 +2077,19 @@ function GenerateTab() {
             >
               Bank
             </button>
-            <button
-              type="button"
-              onClick={() => setGenType("reading")}
-              className={`h-9 rounded-lg text-xs font-semibold transition-all ${
-                genType === "reading"
-                  ? "bg-white text-slate-900 shadow-xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Reading
-            </button>
+            {(assignedSubject === "All" || assignedSubject === "Reading") && (
+              <button
+                type="button"
+                onClick={() => setGenType("reading")}
+                className={`h-9 rounded-lg text-xs font-semibold transition-all ${
+                  genType === "reading"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Reading
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setGenType("upload")}
@@ -2241,7 +2325,7 @@ function GenerateTab() {
                   </label>
                   <select
                     value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   >
                     {assessmentType === "quiz"
@@ -2265,7 +2349,7 @@ function GenerateTab() {
                   </label>
                   <select
                     value={writtenCount}
-                    onChange={(e) => setWrittenCount(parseInt(e.target.value))}
+                    onChange={(e) => setWrittenCount(parseInt(e.target.value) || 0)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   >
                     {[0, 2, 5].filter((n) => n <= count).map((n) => (
@@ -2294,17 +2378,26 @@ function GenerateTab() {
                   <select
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
+                    disabled={assignedSubject !== "All"}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
-                    <option value="Math">Mathematics (Pending PDFs)</option>
-                    <option value="Science">Science (Pending PDFs)</option>
+                    {assignedSubject === "All" ? (
+                      <>
+                        <option value="Math">Mathematics (Pending PDFs)</option>
+                        <option value="Science">Science (Pending PDFs)</option>
+                      </>
+                    ) : assignedSubject === "Science" ? (
+                      <option value="Science">Science (Pending PDFs)</option>
+                    ) : (
+                      <option value="Math">Mathematics (Pending PDFs)</option>
+                    )}
                   </select>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Grade Level</label>
                   <select
                     value={grade}
-                    onChange={(e) => setGrade(parseInt(e.target.value))}
+                    onChange={(e) => setGrade(parseInt(e.target.value) || 7)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[7, 8, 9, 10].map((g) => (
@@ -2316,7 +2409,7 @@ function GenerateTab() {
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Number of Items</label>
                   <select
                     value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[10, 20, 25, 50].map((n) => (
@@ -2347,7 +2440,7 @@ function GenerateTab() {
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Items</label>
                   <select
                     value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[10, 20, 25, 50].map((n) => (
@@ -2358,7 +2451,8 @@ function GenerateTab() {
               </>
             ) : (
               <UploadExamForm
-                onCancel={() => setGenType("aral")}
+                assignedSubject={assignedSubject}
+                onCancel={() => setGenType(assignedSubject === "Math" || assignedSubject === "Science" ? "bank" : "aral")}
                 onUploaded={(d: GeneratedDoc) => {
                   setDoc(sanitizeDoc(d));
                   setGenError("");
@@ -2568,25 +2662,21 @@ function GenerateTab() {
                     <Printer className="h-4 w-4 text-slate-500" />
                     <span>Print Questionnaire</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setPrintMode("bubble")}
-                    className="h-10 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-900 shadow-2xs hover:bg-red-100 hover:text-red-950 active:scale-[0.98] transition-all cursor-pointer"
-                    title="Print authentic OMR bubble answer sheet with custom title and student info header"
-                  >
-                    <FileText className="h-4 w-4 text-red-800" />
-                    <span>Print Bubble Sheet</span>
-                  </button>
                   <a
-                    href={activeBubbleSheet.url}
+                    href={getStampedBubbleSheetUrl({
+                      subject: doc.subject,
+                      title: doc.title,
+                      items: doc.itemCount,
+                      gradeLevel: doc.gradeLevel,
+                      download: true,
+                    })}
                     target="_blank"
                     rel="noopener noreferrer"
-                    download={`AralSync-${doc.subject || activeBubbleSheet.subject}-Bubble-Sheet.pdf`}
                     className="h-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all"
-                    title="Download official matching subject bubble sheet PDF"
+                    title="Download official school bubble sheet PDF stamped with your test title"
                   >
                     <Download className="h-4 w-4 text-slate-500" />
-                    <span>Download Blank Sheet</span>
+                    <span>Download Bubble Sheet</span>
                   </a>
                 </div>
               </div>
@@ -2787,11 +2877,7 @@ function GenerateTab() {
             @page { size: portrait; margin: 0.8cm; } }
           `}</style>
           <div className="print-overlay fixed inset-0 z-[999] overflow-auto bg-white">
-            {printMode === "questionnaire" ? (
-              <QuestionnairePrint doc={doc!} />
-            ) : (
-              <BubbleSheetPrint doc={doc!} />
-            )}
+            <QuestionnairePrint doc={doc!} />
           </div>
         </>
       )}
@@ -2801,14 +2887,16 @@ function GenerateTab() {
 
 /* ━━━ TAB 3 (UPLOAD): DUAL-UPLOAD CUSTOM EXAM & 50-ITEM ANSWER KEY WORKSTATION ━━━ */
 function UploadExamForm({
+  assignedSubject = "All",
   onUploaded,
   onCancel,
 }: {
+  assignedSubject?: string;
   onUploaded: (doc: GeneratedDoc) => void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("Math");
+  const [subject, setSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [grade, setGrade] = useState(7);
   const [totalItems, setTotalItems] = useState(50);
   const [examFile, setExamFile] = useState<File | null>(null);
@@ -2821,6 +2909,12 @@ function UploadExamForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [successToast, setSuccessToast] = useState("");
+
+  useEffect(() => {
+    if (assignedSubject && assignedSubject !== "All") {
+      setSubject(assignedSubject);
+    }
+  }, [assignedSubject]);
 
   const handleItemCountChange = (newCount: number) => {
     setTotalItems(newCount);
@@ -3025,18 +3119,25 @@ function UploadExamForm({
           <select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium outline-none focus:border-blue-500"
+            disabled={assignedSubject !== "All"}
+            className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
-            <option value="Math">Mathematics</option>
-            <option value="Science">Science</option>
-            <option value="Reading">Reading</option>
+            {assignedSubject === "All" ? (
+              <>
+                <option value="Math">Mathematics</option>
+                <option value="Science">Science</option>
+                <option value="Reading">Reading</option>
+              </>
+            ) : (
+              <option value={assignedSubject}>{assignedSubject === "Math" ? "Mathematics" : assignedSubject}</option>
+            )}
           </select>
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Grade Level</label>
           <select
             value={grade}
-            onChange={(e) => setGrade(parseInt(e.target.value))}
+            onChange={(e) => setGrade(parseInt(e.target.value) || 7)}
             className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium outline-none focus:border-blue-500"
           >
             {[7, 8, 9, 10].map((g) => (
@@ -3048,7 +3149,7 @@ function UploadExamForm({
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Total Items</label>
           <select
             value={totalItems}
-            onChange={(e) => handleItemCountChange(parseInt(e.target.value))}
+            onChange={(e) => handleItemCountChange(parseInt(e.target.value) || 20)}
             className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium outline-none focus:border-blue-500"
           >
             {[10, 20, 25, 30, 40, 50].map((n) => (
@@ -3391,142 +3492,3 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
   );
 }
 
-/* ━━━ PRINTABLE: BUBBLE SHEET ━━━ */
-function BubbleSheetPrint({ doc }: { doc: GeneratedDoc }) {
-  const isExam = doc.assessmentType === "exam" || doc.title.toLowerCase().includes("exam");
-  const questions = doc.questions || [];
-  const total = doc.itemCount || questions.length;
-
-  // Split questions into columns for clean single-page printing
-  const numCols = total > 15 ? 2 : 1;
-  const itemsPerCol = Math.ceil(total / numCols);
-
-  const columns: GeneratedQuestion[][] = [];
-  for (let c = 0; c < numCols; c++) {
-    columns.push(questions.slice(c * itemsPerCol, (c + 1) * itemsPerCol));
-  }
-
-  return (
-    <div className="relative bg-white p-6 text-black min-h-screen">
-      {/* Registration (fiducial) marks — filled black corner circles for OpenCV OMR detection */}
-      <span className="absolute left-3 top-3 block h-5 w-5 rounded-full bg-black" />
-      <span className="absolute right-3 top-3 block h-5 w-5 rounded-full bg-black" />
-      <span className="absolute bottom-3 left-3 block h-5 w-5 rounded-full bg-black" />
-      <span className="absolute bottom-3 right-3 block h-5 w-5 rounded-full bg-black" />
-
-      {/* Header Container */}
-      <div className="mb-3 border-b-2 border-black pb-2.5 text-center">
-        <div className="flex items-center justify-between px-6 text-[10px] font-semibold tracking-wider uppercase text-gray-700">
-          <span>Republic of the Philippines</span>
-          <span>Department of Education</span>
-          <span>ARAL Program</span>
-        </div>
-
-        {/* Prominent Custom Quiz or Exam Title */}
-        <div className="my-2 rounded border-2 border-black bg-gray-50/50 py-1.5 px-3">
-          <h1 className="text-base font-black uppercase tracking-wider text-black">
-            {doc.title || (isExam ? "Comprehensive Examination" : "Weekly Assessment Quiz")}
-          </h1>
-          <p className="text-[11px] font-semibold text-gray-800 mt-0.5">
-            OFFICIAL OMR ANSWER SHEET • {isExam ? "COMPREHENSIVE EXAM" : "WEEKLY QUIZ"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold text-gray-800">
-          <span>Subject: <strong className="font-bold">{doc.subject}</strong></span>
-          <span>Grade: <strong className="font-bold">Grade {doc.gradeLevel || 7}</strong></span>
-          <span>Total Items: <strong className="font-bold">{total}</strong></span>
-          {doc.writtenCount > 0 && (
-            <span>Written: <strong className="font-bold">{doc.writtenCount} item(s)</strong></span>
-          )}
-        </div>
-      </div>
-
-      {/* Student Identification & Details Block */}
-      <div className="mb-3 grid grid-cols-12 gap-3 text-xs border border-gray-400 p-2.5 rounded bg-gray-50/30">
-        <div className="col-span-8 flex gap-2">
-          <span className="font-bold uppercase tracking-wider text-gray-700 text-[11px]">Learner Name:</span>
-          <span className="flex-1 border-b border-black border-dashed" />
-        </div>
-        <div className="col-span-4 flex gap-2">
-          <span className="font-bold uppercase tracking-wider text-gray-700 text-[11px]">LRN:</span>
-          <span className="flex-1 border-b border-black border-dashed" />
-        </div>
-        <div className="col-span-5 flex gap-2">
-          <span className="font-bold uppercase tracking-wider text-gray-700 text-[11px]">Grade &amp; Section:</span>
-          <span className="flex-1 border-b border-black border-dashed" />
-        </div>
-        <div className="col-span-4 flex gap-2">
-          <span className="font-bold uppercase tracking-wider text-gray-700 text-[11px]">Date:</span>
-          <span className="flex-1 border-b border-black border-dashed" />
-        </div>
-        <div className="col-span-3 flex items-center justify-end gap-1">
-          <span className="font-bold uppercase text-[11px] text-gray-700">Raw Score:</span>
-          <span className="inline-block w-14 border-2 border-black text-center font-bold text-xs py-0.5">
-            / {total}
-          </span>
-        </div>
-      </div>
-
-      {/* Shading Instructions Box */}
-      <div className="mb-3 flex items-center justify-between rounded border border-black bg-gray-100/60 px-3 py-1 text-[10px] text-gray-800">
-        <div className="font-medium">
-          <strong className="font-bold uppercase">Instructions:</strong> Use black ballpoint pen or 2B pencil. Shade the circle completely. Do not fold or smudge.
-        </div>
-        <div className="flex items-center gap-3 font-semibold text-gray-900 shrink-0 ml-4">
-          <span>Correct: <span className="inline-block h-3 w-3 rounded-full bg-black align-middle" /></span>
-          <span className="text-gray-500">Incorrect: ✕ ✓ ◐ •</span>
-        </div>
-      </div>
-
-      {/* Multi-Column Bubble Grid */}
-      <div className={numCols === 2 ? "grid grid-cols-2 gap-6 text-xs" : "grid grid-cols-1 gap-6 text-xs"}>
-        {columns.map((colQuestions, cIdx) => (
-          <div key={cIdx} className="space-y-0.5">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b-2 border-black text-[10px] uppercase text-gray-600">
-                  <th className="py-1 text-center w-8">#</th>
-                  <th className="py-1 text-center">Options / Response</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {colQuestions.map((q) => (
-                  <tr key={q.number} className="hover:bg-gray-50">
-                    <td className="py-1.5 text-center font-bold text-gray-900" style={{ width: "2rem" }}>
-                      {q.number < 10 ? `0${q.number}` : q.number}.
-                    </td>
-                    <td className="py-1.5">
-                      {q.mode === "written" ? (
-                        <div className="flex items-center gap-2 px-2">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Written:</span>
-                          <div className="h-4 flex-1 border-b border-black" />
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-around px-2">
-                          {PrintAry.map((letter) => (
-                            <div key={letter} className="flex items-center justify-center">
-                              <span className="flex h-5.5 w-5.5 items-center justify-center rounded-full border-2 border-black font-bold text-[10px] text-black">
-                                {letter}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      </div>
-
-      {/* Sheet Footer */}
-      <div className="mt-3 pt-2 border-t border-gray-300 flex items-center justify-between text-[9px] text-gray-500">
-        <span>AralSync OMR Engine • Automated Scoring &amp; Diagnostic System</span>
-        <span>Key ID: {doc.answerKey?.id || "N/A"} • Form ID: {doc.itemCount}-ITEM-{isExam ? "EXAM" : "QUIZ"}</span>
-      </div>
-    </div>
-  );
-}

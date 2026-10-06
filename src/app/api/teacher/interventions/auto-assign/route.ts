@@ -6,6 +6,7 @@ import LearnerRecord from '../../../../../../models/LearnerRecord';
 import Assessment from '../../../../../../models/Assessment';
 import Intervention from '../../../../../../models/Intervention';
 import Recommendation from '../../../../../../models/Recommendation';
+import { getTeacherSubject, getSubjectFilter } from '@/lib/teacherScope';
 
 /** Weakness (assessment competency) → Recommendation.subject. */
 const SUBJECT_BY_WEAKNESS: Record<string, string> = {
@@ -27,25 +28,31 @@ const WEAK_THRESHOLD = 75;
 
 /**
  * POST /api/teacher/interventions/auto-assign
- * Auto-assigns interventions to learners based on their weakest competencies:
- * every learner whose most recent assessment in a competency scored below 75 gets
- * an intervention drawn from the Recommendation library for that competency's subject.
- * Learners who already have an active (not Completed) intervention for the same
- * weakness are skipped.
+ * Auto-assigns interventions to learners based on their weakest competencies,
+ * strictly scoped to the teacher's assigned subject.
  */
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     const records = await LearnerRecord.find().populate('studentId', 'name');
     const studentIds = records.map((r: any) => r.studentId?._id).filter(Boolean);
 
+    const assessmentQuery: Record<string, any> = { studentId: { $in: studentIds } };
+    const recommendationQuery: Record<string, any> = {};
+    if (teacherSubject !== 'All') {
+      assessmentQuery.subject = teacherSubject;
+      recommendationQuery.subject = teacherSubject;
+    }
+
     const [assessments, interventions, recommendations] = await Promise.all([
-      Assessment.find({ studentId: { $in: studentIds } }).sort({ date: -1 }),
+      Assessment.find(assessmentQuery).sort({ date: -1 }),
       Intervention.find({ studentId: { $in: studentIds } }),
-      Recommendation.find(),
+      Recommendation.find(recommendationQuery),
     ]);
 
     // Latest assessment per (student, competency).
@@ -106,12 +113,49 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const subject = SUBJECT_BY_WEAKNESS[weakness] || studentByCompetency[`${sid}|${weakness}`];
-        const rec = subject ? recBySubject[subject] : undefined;
+        const subject = SUBJECT_BY_WEAKNESS[weakness] || studentByCompetency[`${sid}|${weakness}`] || 'Reading';
+        
+        // Resolve student's Key Stage and remediation level (Basic vs Plus)
+        const grade = record.gradeLevel || 7;
+        const targetKeyStage = grade >= 7 ? 'KS3' : grade >= 4 ? 'KS2' : 'KS1';
+        const isStruggling = record.riskLevel === 'High Risk' || record.readingLevel === 'Non-Reader' || record.readingLevel === 'Frustration';
+        const targetLevel = isStruggling ? 'Basic' : 'Plus';
+
+        // Find best matching ARAL learning material activity
+        let rec = recommendations.find((r: any) =>
+          r.subject === subject &&
+          r.keyStage === targetKeyStage &&
+          r.programLevel === targetLevel &&
+          (weakness ? r.title.toLowerCase().includes(weakness.toLowerCase()) || r.description?.toLowerCase().includes(weakness.toLowerCase()) : true)
+        );
+
+        if (!rec) {
+          rec = recommendations.find((r: any) =>
+            r.subject === subject &&
+            r.keyStage === targetKeyStage &&
+            r.programLevel === targetLevel
+          );
+        }
+
+        if (!rec) {
+          rec = recommendations.find((r: any) =>
+            r.subject === subject &&
+            r.keyStage === targetKeyStage
+          );
+        }
+
+        if (!rec) {
+          rec = recBySubject[subject];
+        }
+
         if (!rec) {
           noMaterial += 1;
           continue;
         }
+
+        const defaultInstructions = rec.description
+          ? `Complete ${rec.title}. Read the attached workbook session, answer the exercises, and submit a photo of your written answers or type your response.`
+          : 'Complete the attached ARAL learning activity and submit your work.';
 
         const intervention = await Intervention.create({
           studentId: sid,
@@ -122,6 +166,13 @@ export async function POST(req: NextRequest) {
           assignedDate: new Date(),
           weakness,
           recommendationRef: rec._id,
+          workbookUrl: rec.workbookUrl || null,
+          tutorGuideUrl: rec.tutorGuideUrl || null,
+          keyStage: rec.keyStage || null,
+          pageStart: rec.pageStart || null,
+          pageEnd: rec.pageEnd || null,
+          sessionInfo: rec.sessionInfo || null,
+          instructions: defaultInstructions,
         });
 
         activeByWeakness.add(key); // prevent a second same-weakness assign this run

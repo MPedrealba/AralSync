@@ -27,6 +27,7 @@ interface ProfileData {
   name: string;
   role: string;
   specialization: string;
+  assignedSubject?: string;
   email: string | null;
   active: boolean;
   createdAt: string | null;
@@ -273,9 +274,11 @@ export default function Profile() {
             {data.role === "teacher" && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                 <BookOpen className="h-3.5 w-3.5" />
-                {specializationLabel[
-                  isEditing ? specialization : data.specialization
-                ] ?? "Subject Teacher"}
+                {data.assignedSubject === "Math" || data.assignedSubject === "Science"
+                  ? `${data.assignedSubject} Teacher`
+                  : specializationLabel[
+                      isEditing ? specialization : data.specialization
+                    ] ?? "Subject Teacher"}
               </span>
             )}
           </div>
@@ -342,7 +345,9 @@ export default function Profile() {
                   Teaching Focus
                 </dt>
                 <dd className="text-sm font-medium text-gray-800">
-                  {specializationLabel[data.specialization] ?? "Subject Teacher"}
+                  {data.assignedSubject === "Math" || data.assignedSubject === "Science"
+                    ? `${data.assignedSubject} Teacher`
+                    : specializationLabel[data.specialization] ?? "Subject Teacher"}
                 </dd>
               </div>
             )}

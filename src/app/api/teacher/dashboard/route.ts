@@ -4,6 +4,7 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
+import { getTeacherSubject, TeacherSubject } from '@/lib/teacherScope';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -15,15 +16,19 @@ const CHART_KEY: Record<string, string> = {
 };
 
 /**
- * Builds a 4-point weekly mastery series from real assessment data.
- * Anchors buckets to the actual date range of assessments so every week
- * renders real averages (falling back to 0 only when there is no data).
+ * Builds a 4-point weekly mastery series from real assessment data,
+ * scoped to the teacher's assigned subject.
  */
-async function buildChartData(): Promise<any[]> {
-  const assessments = await Assessment.find(
-    { score: { $exists: true, $ne: null }, date: { $exists: true } },
-    'subject score date'
-  );
+async function buildChartData(teacherSubject: TeacherSubject): Promise<any[]> {
+  const query: Record<string, any> = {
+    score: { $exists: true, $ne: null },
+    date: { $exists: true },
+  };
+  if (teacherSubject !== 'All') {
+    query.subject = teacherSubject;
+  }
+
+  const assessments = await Assessment.find(query, 'subject score date');
 
   const weeks = 4;
   type Series = { sums: Record<string, number>; counts: Record<string, number> };
@@ -68,9 +73,14 @@ async function buildChartData(): Promise<any[]> {
   }));
 }
 
-/** Latest OMR scans with cohort + class average per assessment title/subject. */
-async function buildRecentScans(): Promise<any[]> {
-  const scans = await Assessment.find({ type: 'OMR' })
+/** Latest OMR scans scoped to teacher's subject. */
+async function buildRecentScans(teacherSubject: TeacherSubject): Promise<any[]> {
+  const query: Record<string, any> = { type: 'OMR' };
+  if (teacherSubject !== 'All') {
+    query.subject = teacherSubject;
+  }
+
+  const scans = await Assessment.find(query)
     .sort({ date: -1 })
     .limit(5)
     .populate('studentId', 'name');
@@ -88,7 +98,7 @@ async function buildRecentScans(): Promise<any[]> {
     {
       $match: {
         title: { $in: titles },
-        subject: { $in: ['Math', 'Reading', 'Science'] },
+        subject: teacherSubject !== 'All' ? teacherSubject : { $in: ['Math', 'Reading', 'Science'] },
         score: { $exists: true, $ne: null },
       },
     },
@@ -121,9 +131,11 @@ async function buildRecentScans(): Promise<any[]> {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     // 1. Total Learners Count
     const totalLearners = await LearnerRecord.countDocuments();
@@ -144,23 +156,36 @@ export async function GET(req: NextRequest) {
       action: "Review Profile",
     }));
 
-    // 3. Recent Scans (last 7 days) + table
+    // 3. Recent Scans (last 7 days) scoped to teacher's subject
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentScans = await Assessment.countDocuments({
+    const scanCountQuery: Record<string, any> = {
       type: 'OMR',
-      date: { $gte: sevenDaysAgo }
-    });
+      date: { $gte: sevenDaysAgo },
+    };
+    if (teacherSubject !== 'All') {
+      scanCountQuery.subject = teacherSubject;
+    }
+
+    const recentScans = await Assessment.countDocuments(scanCountQuery);
 
     // 4. Pending Reviews
-    const pendingReviews = await Assessment.countDocuments({
-      type: 'READING_FLUENCY'
-    });
+    let pendingReviews = 0;
+    if (teacherSubject === 'Reading' || teacherSubject === 'All') {
+      pendingReviews = await Assessment.countDocuments({
+        type: 'READING_FLUENCY',
+      });
+    } else {
+      pendingReviews = await Assessment.countDocuments({
+        subject: teacherSubject,
+        gradingStatus: 'partial',
+      });
+    }
 
     const [chartData, recentScansTable] = await Promise.all([
-      buildChartData(),
-      buildRecentScans(),
+      buildChartData(teacherSubject),
+      buildRecentScans(teacherSubject),
     ]);
 
     return ok({
@@ -173,6 +198,7 @@ export async function GET(req: NextRequest) {
       alerts,
       chartData,
       recentScans: recentScansTable,
+      teacherSubject,
     });
 
   } catch (error) {

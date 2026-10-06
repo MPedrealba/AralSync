@@ -3,6 +3,7 @@ import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import Recommendation from '../../../../../models/Recommendation';
+import { getTeacherSubject, getSubjectFilter } from '@/lib/teacherScope';
 
 const TAB_MAP: Record<string, string> = {
   Video: 'videos',
@@ -11,14 +12,19 @@ const TAB_MAP: Record<string, string> = {
   Module: 'modules',
 };
 
-/** GET /api/teacher/recommendations — the recommendation library grouped by kind. */
+/** GET /api/teacher/recommendations — the recommendation library grouped by kind, scoped to teacher's subject. */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
 
-    const items = await Recommendation.find().sort({ createdAt: 1 });
+    const teacherSubject = await getTeacherSubject(authUser);
+    const { searchParams } = new URL(req.url);
+    const requestedSubject = searchParams.get('subject');
+    const filter = getSubjectFilter(teacherSubject, requestedSubject);
+
+    const items = await Recommendation.find(filter).sort({ createdAt: 1 });
 
     const grouped: Record<string, any[]> = { videos: [], quizzes: [], activities: [], modules: [] };
 
@@ -36,6 +42,9 @@ export async function GET(req: NextRequest) {
         keyStage: rec.keyStage || null,
         programLevel: rec.programLevel || null,
         targetGrades: rec.targetGrades || [],
+        pageStart: rec.pageStart || null,
+        pageEnd: rec.pageEnd || null,
+        sessionInfo: rec.sessionInfo || null,
       });
     });
 

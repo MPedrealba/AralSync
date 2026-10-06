@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { useSearch } from "@/components/SearchContext";
 import { Search, X, Loader2, AlertCircle, Eye, Phone, MapPin, UserRound, BookOpenText, ArrowUpRight } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface AssessmentRow {
   type: string;
@@ -93,7 +94,7 @@ export default function CoordinatorLearnerRecordsPage() {
       if (search) params.set("search", search);
       if (gradeFilter) params.set("grade", gradeFilter);
       const res = await fetch(`/api/coordinator/learner-records?${params.toString()}`);
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) setLearners(json.data);
       else setError(json.error || "Failed to load records.");
     } catch {
@@ -415,7 +416,7 @@ export default function CoordinatorLearnerRecordsPage() {
                                 <span className="text-sm text-gray-300">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 text-sm text-gray-500">{dateFmt(a.date)}</td>
+                            <td className="px-4 py-2.5 text-sm text-gray-500" suppressHydrationWarning>{dateFmt(a.date)}</td>
                           </tr>
                         ))}
                       </tbody>

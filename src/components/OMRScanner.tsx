@@ -431,7 +431,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">
-                    {Math.round((result.score / result.total) * 100)}%
+                    {result.total > 0 ? Math.round((result.score / result.total) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500">Percentage</p>
                 </div>
@@ -495,7 +495,7 @@ export default function OMRScanner({ isOpen, onClose }: OMRScannerProps) {
                 id: result.assessmentId || "recent-scan",
                 title: competency ? `${competency} Diagnostic` : "OMR Diagnostic",
                 studentName: students.find((s) => s._id === studentId)?.name || "Student",
-                score: Math.round((result.score / result.total) * 100),
+                score: result.total > 0 ? Math.round((result.score / result.total) * 100) : 0,
                 masteryLevel: result.masteryLevel,
                 omrSheetUrl: result.omrSheetUrl || preview,
                 omrOriginalFilename: file?.name || "sheet.png",

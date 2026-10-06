@@ -209,7 +209,7 @@ export async function GET(req: NextRequest) {
     const entries = [...studentScores.entries()];
     const vectors = entries.map(([, bySubj]) => {
       const all = Object.values(bySubj).flat();
-      const overall = all.reduce((a, b) => a + b, 0) / all.length;
+      const overall = all.length > 0 ? all.reduce((a, b) => a + b, 0) / all.length : 0;
       return SUBJECTS.map((s) => {
         const arr = bySubj[s];
         if (arr && arr.length) return arr.reduce((a, b) => a + b, 0) / arr.length;

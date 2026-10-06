@@ -33,7 +33,7 @@ export default function AddLearnerModal({
   const [isCustomSection, setIsCustomSection] = useState(false);
   const [customSectionText, setCustomSectionText] = useState("");
   const [assignedTeacherId, setAssignedTeacherId] = useState("");
-  const [riskLevel, setRiskLevel] = useState("Low Risk");
+  const [riskLevel, setRiskLevel] = useState("Pending Assessment");
   const [guardian, setGuardian] = useState("");
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
@@ -41,14 +41,14 @@ export default function AddLearnerModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  if (!isOpen) return null;
-
   const sectionsForGrade = useMemo(() => {
     if (gradeSectionsMap && gradeSectionsMap[gradeLevel] && gradeSectionsMap[gradeLevel].length > 0) {
       return gradeSectionsMap[gradeLevel];
     }
     return availableSections;
   }, [gradeSectionsMap, gradeLevel, availableSections]);
+
+  if (!isOpen) return null;
 
   const handleGradeChange = (newGrade: string) => {
     setGradeLevel(newGrade);
@@ -107,6 +107,7 @@ export default function AddLearnerModal({
       setContact("");
       setAddress("");
       setAssignedTeacherId("");
+      setRiskLevel("Pending Assessment");
       setIsCustomSection(false);
       setCustomSectionText("");
       onCreated();
@@ -288,6 +289,7 @@ export default function AddLearnerModal({
               onChange={(e) => setRiskLevel(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white"
             >
+              <option value="Pending Assessment">Pending Assessment (New Enrollee)</option>
               <option value="Low Risk">Low Risk</option>
               <option value="Moderate Risk">Moderate Risk</option>
               <option value="High Risk">High Risk</option>

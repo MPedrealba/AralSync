@@ -4,6 +4,7 @@ import { ok, fail } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import Intervention from '../../../../../models/Intervention';
 import LearnerRecord from '../../../../../models/LearnerRecord';
+import { getTeacherSubject, getInterventionSubjectFilter } from '@/lib/teacherScope';
 
 /** Map a category/title onto a card icon key. */
 const iconFor = (intervention: any): string => {
@@ -14,17 +15,24 @@ const iconFor = (intervention: any): string => {
   return 'reading';
 };
 
-/** GET /api/teacher/interventions — list with learner name + cohort. */
+/** GET /api/teacher/interventions — list with learner name + cohort scoped to teacher subject. */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
 
+    const teacherSubject = await getTeacherSubject(authUser);
     const { searchParams } = new URL(req.url);
     const filter: Record<string, unknown> = {};
     const status = searchParams.get('status');
     if (status) filter.status = status;
+
+    const subjectFilter = getInterventionSubjectFilter(
+      teacherSubject,
+      searchParams.get('category') || searchParams.get('subject')
+    );
+    Object.assign(filter, subjectFilter);
 
     const interventions = await Intervention.find(filter)
       .sort({ assignedDate: -1 })
@@ -64,6 +72,18 @@ export async function GET(req: NextRequest) {
         workbookUrl: i.workbookUrl || null,
         tutorGuideUrl: i.tutorGuideUrl || null,
         keyStage: i.keyStage || null,
+        pageStart: i.pageStart ?? null,
+        pageEnd: i.pageEnd ?? null,
+        sessionInfo: i.sessionInfo || null,
+        studentId: i.studentId?._id?.toString() || '',
+        instructions: i.instructions || '',
+        dueDate: i.dueDate || null,
+        submissionText: i.submissionText || '',
+        submissionFileUrl: i.submissionFileUrl || null,
+        submittedAt: i.submittedAt || null,
+        teacherRemarks: i.teacherRemarks || '',
+        gradeScore: i.gradeScore ?? null,
+        gradedAt: i.gradedAt || null,
       };
     });
 

@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const trendData = sortedKeys.map((key) => {
       const b = buckets.get(key)!;
       const [, monthIdx] = key.split('-');
-      const monthName = MONTHS[parseInt(monthIdx, 10) - 1];
+      const monthName = MONTHS[parseInt(monthIdx, 10) - 1] || 'Unknown';
       const avg = (subj: string) => (b.counts[subj] ? Math.round(b.sums[subj] / b.counts[subj]) : 0);
       return { month: monthName, Reading: avg('Reading'), Science: avg('Science'), Math: avg('Math') };
     });
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, count]) => {
         const [, monthIdx] = key.split('-');
-        return { month: MONTHS[parseInt(monthIdx, 10) - 1], atRisk: count };
+        return { month: MONTHS[parseInt(monthIdx, 10) - 1] || 'Unknown', atRisk: count };
       });
 
     // 4. Summary

@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import { Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Subject {
   name: string;
@@ -40,7 +41,7 @@ export default function SubjectAnalysisPage() {
       setError("");
       try {
         const res = await fetch("/api/principal/subject-analysis");
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setSubjects(json.data.subjects);
           setGroups(json.data.learnerGroups || []);

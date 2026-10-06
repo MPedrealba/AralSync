@@ -302,7 +302,7 @@ function NewCheckFlow() {
         <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className="h-full rounded-full bg-red-800 transition-all duration-300"
-            style={{ width: `${((currentQ + 1) / totalQuestions) * 100}%` }}
+            style={{ width: `${totalQuestions > 0 ? ((currentQ + 1) / totalQuestions) * 100 : 0}%` }}
           />
         </div>
 
@@ -351,7 +351,7 @@ function NewCheckFlow() {
     (acc, ans, i) => acc + (ans === sampleQuestions[i]?.correctIndex ? 1 : 0),
     0
   );
-  const percentage = Math.round((correctCount / totalQuestions) * 100);
+  const percentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">

@@ -247,7 +247,7 @@ export async function POST(req: NextRequest) {
       guardian: guardian ? guardian.trim() : undefined,
       contact: contact ? contact.trim() : undefined,
       address: address ? address.trim() : undefined,
-      riskLevel: riskLevel || 'Low Risk',
+      riskLevel: riskLevel || 'Pending Assessment',
       masteryStatus: 'Beginning',
       assignedTeacherId: assignedTeacherDoc ? assignedTeacherDoc._id : null,
       assignedTeacherName: assignedTeacherDoc ? assignedTeacherDoc.name : null,

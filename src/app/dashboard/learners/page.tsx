@@ -37,6 +37,7 @@ const riskDisplay: Record<string, string> = {
   "Moderate Risk": "Moderate",
   "Low Risk": "Low",
   "At Risk": "At Risk",
+  "Pending Assessment": "Pending Assessment",
 };
 
 const riskConfig: Record<string, { bg: string; text: string; border: string }> = {
@@ -44,6 +45,7 @@ const riskConfig: Record<string, { bg: string; text: string; border: string }> =
   "At Risk": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
   Moderate: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   Low: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  "Pending Assessment": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
 
 const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
@@ -267,7 +269,7 @@ export default function LearnersPage() {
               label="All Risk Levels"
               value={riskFilter}
               onChange={setRiskFilter}
-              options={["High", "At Risk", "Moderate", "Low"]}
+              options={["High", "At Risk", "Moderate", "Low", "Pending Assessment"]}
             />
           </div>
         </div>

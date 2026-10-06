@@ -140,7 +140,7 @@ export default function ComprehensionCheckPage() {
                         {r.title || r.passageTitle || "Untitled Passage"}
                       </h3>
                       <span className="tag-chip" style={{ marginTop: "0.35rem" }}>{r.subject || "Reading"}</span>
-                      <span style={{ fontSize: "0.75rem", color: "#9ca3af", marginLeft: "0.5rem" }}>{fmtDate(r.date)}</span>
+                      <span style={{ fontSize: "0.75rem", color: "#9ca3af", marginLeft: "0.5rem" }} suppressHydrationWarning>{fmtDate(r.date)}</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                       <span className={`badge ${badgeMap[r.masteryLevel] || "badge-beginning"}`}>{r.masteryLevel}</span>

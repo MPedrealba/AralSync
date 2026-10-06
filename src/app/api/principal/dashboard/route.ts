@@ -21,11 +21,13 @@ export async function GET(req: NextRequest) {
     // 2. Risk Distribution (for Pie Chart)
     const lowRisk = await LearnerRecord.countDocuments({ riskLevel: 'Low Risk' });
     const modRisk = await LearnerRecord.countDocuments({ riskLevel: 'Moderate Risk' });
+    const pendingAssessment = await LearnerRecord.countDocuments({ riskLevel: 'Pending Assessment' });
 
     const riskDistribution = [
       { name: "Low Risk", value: lowRisk, color: "#22c55e" },
       { name: "Moderate Risk", value: modRisk, color: "#f59e0b" },
       { name: "High Risk", value: highRiskCount, color: "#ef4444" },
+      { name: "Pending Assessment", value: pendingAssessment, color: "#94a3b8" },
     ];
 
     // 3. Recent Activity Feed (Assessments & Interventions)

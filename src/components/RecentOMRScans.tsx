@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FileCheck, MoreHorizontal } from "lucide-react";
 
 interface ScanRow {
@@ -64,9 +65,12 @@ export default function RecentOMRScans() {
             Recent OMR Scans
           </h3>
         </div>
-        <button className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
+        <Link
+          href="/dashboard/omr-assessments?tab=results"
+          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+        >
           View All
-        </button>
+        </Link>
       </div>
 
       <div className="overflow-x-auto">
@@ -132,9 +136,13 @@ export default function RecentOMRScans() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <button className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+                    <Link
+                      href="/dashboard/omr-assessments?tab=results"
+                      className="inline-flex rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                      title="View Assessment Results"
+                    >
                       <MoreHorizontal className="h-4 w-4" />
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               );

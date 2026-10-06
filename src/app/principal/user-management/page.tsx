@@ -45,6 +45,7 @@ export default function UserManagementPage() {
   const [error, setError] = useState("");
   const { query } = useSearch();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [formMsg, setFormMsg] = useState("");
   // Whether the viewer can manage accounts (coordinator) or only view (principal).
@@ -212,7 +213,12 @@ export default function UserManagementPage() {
                       <td className="px-6 py-3.5"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle[u.status] ?? ""}`}>{u.status}</span></td>
                       <td className="px-6 py-3.5 text-sm text-gray-500">{u.lastLogin}</td>
                       <td className="px-6 py-3.5">
-                        <button className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUser(u)}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                          title="View user details"
+                        >
                           <MoreVertical className="h-4 w-4" />
                         </button>
                       </td>
@@ -294,6 +300,69 @@ export default function UserManagementPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {saving ? "Creating…" : "Create User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Details Modal */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSelectedUser(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-xs font-bold text-red-900 border border-red-200">
+                  {selectedUser.avatar}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">{selectedUser.name}</h3>
+                  <p className="text-xs text-gray-500">{selectedUser.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedUser(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-xs">
+              <div className="flex justify-between items-center rounded-xl border border-gray-100 bg-gray-50/70 p-3">
+                <span className="font-semibold text-gray-500">Account Role</span>
+                <span className="font-bold text-gray-900">{selectedUser.role}</span>
+              </div>
+              <div className="flex justify-between items-center rounded-xl border border-gray-100 bg-gray-50/70 p-3">
+                <span className="font-semibold text-gray-500">Specialization</span>
+                <span className="font-medium text-gray-800">
+                  {specLabel[selectedUser.specialization ?? "all-subjects"] ?? "All Subjects"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center rounded-xl border border-gray-100 bg-gray-50/70 p-3">
+                <span className="font-semibold text-gray-500">Status</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle[selectedUser.status] ?? ""}`}>
+                  {selectedUser.status}
+                </span>
+              </div>
+              <div className="flex justify-between items-center rounded-xl border border-gray-100 bg-gray-50/70 p-3">
+                <span className="font-semibold text-gray-500">Last Login / Activity</span>
+                <span className="text-gray-600 font-medium" suppressHydrationWarning>{selectedUser.lastLogin}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedUser(null)}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Close
               </button>
             </div>
           </div>

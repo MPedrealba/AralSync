@@ -21,6 +21,9 @@ const RecommendationSchema = new mongoose.Schema(
     keyStage: { type: String, default: null },
     programLevel: { type: String, default: null },
     targetGrades: [{ type: Number }],
+    pageStart: { type: Number, default: null },
+    pageEnd: { type: Number, default: null },
+    sessionInfo: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

@@ -19,6 +19,18 @@ export interface PhilIriSyncResult {
 }
 
 /**
+ * Auto-calculates risk level based on assessment score percentage:
+ * - Score < 50%  -> 'High Risk'
+ * - Score 50%-74% -> 'Moderate Risk'
+ * - Score >= 75%  -> 'Low Risk'
+ */
+export function calculateRiskLevelFromScore(score: number): 'High Risk' | 'Moderate Risk' | 'Low Risk' {
+  if (score < 50) return 'High Risk';
+  if (score <= 74) return 'Moderate Risk';
+  return 'Low Risk';
+}
+
+/**
  * Recalculates and persists a learner's official Phil-IRI metrics on their LearnerRecord.
  *
  * Rules (Phil-IRI DepEd Framework & Capstone Spec):
@@ -149,14 +161,28 @@ export async function syncLearnerPhilIriMetrics(
   record.lastReadingAssessmentDate = lastDate;
   record.lastReadingAssessmentId = lastId;
 
-  // Correlate with risk level if student is struggling
-  if (finalReadingLevel === 'Non-Reader') {
-    if (record.riskLevel !== 'High Risk') {
+  // Auto-calculate risk level based on assessment score / Phil-IRI level
+  if (finalReadingLevel !== 'Not Assessed') {
+    if (
+      finalReadingLevel === 'Non-Reader' ||
+      finalReadingLevel === 'Frustration' ||
+      (oralAccuracy != null && oralAccuracy < 50) ||
+      (compScore != null && compScore < 50)
+    ) {
       record.riskLevel = 'High Risk';
-    }
-  } else if (finalReadingLevel === 'Frustration') {
-    if (record.riskLevel === 'Low Risk') {
+    } else if (
+      finalReadingLevel === 'Instructional' ||
+      (oralAccuracy != null && oralAccuracy <= 74) ||
+      (compScore != null && compScore <= 74)
+    ) {
       record.riskLevel = 'Moderate Risk';
+    } else if (
+      finalReadingLevel === 'Independent' ||
+      finalReadingLevel === 'Proficient' ||
+      (oralAccuracy != null && oralAccuracy >= 75) ||
+      (compScore != null && compScore >= 75)
+    ) {
+      record.riskLevel = 'Low Risk';
     }
   }
 

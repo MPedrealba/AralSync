@@ -2,17 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../database/db";
 import Question from "../../../../../models/Question";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { getTeacherSubject } from "@/lib/teacherScope";
 
 /**
  * GET /api/teacher/questions
  * List the Question Bank (DepEd-aligned OMR questions). Supports optional
- * ?subject=, ?grade=, ?topic= filters so the generator tab can preview
- * available questions.
+ * ?subject=, ?grade=, ?topic= filters, strictly scoped to teacher's subject.
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ["teacher"]);
+    const authUser = await requireAuth(req, ["teacher"]);
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     const { searchParams } = new URL(req.url);
     const subject = searchParams.get("subject");
@@ -20,7 +22,11 @@ export async function GET(req: NextRequest) {
     const topic = searchParams.get("topic");
 
     const filter: Record<string, unknown> = {};
-    if (subject) filter.subject = subject;
+    if (teacherSubject !== "All") {
+      filter.subject = teacherSubject;
+    } else if (subject) {
+      filter.subject = subject;
+    }
     if (grade) filter.gradeLevel = Number(grade);
     if (topic) {
       filter.$or = [

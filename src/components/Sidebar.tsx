@@ -71,17 +71,21 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [specialization, setSpecialization] = useState<string>("all-subjects");
+  const [assignedSubject, setAssignedSubject] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => parseJsonResponse(r))
       .then((json) => {
-        if (json.success && json.data?.specialization) setSpecialization(json.data.specialization);
+        if (json.success) {
+          if (json.data?.specialization) setSpecialization(json.data.specialization);
+          if (json.data?.assignedSubject) setAssignedSubject(json.data.assignedSubject);
+        }
       })
       .catch(() => /* ignore — default to all-subjects */ {});
   }, []);
 
-  const isReading = specialization === "reading";
+  const isReading = specialization === "reading" || assignedSubject === "Reading";
 
   // Filter out reading-only items for non-reading teachers
   const navSections = isReading
@@ -95,7 +99,12 @@ export default function Sidebar() {
         }))
         .filter((section) => section.items.length > 0);
 
-  const portalLabel = isReading ? "Reading Teacher" : "Subject Teacher";
+  const portalLabel =
+    ["Math", "Science", "Reading"].includes(assignedSubject)
+      ? `${assignedSubject} Teacher`
+      : specialization === "reading"
+      ? "Reading Teacher"
+      : "Subject Teacher";
 
   const handleLogout = async () => {
     try {

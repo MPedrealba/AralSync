@@ -146,7 +146,7 @@ export default function DashboardPage() {
             title="Flagged for Intervention"
             value={overview.highRiskCount.toString()}
             icon={AlertTriangle}
-            color="rose"
+            color="red"
             valueColor="text-rose-600"
             subtext="High risk learners"
           />

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { useSearch } from "@/components/SearchContext";
 import { AlertTriangle, BookOpen, FlaskConical, Calculator, Loader2, AlertCircle } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface Flag {
   name: string;
@@ -42,7 +43,7 @@ export default function AtRiskLearnersPage() {
         if (gradeFilter) params.set("grade", gradeFilter);
         if (subjectFilter) params.set("subject", subjectFilter);
         const res = await fetch(`/api/coordinator/at-risk-learners?${params.toString()}`);
-        const json = await res.json();
+        const json = await parseJsonResponse(res);
         if (json.success) {
           setFlags(json.data.flags);
           setStats(json.data.stats);

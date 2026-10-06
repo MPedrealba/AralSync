@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { useSearch } from "@/components/SearchContext";
 import { Loader2, AlertCircle, History, RefreshCw } from "lucide-react";
+import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface LogEntry {
   id: string;
@@ -61,7 +62,7 @@ export default function CoordinatorAuditLogPage() {
       if (role) params.set("role", role);
       if (action) params.set("action", action);
       const res = await fetch(`/api/coordinator/audit-log?${params.toString()}`);
-      const json = await res.json();
+      const json = await parseJsonResponse(res);
       if (json.success) setEntries(json.data.entries);
       else setError(json.error || "Failed to load audit log.");
     } catch {

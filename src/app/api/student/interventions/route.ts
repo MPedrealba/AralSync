@@ -24,6 +24,17 @@ export async function GET(req: NextRequest) {
       workbookUrl: i.workbookUrl || null,
       tutorGuideUrl: i.tutorGuideUrl || null,
       keyStage: i.keyStage || null,
+      pageStart: i.pageStart ?? null,
+      pageEnd: i.pageEnd ?? null,
+      sessionInfo: i.sessionInfo || null,
+      instructions: i.instructions || '',
+      dueDate: i.dueDate || null,
+      submissionText: i.submissionText || '',
+      submissionFileUrl: i.submissionFileUrl || null,
+      submittedAt: i.submittedAt || null,
+      teacherRemarks: i.teacherRemarks || '',
+      gradeScore: i.gradeScore ?? null,
+      gradedAt: i.gradedAt || null,
     }));
 
     const completed = data.filter((d) => d.status === 'Completed').length;

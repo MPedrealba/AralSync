@@ -33,6 +33,7 @@ const riskStyles: Record<string, { bg: string; text: string }> = {
   "High Risk": { bg: "bg-red-50", text: "text-red-700" },
   "Moderate Risk": { bg: "bg-yellow-50", text: "text-yellow-700" },
   "Low Risk": { bg: "bg-green-50", text: "text-green-700" },
+  "Pending Assessment": { bg: "bg-slate-100", text: "text-slate-700" },
 };
 
 const fmtDate = (d: string) => {
@@ -240,7 +241,7 @@ export default function LearnerViewPage() {
                   ) : (
                     data.omrAssessments.map((a: OMRRow) => (
                       <tr key={a.id} className="hover:bg-gray-50/60">
-                        <td className="px-5 py-3 text-sm text-gray-500">
+                        <td className="px-5 py-3 text-sm text-gray-500" suppressHydrationWarning>
                           {fmtDate(a.date)}
                         </td>
                         <td className="px-5 py-3 text-sm text-gray-600">
@@ -326,7 +327,7 @@ export default function LearnerViewPage() {
                   ) : (
                     data.readingAssessments.map((a: ReadingRow) => (
                       <tr key={a.id} className="hover:bg-gray-50/60">
-                        <td className="px-4 py-3 text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm text-gray-500" suppressHydrationWarning>
                           {fmtDate(a.date)}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">

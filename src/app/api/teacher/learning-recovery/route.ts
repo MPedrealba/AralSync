@@ -5,17 +5,21 @@ import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
+import { getTeacherSubject, getInterventionSubjectFilter } from '@/lib/teacherScope';
 
 /**
  * GET /api/teacher/learning-recovery
  * Flags learners who are High Risk or under-performing (2+ OMR below 60%),
- * with summary counts and suggested interventions derived from real data.
+ * with summary counts and suggested interventions derived from real data,
+ * scoped to the teacher's assigned subject.
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher']);
+    const authUser = await requireAuth(req, ['teacher']);
 
     await connectDB();
+
+    const teacherSubject = await getTeacherSubject(authUser);
 
     const { searchParams } = new URL(req.url);
     const grade = searchParams.get('grade');
@@ -31,9 +35,17 @@ export async function GET(req: NextRequest) {
     const records = await LearnerRecord.find(recordFilter).populate('studentId', 'name');
     const studentIds = records.map((r: any) => r.studentId?._id).filter(Boolean);
 
+    const assessmentQuery: Record<string, any> = { studentId: { $in: studentIds } };
+    const interventionQuery: Record<string, any> = { studentId: { $in: studentIds } };
+    if (teacherSubject !== 'All') {
+      assessmentQuery.subject = teacherSubject;
+      const subFilter = getInterventionSubjectFilter(teacherSubject);
+      Object.assign(interventionQuery, subFilter);
+    }
+
     const [assessments, interventions] = await Promise.all([
-      Assessment.find({ studentId: { $in: studentIds } }).sort({ date: -1 }),
-      Intervention.find({ studentId: { $in: studentIds } }),
+      Assessment.find(assessmentQuery).sort({ date: -1 }),
+      Intervention.find(interventionQuery),
     ]);
 
     let readingFrustration = 0;
