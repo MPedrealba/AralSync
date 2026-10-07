@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
       assignedSubject:
         role === 'teacher' && assignedSubject ? assignedSubject : role === 'teacher' ? 'All' : undefined,
       active: true,
+      mustChangePassword: true,
     });
 
     return ok({
@@ -208,8 +209,9 @@ export async function PATCH(req: NextRequest) {
     // Reset password to LRN (for students)
     if (resetToLrn) {
       const lr = await LearnerRecord.findOne({ studentId: user._id });
-      const targetPass = (lr?.lrn || user.username).trim();
+      const targetPass = (lr?.lrn || user.username).trim().toUpperCase();
       user.password = await bcrypt.hash(targetPass, 10);
+      user.mustChangePassword = true;
     } else if (password && password.trim()) {
       user.password = await bcrypt.hash(password.trim(), 10);
     }

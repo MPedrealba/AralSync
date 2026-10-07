@@ -8,7 +8,8 @@ const UserSchema = new mongoose.Schema({
   specialization: { type: String, enum: ['reading', 'all-subjects'], default: 'all-subjects' },
   assignedSubject: { type: String, enum: ['Reading', 'Math', 'Science', 'All'], default: 'All' },
   email: { type: String },
-  active: { type: Boolean, default: true }
+  active: { type: Boolean, default: true },
+  mustChangePassword: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.models.User || mongoose.model('User', UserSchema);

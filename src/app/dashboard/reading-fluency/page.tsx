@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -15,12 +15,41 @@ import {
   Play,
   Wand2,
   CheckCircle2,
+  Volume2,
+  Sliders,
+  Check,
+  RotateCcw,
 } from "lucide-react";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
 
 /* ──── Types ──── */
+export interface MiscueItem {
+  type:
+    | "match"
+    | "mispronunciation"
+    | "substitution"
+    | "omission"
+    | "insertion"
+    | "repetition"
+    | "reversal"
+    | "hesitation"
+    | "unattempted";
+  position: number | null;
+  expected: string | null;
+  spoken: string | null;
+}
+
+export interface MiscueCounts {
+  mispronunciations: number;
+  substitutions: number;
+  omissions: number;
+  insertions: number;
+  repetitions: number;
+  reversals: number;
+}
+
 interface FluencyRow {
   id: string;
   title: string;
@@ -40,7 +69,9 @@ interface FluencyRow {
   date: string;
   // Phil-IRI measured output.
   miscueBreakdown?: MiscueCounts | null;
+  miscueItems?: MiscueItem[];
   miscueTotal?: number | null;
+  wordsAttempted?: number | null;
   stutterCount?: number | null;
   hesitations?: number | null;
   longestPause?: number | null;
@@ -48,15 +79,6 @@ interface FluencyRow {
   pauseTotalSec?: number | null;
   pauseAvgSec?: number | null;
   silentSec?: number | null;
-}
-
-interface MiscueCounts {
-  mispronunciations: number;
-  substitutions: number;
-  omissions: number;
-  insertions: number;
-  repetitions: number;
-  reversals: number;
 }
 
 const fmtShort = (d: string) => {
@@ -176,6 +198,397 @@ interface AnalyzeResult {
   masteryLevel: string;
   simulation?: boolean;
   comprehension?: { id: string; score: number; masteryLevel: string; combinedLevel?: string } | null;
+  miscueBreakdown?: MiscueCounts;
+  miscueItems?: MiscueItem[];
+  miscueTotal?: number;
+  wordsAttempted?: number;
+  wordsTotal?: number;
+  stutters?: number;
+  activeDurationSec?: number;
+  spokenWords?: number;
+}
+
+function getMiscueStyle(type: MiscueItem["type"]) {
+  switch (type) {
+    case "match":
+      return {
+        bg: "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100",
+        label: "Correct",
+        badge: "text-emerald-700 bg-emerald-50",
+      };
+    case "mispronunciation":
+      return {
+        bg: "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 ring-1 ring-amber-300 font-medium",
+        label: "Mispronunciation",
+        badge: "text-amber-800 bg-amber-50",
+      };
+    case "substitution":
+      return {
+        bg: "bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200 ring-1 ring-rose-300 font-medium",
+        label: "Substitution",
+        badge: "text-rose-800 bg-rose-50",
+      };
+    case "omission":
+      return {
+        bg: "bg-rose-50 text-rose-700 border-dashed border-rose-300 line-through opacity-75 hover:bg-rose-100",
+        label: "Omission",
+        badge: "text-rose-800 bg-rose-50",
+      };
+    case "insertion":
+      return {
+        bg: "bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200 ring-1 ring-blue-300 italic font-medium",
+        label: "Insertion",
+        badge: "text-blue-800 bg-blue-50",
+      };
+    case "repetition":
+      return {
+        bg: "bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200 ring-1 ring-blue-300 font-medium",
+        label: "Repetition",
+        badge: "text-blue-800 bg-blue-50",
+      };
+    case "hesitation":
+      return {
+        bg: "bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 italic opacity-85",
+        label: "Hesitation (Filler)",
+        badge: "text-purple-800 bg-purple-50",
+      };
+    case "unattempted":
+      return {
+        bg: "bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-default",
+        label: "Unread Suffix",
+        badge: "text-slate-500 bg-slate-50",
+      };
+    default:
+      return {
+        bg: "bg-slate-100 text-slate-800 border-slate-200",
+        label: "Unknown",
+        badge: "text-slate-600 bg-slate-50",
+      };
+  }
+}
+
+function recalculateCalibration(
+  items: MiscueItem[],
+  spokenWordsCount?: number | null,
+  activeDurationSec?: number | null,
+  wordsAttemptedCount?: number | null
+) {
+  const counts: MiscueCounts = {
+    mispronunciations: 0,
+    substitutions: 0,
+    omissions: 0,
+    insertions: 0,
+    repetitions: 0,
+    reversals: 0,
+  };
+
+  for (const it of items) {
+    if (it.type === "match" || it.type === "hesitation" || it.type === "unattempted") continue;
+    if (it.type === "mispronunciation") counts.mispronunciations++;
+    else if (it.type === "substitution") counts.substitutions++;
+    else if (it.type === "omission") counts.omissions++;
+    else if (it.type === "insertion") counts.insertions++;
+    else if (it.type === "repetition") counts.repetitions++;
+    else if (it.type === "reversal") counts.reversals++;
+  }
+
+  const totalMiscues =
+    counts.mispronunciations +
+    counts.substitutions +
+    counts.omissions +
+    counts.insertions +
+    counts.repetitions +
+    counts.reversals;
+
+  const attemptedInItems = items.filter((it) => it.expected && it.type !== "unattempted").length;
+  const baseWords = Math.max(
+    1,
+    wordsAttemptedCount && wordsAttemptedCount > 0
+      ? wordsAttemptedCount
+      : attemptedInItems > 0
+      ? attemptedInItems
+      : 1
+  );
+  const accuracy = Math.max(
+    0,
+    Math.min(100, Math.round(((baseWords - totalMiscues) / baseWords) * 100))
+  );
+
+  const spokenInItems = items.filter((it) => it.spoken && it.type !== "unattempted").length;
+  const spoken =
+    spokenWordsCount && spokenWordsCount > 0
+      ? spokenWordsCount
+      : spokenInItems > 0
+      ? spokenInItems
+      : baseWords;
+  const duration = Math.max(1, activeDurationSec || 60);
+  const activeMinutes = duration / 60;
+  const wordsDecoded = Math.max(0, spoken - totalMiscues);
+  const wpm = spoken > 0 ? Math.max(0, Math.round(wordsDecoded / activeMinutes)) : 0;
+
+  let masteryLevel = "Frustration";
+  if (wordsDecoded <= 0) masteryLevel = "Non-Reader";
+  else if (accuracy >= 97) masteryLevel = "Independent";
+  else if (accuracy >= 90) masteryLevel = "Instructional";
+
+  return {
+    counts,
+    totalMiscues,
+    accuracy,
+    wpm,
+    masteryLevel,
+  };
+}
+
+function AudioPlayerSync({ audioUrl }: { audioUrl?: string | null }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+
+  if (!audioUrl) return null;
+
+  const handleRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-white shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Volume2 className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span className="text-xs font-bold text-slate-200">
+            Audio Playback Sync
+          </span>
+          <span className="text-[10px] text-slate-400 hidden sm:inline">
+            Listen &amp; verify learner oral reading
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-[11px] font-semibold">
+          <span className="text-slate-400 mr-1">Speed:</span>
+          {[0.75, 1.0, 1.25].map((rate) => (
+            <button
+              key={rate}
+              type="button"
+              onClick={() => handleRateChange(rate)}
+              className={`rounded-md px-2 py-0.5 transition-colors ${
+                playbackRate === rate
+                  ? "bg-red-800 text-white font-bold"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              {rate}x
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2">
+        <audio ref={audioRef} controls src={audioUrl} className="w-full h-8" />
+      </div>
+    </div>
+  );
+}
+
+function WordByWordReader({
+  items,
+  audioUrl,
+  onOverrideWord,
+  activeWordIdx,
+  setActiveWordIdx,
+  readOnly = false,
+}: {
+  items: MiscueItem[];
+  audioUrl?: string | null;
+  onOverrideWord?: (index: number, newType: MiscueItem["type"]) => void;
+  activeWordIdx: number | null;
+  setActiveWordIdx: (idx: number | null) => void;
+  readOnly?: boolean;
+}) {
+  return (
+    <div className="space-y-3.5">
+      {/* ── Audio Playback Sync Bar ── */}
+      {audioUrl && <AudioPlayerSync audioUrl={audioUrl} />}
+
+      {/* ── Legend ── */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] font-medium border-b border-slate-200/80 pb-2.5">
+        <span className="text-slate-400 font-semibold mr-1">Legend:</span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          Green: Correct
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          Orange: Mispronunciation
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+          Red: Substitution / Omission
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+          Blue: Repeat / Insert
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-purple-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+          Purple: Filler
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+          Gray: Unread Suffix
+        </span>
+      </div>
+
+      {/* ── Word Grid ── */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 shadow-xs">
+        <div className="font-serif text-base sm:text-lg leading-loose flex flex-wrap gap-1.5 items-center">
+          {items.map((item, idx) => {
+            const style = getMiscueStyle(item.type);
+            const isSelected = activeWordIdx === idx;
+            return (
+              <span
+                key={idx}
+                onClick={() => !readOnly && setActiveWordIdx(isSelected ? null : idx)}
+                className={`relative inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-sm sm:text-base transition-all select-none ${
+                  readOnly ? "cursor-default" : "cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                } ${style.bg} ${isSelected ? "ring-2 ring-slate-900 shadow-sm" : ""}`}
+                title={`Word #${idx + 1}: ${style.label}${item.spoken ? ` (Spoken: "${item.spoken}")` : ""}`}
+              >
+                <span>{item.expected || item.spoken}</span>
+                {item.type !== "match" && item.type !== "unattempted" && (
+                  <span className="text-[10px] font-bold opacity-80">
+                    {item.type === "mispronunciation"
+                      ? "⚡"
+                      : item.type === "substitution"
+                      ? "⇄"
+                      : item.type === "omission"
+                      ? "✕"
+                      : item.type === "hesitation"
+                      ? "…"
+                      : "+"}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Active Word Override Popover ── */}
+      {activeWordIdx !== null && items[activeWordIdx] && !readOnly && onOverrideWord && (
+        <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 duration-150">
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                  Word #{activeWordIdx + 1}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${getMiscueStyle(items[activeWordIdx].type).bg}`}>
+                  {getMiscueStyle(items[activeWordIdx].type).label}
+                </span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-3">
+                <div>
+                  <span className="text-[11px] text-slate-400">Passage Word: </span>
+                  <span className="font-serif text-base font-bold text-slate-900">
+                    {items[activeWordIdx].expected || "— (Inserted Word)"}
+                  </span>
+                </div>
+                {items[activeWordIdx].spoken && (
+                  <div>
+                    <span className="text-[11px] text-slate-400">Spoken: </span>
+                    <span className="font-serif text-base font-bold text-red-900">
+                      &ldquo;{items[activeWordIdx].spoken}&rdquo;
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveWordIdx(null)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <p className="mt-2.5 text-xs text-slate-500">
+            Click to calibrate AI classification. Accept regional accents or dialect pronunciation as correct:
+          </p>
+
+          {/* Quick Override Button: Accept as Correct */}
+          <div className="mt-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "match");
+                setActiveWordIdx(null);
+              }}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-[0.98] transition-all"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Accept as Correct (Regional Accent / Valid Reading)</span>
+            </button>
+          </div>
+
+          {/* Alternate Manual Categories */}
+          <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-5">
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "mispronunciation");
+                setActiveWordIdx(null);
+              }}
+              className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-1.5 font-semibold text-amber-800 hover:bg-amber-100 transition-colors text-center"
+            >
+              ⚡ Mispronounce
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "substitution");
+                setActiveWordIdx(null);
+              }}
+              className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 font-semibold text-rose-800 hover:bg-rose-100 transition-colors text-center"
+            >
+              ⇄ Substitution
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "omission");
+                setActiveWordIdx(null);
+              }}
+              className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 font-semibold text-rose-800 hover:bg-rose-100 transition-colors text-center"
+            >
+              ✕ Omission
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "repetition");
+                setActiveWordIdx(null);
+              }}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 font-semibold text-blue-800 hover:bg-blue-100 transition-colors text-center"
+            >
+              ↻ Repetition
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOverrideWord(activeWordIdx, "hesitation");
+                setActiveWordIdx(null);
+              }}
+              className="rounded-xl border border-purple-200 bg-purple-50 px-2 py-1.5 font-semibold text-purple-800 hover:bg-purple-100 transition-colors text-center"
+            >
+              … Filler/Hesitate
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const fmtTimer = (s: number) =>
@@ -203,6 +616,15 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [analyzingSim, setAnalyzingSim] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
+
+  /* Teacher calibration state */
+  const [calibratedItems, setCalibratedItems] = useState<MiscueItem[]>([]);
+  const [activeWordIdx, setActiveWordIdx] = useState<number | null>(null);
+  const [overrideCount, setOverrideCount] = useState(0);
+  const [viewMode, setViewMode] = useState<"passage" | "calibration">("passage");
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [finalizeSuccess, setFinalizeSuccess] = useState(false);
+  const [finalizeError, setFinalizeError] = useState("");
 
   /* Phil-IRI miscue tracker (manual mode) */
   const [miscues, setMiscues] = useState<Miscues>({
@@ -355,6 +777,15 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       const json = await parseJsonResponse(res);
       if (json.success) {
         setResult(json.data);
+        const items: MiscueItem[] = json.data.miscueItems || [];
+        setCalibratedItems(items);
+        setOverrideCount(0);
+        setActiveWordIdx(null);
+        setFinalizeSuccess(false);
+        setFinalizeError("");
+        if (items.length > 0) {
+          setViewMode("calibration");
+        }
         onAnalyzed();
       } else {
         setError(json.error || "Analysis failed.");
@@ -367,6 +798,87 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     }
   };
 
+  const handleOverrideWord = (index: number, newType: MiscueItem["type"]) => {
+    setCalibratedItems((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], type: newType };
+      }
+      return next;
+    });
+    setOverrideCount((c) => c + 1);
+    setFinalizeSuccess(false);
+  };
+
+  const wordCount = passageText.split(/\s+/).filter(Boolean).length;
+  const currentPassageObj = passages.find((p) => p.title === passageTitle);
+
+  const liveMetrics = useMemo(() => {
+    if (!result) return null;
+    if (calibratedItems.length === 0) {
+      return {
+        accuracy: result.accuracy,
+        wpm: result.wpm,
+        masteryLevel: result.masteryLevel,
+        counts: result.miscueBreakdown || {
+          mispronunciations: 0,
+          substitutions: result.miscues?.substitutions || 0,
+          omissions: result.miscues?.omissions || 0,
+          insertions: result.miscues?.insertions || 0,
+          repetitions: result.miscues?.repetitions || 0,
+          reversals: 0,
+        },
+        totalMiscues: result.miscueTotal ?? 0,
+      };
+    }
+    const wordsAttempted = result.wordsAttempted ?? result.wordsTotal ?? wordCount;
+    const spokenWords = result.spokenWords ?? wordsAttempted;
+    const duration = result.activeDurationSec ?? result.durationSec ?? recTime;
+    return recalculateCalibration(
+      calibratedItems,
+      spokenWords,
+      duration,
+      wordsAttempted
+    );
+  }, [result, calibratedItems, wordCount, recTime]);
+
+  const handleFinalizeAssessment = async () => {
+    if (!result?.id || !liveMetrics) return;
+    setIsFinalizing(true);
+    setFinalizeError("");
+    setFinalizeSuccess(false);
+    try {
+      const res = await fetch(`/api/teacher/assessments/${result.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accuracy: liveMetrics.accuracy,
+          wpm: liveMetrics.wpm,
+          masteryLevel: liveMetrics.masteryLevel,
+          miscueBreakdown: liveMetrics.counts,
+          miscueItems: calibratedItems,
+          miscueTotal: liveMetrics.totalMiscues,
+          status: "approved",
+          notes:
+            overrideCount > 0
+              ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Approved.`
+              : "Verified and approved by teacher.",
+        }),
+      });
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setFinalizeSuccess(true);
+        onAnalyzed();
+      } else {
+        setFinalizeError(json.error || "Failed to finalize assessment.");
+      }
+    } catch {
+      setFinalizeError("Failed to finalize assessment. Check connection.");
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
   const levelColor = (lv?: string) =>
     lv === "Independent"
       ? "text-emerald-700 bg-emerald-50 border-emerald-200"
@@ -375,9 +887,6 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       : lv === "Non-Reader"
       ? "text-slate-800 bg-slate-100 border-slate-200"
       : "text-rose-700 bg-rose-50 border-rose-200";
-
-  const wordCount = passageText.split(/\s+/).filter(Boolean).length;
-  const currentPassageObj = passages.find((p) => p.title === passageTitle);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
@@ -404,6 +913,37 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
             </div>
 
             <div className="flex items-center gap-2">
+              {calibratedItems.length > 0 && (
+                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("passage")}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      viewMode === "passage"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Passage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("calibration")}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      viewMode === "calibration"
+                        ? "bg-red-800 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <span>Word Calibration</span>
+                    {overrideCount > 0 && (
+                      <span className="rounded-full bg-white/20 px-1 text-[10px]">
+                        {overrideCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
                 {wordCount} words
               </span>
@@ -452,6 +992,16 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 onChange={(e) => setPassageText(e.target.value)}
                 placeholder="Paste or type the reading passage here..."
                 className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 font-serif text-base leading-relaxed text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              />
+            </div>
+          ) : viewMode === "calibration" && calibratedItems.length > 0 ? (
+            <div className="mt-4">
+              <WordByWordReader
+                items={calibratedItems}
+                audioUrl={audioUrl}
+                onOverrideWord={handleOverrideWord}
+                activeWordIdx={activeWordIdx}
+                setActiveWordIdx={setActiveWordIdx}
               />
             </div>
           ) : (
@@ -697,11 +1247,18 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 Fluency Screener Results
               </h4>
-              {result.simulation && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                  Simulated
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                {overrideCount > 0 && (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                    {overrideCount} Override{overrideCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {result.simulation && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                    Simulated
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -710,7 +1267,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                   WCPM
                 </p>
                 <p className="mt-1 text-xl font-black text-slate-900">
-                  {result.wpm ?? "—"}
+                  {liveMetrics?.wpm ?? result.wpm ?? "—"}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
@@ -718,7 +1275,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                   Accuracy
                 </p>
                 <p className="mt-1 text-xl font-black text-slate-900">
-                  {result.accuracy}%
+                  {liveMetrics?.accuracy ?? result.accuracy}%
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
@@ -733,17 +1290,23 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Mastery
                 </p>
-                <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(result.masteryLevel)}`}>
-                  {result.masteryLevel}
+                <span
+                  className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
+                    liveMetrics?.masteryLevel ?? result.masteryLevel
+                  )}`}
+                >
+                  {liveMetrics?.masteryLevel ?? result.masteryLevel}
                 </span>
               </div>
             </div>
 
             {/* Miscues Breakdown */}
-            {result.miscues && (
+            {liveMetrics?.counts && (
               <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs text-slate-600">
-                <span className="font-semibold text-slate-700">Miscues: </span>
-                Sub: {result.miscues.substitutions} &bull; Om: {result.miscues.omissions} &bull; Ins: {result.miscues.insertions} &bull; Rep: {result.miscues.repetitions}
+                <span className="font-semibold text-slate-700">
+                  Miscues ({liveMetrics.totalMiscues}):{" "}
+                </span>
+                Sub: {liveMetrics.counts.substitutions} &bull; Om: {liveMetrics.counts.omissions} &bull; Ins: {liveMetrics.counts.insertions} &bull; Rep: {liveMetrics.counts.repetitions} &bull; Mis: {liveMetrics.counts.mispronunciations}
               </div>
             )}
 
@@ -758,6 +1321,35 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 </span>
               </div>
             )}
+
+            {/* Finalize / Approve Calibrated Assessment */}
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleFinalizeAssessment}
+                disabled={isFinalizing}
+                className="w-full inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isFinalizing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                <span>Save &amp; Approve Calibrated Assessment</span>
+              </button>
+
+              {finalizeSuccess && (
+                <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-800 animate-in fade-in-50">
+                  Assessment calibrated &amp; approved! Learner record updated.
+                </div>
+              )}
+
+              {finalizeError && (
+                <div className="mt-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-800 animate-in fade-in-50">
+                  {finalizeError}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -917,26 +1509,72 @@ function FluencyReportModal({
   onClose: () => void;
   onUpdated?: (status: string) => void;
 }) {
-  const accuracyPct = learner.accuracy ?? 0;
+  const [calibratedItems, setCalibratedItems] = useState<MiscueItem[]>(
+    learner.miscueItems || []
+  );
+  const [activeWordIdx, setActiveWordIdx] = useState<number | null>(null);
+  const [overrideCount, setOverrideCount] = useState(0);
+
+  const liveMetrics = useMemo(() => {
+    if (calibratedItems.length === 0) return null;
+    return recalculateCalibration(
+      calibratedItems,
+      null,
+      learner.durationSec,
+      learner.wordsAttempted
+    );
+  }, [calibratedItems, learner.durationSec, learner.wordsAttempted]);
+
+  const accuracyPct = liveMetrics ? liveMetrics.accuracy : (learner.accuracy ?? 0);
+  const wpmVal = liveMetrics ? liveMetrics.wpm : (learner.wpm ?? "—");
   const errPct = 100 - accuracyPct;
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState("");
   const [validationSuccess, setValidationSuccess] = useState("");
+
+  const handleOverrideWord = (index: number, newType: MiscueItem["type"]) => {
+    setCalibratedItems((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], type: newType };
+      }
+      return next;
+    });
+    setOverrideCount((c) => c + 1);
+  };
 
   const validate = async (status: string) => {
     setValidating(true);
     setValidationError("");
     setValidationSuccess("");
     try {
+      const payload: any = { status };
+      if (liveMetrics) {
+        payload.accuracy = liveMetrics.accuracy;
+        payload.wpm = liveMetrics.wpm;
+        payload.masteryLevel = liveMetrics.masteryLevel;
+        payload.miscueBreakdown = liveMetrics.counts;
+        payload.miscueItems = calibratedItems;
+        payload.miscueTotal = liveMetrics.totalMiscues;
+        if (overrideCount > 0) {
+          payload.notes = learner.notes
+            ? `${learner.notes} | Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}).`
+            : `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}).`;
+        }
+      }
       const res = await fetch(`/api/teacher/assessments/${learner.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
       });
       const json = await parseJsonResponse(res);
       if (json.success) {
         if (status === "approved") {
-          setValidationSuccess("Assessment approved! Learner record Phil-IRI metrics updated.");
+          setValidationSuccess(
+            overrideCount > 0
+              ? `Calibrated assessment approved! (${overrideCount} override${overrideCount > 1 ? "s" : ""} saved).`
+              : "Assessment approved! Learner record Phil-IRI metrics updated."
+          );
         } else {
           setValidationSuccess("Assessment flagged.");
         }
@@ -954,7 +1592,7 @@ function FluencyReportModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
@@ -989,7 +1627,7 @@ function FluencyReportModal({
           <div className="mb-6 grid grid-cols-3 gap-3">
             <MetricBox
               label="Words Correct/Min"
-              value={String(learner.wpm ?? "—")}
+              value={String(wpmVal)}
               color="text-blue-600"
             />
             <MetricBox
@@ -1004,9 +1642,36 @@ function FluencyReportModal({
             />
           </div>
 
+          {/* Word-by-Word Mis-cue Reader */}
+          {calibratedItems.length > 0 && (
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Word-by-Word Mis-cue Reader
+                  </h4>
+                  {overrideCount > 0 && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      {overrideCount} Override{overrideCount > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Click flagged words to override AI (Accept accents as correct)
+                </span>
+              </div>
+              <WordByWordReader
+                items={calibratedItems}
+                onOverrideWord={handleOverrideWord}
+                activeWordIdx={activeWordIdx}
+                setActiveWordIdx={setActiveWordIdx}
+              />
+            </div>
+          )}
+
           {/* Score Cards — raw measured values, no invented /10 benchmarks */}
           <div className="mb-6 grid grid-cols-4 gap-3">
-            <ScoreCard label="Fluency (WCPM)" value={learner.wpm ?? "—"} isText />
+            <ScoreCard label="Fluency (WCPM)" value={wpmVal} isText />
             <ScoreCard label="Accuracy" value={`${accuracyPct}%`} isText />
             <ScoreCard label="Words Err" value={`${errPct.toFixed(1)}%`} isText />
             <ScoreCard label="Pauses" value={learner.pauses ?? "—"} isText />

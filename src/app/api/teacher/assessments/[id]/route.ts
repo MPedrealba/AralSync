@@ -23,17 +23,49 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
-    const { status } = body || {};
+    const {
+      status,
+      accuracy,
+      score,
+      wpm,
+      miscueBreakdown,
+      miscueItems,
+      miscueTotal,
+      wordsAttempted,
+      masteryLevel,
+      notes,
+    } = body || {};
 
-    if (!['approved', 'flagged'].includes(status)) {
-      return fail('status must be approved or flagged', 400);
+    const updateFields: Record<string, any> = {};
+    if (status) {
+      if (!['approved', 'flagged', 'pending'].includes(status)) {
+        return fail('status must be approved, flagged, or pending', 400);
+      }
+      updateFields.status = status;
+    }
+    if (typeof accuracy === 'number') {
+      updateFields.accuracy = accuracy;
+      updateFields.score = accuracy;
+    } else if (typeof score === 'number') {
+      updateFields.score = score;
+    }
+    if (typeof wpm === 'number') updateFields.wpm = wpm;
+    if (miscueBreakdown) updateFields.miscueBreakdown = miscueBreakdown;
+    if (Array.isArray(miscueItems)) updateFields.miscueItems = miscueItems;
+    if (typeof miscueTotal === 'number') updateFields.miscueTotal = miscueTotal;
+    if (typeof wordsAttempted === 'number') updateFields.wordsAttempted = wordsAttempted;
+    if (masteryLevel) updateFields.masteryLevel = masteryLevel;
+    if (notes !== undefined) updateFields.notes = notes;
+
+    if (Object.keys(updateFields).length === 0) {
+      return fail('No valid fields to update', 400);
     }
 
     await connectDB();
 
     const updated = await Assessment.findByIdAndUpdate(
       id,
-      { status },
+      updateFields,
       { new: true }
     );
 
@@ -41,8 +73,8 @@ export async function PATCH(
       return fail('Assessment not found', 404);
     }
 
-    // If paired assessment exists (e.g. reading comprehension paired with oral reading), update it too
-    if (updated.pairedAssessmentId) {
+    // If paired assessment exists and status changed, update it too
+    if (status && updated.pairedAssessmentId) {
       await Assessment.findByIdAndUpdate(updated.pairedAssessmentId, { status });
     }
 

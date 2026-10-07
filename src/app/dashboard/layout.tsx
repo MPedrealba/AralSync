@@ -1,10 +1,12 @@
 import Sidebar from "@/components/Sidebar";
+import { guardMustChangePassword } from "@/lib/auth";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await guardMustChangePassword();
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

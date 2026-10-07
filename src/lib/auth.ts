@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_development';
 
@@ -9,6 +11,7 @@ export interface AuthUser {
   role: string;
   name: string;
   specialization: string;
+  mustChangePassword?: boolean;
 }
 
 export class AuthError extends Error {
@@ -34,9 +37,34 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
       role: payload.role as string,
       name: payload.name as string,
       specialization: (payload.specialization as string) || 'all-subjects',
+      mustChangePassword: Boolean(payload.mustChangePassword),
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Server layout route guard:
+ * Inspects the auth_token cookie. If the user must change their password,
+ * immediately redirects them to /change-password.
+ */
+export async function guardMustChangePassword() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('auth_token')?.value;
+  if (!token) return;
+
+  let mustChange = false;
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    mustChange = Boolean(payload.mustChangePassword);
+  } catch {
+    return;
+  }
+
+  if (mustChange) {
+    redirect('/change-password');
   }
 }
 

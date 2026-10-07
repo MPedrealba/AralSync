@@ -45,6 +45,12 @@ export default function LoginPage() {
         return;
       }
 
+      // If user must change password on first login, redirect immediately
+      if (data.mustChangePassword) {
+        router.push("/change-password");
+        return;
+      }
+
       // Redirect based on the role returned by the server (source of truth).
       if (data.role === "principal") {
         router.push("/principal");

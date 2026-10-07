@@ -1,18 +1,124 @@
 /**
  * Shared Phil-IRI / reading-analysis logic used by the teacher and student
  * reading-fluency routes. This is the single source of truth for:
- *   • word normalization + transcript↔passage accuracy
- *   • the Phil-IRI miscue formula
+ *   • word normalization + contraction/digit expansion + accent tolerance
+ *   • the strict Phil-IRI miscue formula & reading bands
  *   • silent-reading comprehension bands
  *   • WER (Word Error Rate) via Levenshtein
- *   • Groq Whisper transcription
+ *   • Groq Whisper verbatim transcription
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3';
 
+/** Common filler words treated as hesitations rather than accuracy insertion miscues */
+export const FILLER_WORDS = new Set(['um', 'uh', 'ah', 'er', 'hmm', 'erm', 'uhm']);
+
+/** Common contractions expansion map */
+const CONTRACTIONS: Record<string, string> = {
+  "can't": 'cannot',
+  "won't": 'will not',
+  "shan't": 'shall not',
+  "let's": 'let us',
+  "ain't": 'is not',
+  "it's": 'it is',
+  "that's": 'that is',
+  "what's": 'what is',
+  "there's": 'there is',
+  "here's": 'here is',
+  "he's": 'he is',
+  "she's": 'she is',
+  "who's": 'who is',
+  "how's": 'how is',
+  "i'm": 'i am',
+  "you're": 'you are',
+  "we're": 'we are',
+  "they're": 'they are',
+  "i've": 'i have',
+  "you've": 'you have',
+  "we've": 'we have',
+  "they've": 'they have',
+  "i'll": 'i will',
+  "you'll": 'you will',
+  "he'll": 'he will',
+  "she'll": 'she will',
+  "we'll": 'we will',
+  "they'll": 'they will',
+  "i'd": 'i would',
+  "you'd": 'you would',
+  "he'd": 'he would',
+  "she'd": 'she would',
+  "we'd": 'we would',
+  "they'd": 'they would',
+  "isn't": 'is not',
+  "aren't": 'are not',
+  "wasn't": 'was not',
+  "weren't": 'were not',
+  "hasn't": 'has not',
+  "haven't": 'have not',
+  "hadn't": 'had not',
+  "doesn't": 'does not',
+  "don't": 'do not',
+  "didn't": 'did not',
+  "couldn't": 'could not',
+  "shouldn't": 'should not',
+  "wouldn't": 'would not',
+};
+
+/** Convert standalone digits (0-100+) to words */
+export function convertDigitsToWords(text: string): string {
+  const numWords: Record<string, string> = {
+    '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+    '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine',
+    '10': 'ten', '11': 'eleven', '12': 'twelve', '13': 'thirteen',
+    '14': 'fourteen', '15': 'fifteen', '16': 'sixteen', '17': 'seventeen',
+    '18': 'eighteen', '19': 'nineteen', '20': 'twenty', '30': 'thirty',
+    '40': 'forty', '50': 'fifty', '60': 'sixty', '70': 'seventy',
+    '80': 'eighty', '90': 'ninety', '100': 'one hundred',
+  };
+
+  return text.replace(/\b\d+\b/g, (match) => {
+    if (numWords[match]) return numWords[match];
+    const n = parseInt(match, 10);
+    if (n > 20 && n < 100) {
+      const tens = Math.floor(n / 10) * 10;
+      const ones = n % 10;
+      return `${numWords[String(tens)]} ${numWords[String(ones)]}`;
+    }
+    return match;
+  });
+}
+
+/** Expand common contractions so formatting doesn't penalize miscues */
+export function expandContractions(text: string): string {
+  let lower = text.toLowerCase();
+  for (const [contraction, expansion] of Object.entries(CONTRACTIONS)) {
+    const pattern = new RegExp(`\\b${contraction.replace("'", "['’]")}\\b`, 'gi');
+    lower = lower.replace(pattern, expansion);
+  }
+  return lower;
+}
+
+/** Detect if passage is Filipino / Tagalog based on DepEd vocabulary markers */
+export function detectPassageLanguage(passage?: string): 'tl' | 'en' {
+  if (!passage) return 'en';
+  const lower = passage.toLowerCase();
+  const tagalogMarkers = [
+    /\bang\b/, /\bmga\b/, /\bsa\b/, /\bng\b/, /\bay\b/, /\bsi\b/, /\bna\b/,
+    /\bni\b/, /\bkay\b/, /\bito\b/, /\biya\b/, /\bano\b/, /\bsino\b/, /\bmay\b/,
+    /\blahat\b/, /\bisang\b/, /\bnang\b/, /\bpara\b/, /\bdahil\b/
+  ];
+  let matches = 0;
+  for (const marker of tagalogMarkers) {
+    if (marker.test(lower)) matches++;
+  }
+  return matches >= 2 ? 'tl' : 'en';
+}
+
 export function normalizeWords(text: string): string[] {
-  return text
+  const expanded = expandContractions(text);
+  const withWords = convertDigitsToWords(expanded);
+  return withWords
     .toLowerCase()
     .replace(/[^a-z0-9'\s]/g, ' ')
     .split(/\s+/)
@@ -21,10 +127,7 @@ export function normalizeWords(text: string): string[] {
 
 /**
  * Transcript↔passage accuracy via Levenshtein alignment (Whisper auto mode).
- *
- * Accuracy = 100% − WER, giving a stable score that isn't wrecked by
- * insertions/deletions shifting word positions (the old positional compare
- * cascaded errors from a single filler word).
+ * Accuracy = 100% − WER, giving a stable score.
  */
 export function computeAccuracy(transcript: string, passage: string): number {
   const wer = werFor(transcript, passage);
@@ -32,25 +135,31 @@ export function computeAccuracy(transcript: string, passage: string): number {
   return Math.max(0, 100 - wer);
 }
 
-/** Phil-IRI miscue formula: ((words read correctly) / total words) × 100. */
+/**
+ * Phil-IRI miscue formula: ((Words Attempted - Total Miscues) / Words Attempted) * 100.
+ */
 export function computeAccuracyFromMiscues(
   passage: string,
-  miscues: Record<string, number>
+  miscues: Record<string, number>,
+  wordsAttempted?: number
 ): number {
-  const totalWords = normalizeWords(passage).length;
-  if (totalWords === 0) return 0;
+  const baseWords = wordsAttempted && wordsAttempted > 0
+    ? wordsAttempted
+    : normalizeWords(passage).length;
+  if (baseWords === 0) return 0;
   const totalMiscues = Object.values(miscues).reduce(
     (a, b) => a + (Number(b) || 0),
     0
   );
-  return Math.max(0, Math.round(((totalWords - totalMiscues) / totalWords) * 100));
+  return Math.max(0, Math.round(((baseWords - totalMiscues) / baseWords) * 100));
 }
 
 export function countPauses(segments: { start: number; end: number }[]): number {
   let pauses = 0;
   for (let i = 1; i < segments.length; i++) {
     const gap = Math.max(0, segments[i].start - segments[i - 1].end);
-    if (gap > 1.0) pauses++;
+    // Standardize meaningful reading pause threshold to >= 2.0s (Phil-IRI standard)
+    if (gap >= 2.0) pauses++;
   }
   return pauses;
 }
@@ -58,7 +167,6 @@ export function countPauses(segments: { start: number; end: number }[]): number 
 /**
  * Word Error Rate (WER) via Levenshtein distance between the spoken transcript
  * and the reference passage: (insertions + deletions + substitutions) / ref words.
- * Returns an integer percentage 0–100. Lower is better; 100 means full mismatch.
  */
 export function werFor(transcript: string, passage: string): number | null {
   const spoken = normalizeWords(transcript);
@@ -66,7 +174,6 @@ export function werFor(transcript: string, passage: string): number | null {
   if (expected.length === 0) return null;
   if (spoken.length === 0) return 100;
 
-  // Levenshtein over word arrays (DP with two rolling rows keeps it O(n*m) cheap).
   const m = spoken.length;
   const n = expected.length;
   let prev = Array.from({ length: n + 1 }, (_, j) => j);
@@ -109,12 +216,12 @@ export function charLevenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-/** Count micro-pauses between segments (hesitation markers). */
+/** Count micro-pauses between segments (hesitation markers: 0.5s to 1.5s). */
 export function countHesitations(segments: { start: number; end: number }[]): number {
   let hesitations = 0;
   for (let i = 1; i < segments.length; i++) {
     const gap = Math.max(0, segments[i].start - segments[i - 1].end);
-    if (gap >= 0.3 && gap <= 1.0) hesitations++;
+    if (gap >= 0.5 && gap < 2.0) hesitations++;
   }
   return hesitations;
 }
@@ -139,12 +246,14 @@ export interface MiscueItem {
     | 'omission'
     | 'insertion'
     | 'repetition'
-    | 'reversal';
-  /** 0-based index in the passage word list (null for insertions). */
+    | 'reversal'
+    | 'hesitation'
+    | 'unattempted';
+  /** 0-based index in the passage word list (null for insertions/hesitations). */
   position: number | null;
-  /** The passage word at this position (null for insertions / repeats). */
+  /** The passage word at this position (null for insertions / repeats / hesitations). */
   expected: string | null;
-  /** The word the reader actually spoke (null for omissions). */
+  /** The word the reader actually spoke (null for omissions / unattempted). */
   spoken: string | null;
 }
 
@@ -152,16 +261,18 @@ export interface MiscueItem {
  * Full Phil-IRI miscue classifier — aligns the spoken transcript with the
  * passage word-by-word (Levenshtein backtrack) and classifies EVERY deviation:
  *
- *   • mispronunciation — near-miss of the passage word (small char edit distance)
+ *   • match             — exact or accent-equivalent match
+ *   • mispronunciation — near-miss of the passage word (edit distance <= 1 or <= 2)
  *   • substitution     — a different word replaces the passage word
- *   • omission         — passage word never spoken
- *   • insertion        — extra word not in the passage
+ *   • omission         — passage word skipped within attempted window
+ *   • insertion        — extra content word not in the passage
  *   • repetition       — same word spoken 2+ times consecutively
  *   • reversal         — two adjacent passage words spoken backwards
- *   • stutter          — a repetition run of 3+ copies
+ *   • hesitation       — minor filler words ("um", "uh", "ah")
+ *   • unattempted      — unread suffix of passage when reader stopped / timed out
  *
- * Returns the per-word detail list, per-category counts, total miscue count, and
- * stutter events. This is what the Phil-IRI miscue formula consumes.
+ * Returns the per-word detail list, per-category counts, total miscue count,
+ * wordsAttempted, and stutter events.
  */
 export function classifyMiscues(
   transcript: string,
@@ -171,6 +282,9 @@ export function classifyMiscues(
   counts: Record<'mispronunciations' | 'substitutions' | 'omissions' | 'insertions' | 'repetitions' | 'reversals', number>;
   stutters: number;
   totalMiscues: number;
+  wordsAttempted: number;
+  wordsTotal: number;
+  hesitations: number;
 } {
   const spoken = normalizeWords(transcript);
   const expected = normalizeWords(passage);
@@ -179,11 +293,13 @@ export function classifyMiscues(
     counts: { mispronunciations: 0, substitutions: 0, omissions: 0, insertions: 0, repetitions: 0, reversals: 0 },
     stutters: 0,
     totalMiscues: 0,
+    wordsAttempted: 0,
+    wordsTotal: expected.length,
+    hesitations: 0,
   };
   if (expected.length === 0) return empty;
 
   // ── Consecutive duplicate runs → stutter events ──
-  // run[i] = length of the run of identical tokens ending at spoken[i]
   const runLen = new Array<number>(spoken.length).fill(1);
   const isRepeat = new Array<boolean>(spoken.length).fill(false);
   for (let i = 1; i < spoken.length; i++) {
@@ -193,17 +309,11 @@ export function classifyMiscues(
     }
   }
   let stutters = 0;
-  // A run of 3+ copies of one word counts as a stutter (fillers like a single
-  // repeated word, or the passage's own "very very", do not).
   for (let i = 0; i < spoken.length; i++) {
     if (isRepeat[i] && (i + 1 >= spoken.length || runLen[i + 1] === 1)) {
       if (runLen[i] >= 3) stutters++;
     }
   }
-  // Any transcript word that participates in a consecutive duplicate run is a
-  // candidate for being an extra repetition. Matched tokens only become
-  // 'repetition' if the alignment consumes them as an insertion (i.e. the
-  // passage did not expect that extra copy) — see the relabel pass below.
   const repeatedWords = new Set<string>();
   for (let i = 0; i < spoken.length; i++) {
     if (isRepeat[i]) repeatedWords.add(spoken[i]);
@@ -224,13 +334,12 @@ export function classifyMiscues(
       const up = dp[i - 1][j] + 1; // insertion (extra spoken word)
       const left = dp[i][j - 1] + 1; // omission (missing passage word)
       dp[i][j] = Math.min(diag, up, left);
-      dir[i][j] =
-        dp[i][j] === diag ? 0 : dp[i][j] === up ? 1 : 2;
+      dir[i][j] = dp[i][j] === diag ? 0 : dp[i][j] === up ? 1 : 2;
     }
   }
 
-  // ── Backtrack, honoring diag first so substitutions match over spurious gaps ──
-  const items: MiscueItem[] = [];
+  // ── Backtrack ──
+  const rawItems: MiscueItem[] = [];
   let i = m;
   let j = n;
   while (i > 0 || j > 0) {
@@ -238,13 +347,11 @@ export function classifyMiscues(
       const sp = spoken[i - 1];
       const ex = expected[j - 1];
       if (sp === ex) {
-        // Matched — even a duplicated word the passage also has ("very very").
-        items.unshift({ type: 'match', position: j - 1, expected: ex, spoken: sp });
+        rawItems.unshift({ type: 'match', position: j - 1, expected: ex, spoken: sp });
       } else {
-        // Near-miss → mispronunciation; otherwise substitution.
         const dist = charLevenshtein(sp, ex);
         const near = dist <= 1 || (dist <= 2 && ex.length >= 4);
-        items.unshift({
+        rawItems.unshift({
           type: near ? 'mispronunciation' : 'substitution',
           position: j - 1,
           expected: ex,
@@ -254,24 +361,47 @@ export function classifyMiscues(
       i--;
       j--;
     } else if (i > 0 && (j === 0 || dir[i][j] === 1)) {
-      // Insertion: spoke a word the passage didn't expect here.
-      items.unshift({ type: 'insertion', position: null, expected: null, spoken: spoken[i - 1] });
+      rawItems.unshift({ type: 'insertion', position: null, expected: null, spoken: spoken[i - 1] });
       i--;
     } else {
-      // Omission: passage word never spoken.
-      items.unshift({ type: 'omission', position: j - 1, expected: expected[j - 1], spoken: null });
+      rawItems.unshift({ type: 'omission', position: j - 1, expected: expected[j - 1], spoken: null });
       j--;
     }
   }
 
-  // ── Repetition relabel · extra copies only ──
-  // An insertion whose word is part of a duplicate run in the transcript is an
-  // extra copy of a word the reader repeated — a Phil-IRI repetition. (A
-  // matched word, or a single "um" filler, is never relabeled.)
-  for (const it of items) {
-    if (it.type === 'insertion' && it.spoken && repeatedWords.has(it.spoken)) {
-      it.type = 'repetition';
+  // ── Determine Attempted Reading Window ──
+  // Furthest matched or attempted passage word index
+  let lastAttemptedPos = -1;
+  for (const it of rawItems) {
+    if (['match', 'mispronunciation', 'substitution'].includes(it.type) && it.position !== null) {
+      if (it.position > lastAttemptedPos) lastAttemptedPos = it.position;
     }
+  }
+
+  let fillerHesitations = 0;
+  const items: MiscueItem[] = [];
+
+  for (const it of rawItems) {
+    // 1. Partial/timed reading fix: do NOT count unread suffix as omissions
+    if (it.type === 'omission' && it.position !== null && it.position > lastAttemptedPos) {
+      items.push({ ...it, type: 'unattempted' });
+      continue;
+    }
+
+    // 2. Filler words: treat as hesitation rather than accuracy insertion miscue
+    if (it.type === 'insertion' && it.spoken && FILLER_WORDS.has(it.spoken)) {
+      fillerHesitations++;
+      items.push({ ...it, type: 'hesitation' });
+      continue;
+    }
+
+    // 3. Relabel consecutive repetitions
+    if (it.type === 'insertion' && it.spoken && repeatedWords.has(it.spoken)) {
+      items.push({ ...it, type: 'repetition' });
+      continue;
+    }
+
+    items.push(it);
   }
 
   // ── Reversal pass: adjacent substitutions where swapping spoken words matches ──
@@ -293,7 +423,7 @@ export function classifyMiscues(
     }
   }
 
-  // ── Tally ──
+  // ── Tally strictly within attempted text range ──
   const counts = {
     mispronunciations: 0,
     substitutions: 0,
@@ -302,8 +432,6 @@ export function classifyMiscues(
     repetitions: 0,
     reversals: 0,
   };
-  // Item types are singular; counts keys are plural — map explicitly so
-  // repetitions/reversals actually tally (avoids a NaN key).
   const COUNT_KEY: Record<string, keyof typeof counts> = {
     mispronunciation: 'mispronunciations',
     substitution: 'substitutions',
@@ -312,11 +440,13 @@ export function classifyMiscues(
     repetition: 'repetitions',
     reversal: 'reversals',
   };
+
   for (const it of items) {
-    if (it.type === 'match') continue;
+    if (it.type === 'match' || it.type === 'hesitation' || it.type === 'unattempted') continue;
     const key = COUNT_KEY[it.type];
     if (key) counts[key]++;
   }
+
   const totalMiscues =
     counts.mispronunciations +
     counts.substitutions +
@@ -325,18 +455,30 @@ export function classifyMiscues(
     counts.repetitions +
     counts.reversals;
 
-  return { items, counts, stutters, totalMiscues };
+  const wordsAttempted = lastAttemptedPos >= 0 ? lastAttemptedPos + 1 : (spoken.length > 0 ? Math.min(expected.length, spoken.length) : 0);
+
+  return {
+    items,
+    counts,
+    stutters,
+    totalMiscues,
+    wordsAttempted,
+    wordsTotal: expected.length,
+    hesitations: fillerHesitations,
+  };
 }
 
 /**
- * Phil-IRI oral-reading level bands (capstone spec §5.2):
- *   96–100% Independent | 91–95% Instructional | 80–90% Frustration | <80% Non-Reader
+ * Official DepEd Phil-IRI reading level bands (DepEd Order No. 14, s. 2018):
+ *   Independent:  >= 97% accuracy
+ *   Instructional: 90% to 96% accuracy
+ *   Frustration:   < 90% accuracy (Non-Reader if 0 words decoded)
  */
-export function readingLevel(accuracy: number): string {
-  if (accuracy >= 96) return 'Independent';
-  if (accuracy >= 91) return 'Instructional';
-  if (accuracy >= 80) return 'Frustration';
-  return 'Non-Reader';
+export function readingLevel(accuracy: number, wordsDecoded?: number): string {
+  if (wordsDecoded !== undefined && wordsDecoded <= 0) return 'Non-Reader';
+  if (accuracy >= 97) return 'Independent';
+  if (accuracy >= 90) return 'Instructional';
+  return 'Frustration';
 }
 
 /** Phil-IRI silent-reading comprehension bands. */
@@ -348,31 +490,31 @@ export function comprehensionLevel(score: number): string {
 
 /**
  * Official Phil-IRI combined reading level — word-recognition accuracy AND
- * comprehension jointly determine ONE final level (capstone spec §5.2).
+ * comprehension jointly determine ONE final level.
  *
  *   Word Recognition   Comprehension   Final Level
- *   ≥96%               ≥80%            Independent
- *   91–95%             59–79%          Instructional
- *   <91%               <59%            Frustration
- *
- * Per Phil-IRI determination practice, when the two measures disagree the
- * stricter (lower) level wins, so a learner must clear BOTH tests to be
- * promoted to the next level.
+ *   ≥97%               ≥80%            Independent
+ *   90–96%             59–79%          Instructional
+ *   <90%               <59%            Frustration
  */
-export function combinedReadingLevel(accuracy: number, comprehension: number): string {
-  // Higher number = higher level: 3 Independent, 2 Instructional, 1 Frustration.
-  const wr = accuracy >= 96 ? 3 : accuracy >= 91 ? 2 : 1;
+export function combinedReadingLevel(
+  accuracy: number,
+  comprehension: number,
+  wordsDecoded?: number
+): string {
+  if (wordsDecoded !== undefined && wordsDecoded <= 0) return 'Non-Reader';
+  const wr = accuracy >= 97 ? 3 : accuracy >= 90 ? 2 : 1;
   const comp = comprehension >= 80 ? 3 : comprehension >= 59 ? 2 : 1;
   const min = Math.min(wr, comp);
   return min === 3 ? 'Independent' : min === 2 ? 'Instructional' : 'Frustration';
 }
 
 /**
- * Groq Whisper transcription → { text, segments }. Throws on failure.
- *
- * @param passage  When provided, sent as Whisper's `initial_prompt` to bias
- *                 the model toward the expected text — dramatically improves
- *                 word accuracy on read-aloud tasks.
+ * Groq Whisper verbatim transcription → { text, segments }.
+ * Settings calibrated for verbatim oral reading assessment:
+ *   • temperature: 0 to eliminate hallucinations & paraphrasing
+ *   • language: "tl" for Tagalog/Filipino passages, "en" for English
+ *   • verbatim system prompt
  */
 export async function transcribeGroq(
   file: File,
@@ -386,13 +528,20 @@ export async function transcribeGroq(
   groqForm.append('response_format', 'verbose_json');
   groqForm.append('timestamp_granularities[]', 'segment');
   groqForm.append('file', file, file.name || 'recording.webm');
+  // Calibrate temperature: 0 prevents hallucinations and auto-correction of errors
+  groqForm.append('temperature', '0');
 
-  // Bias Whisper toward the expected passage text (reduces hallucinations
-  // and improves word accuracy on read-aloud tasks).
-  if (passage) {
-    const prompt = normalizeWords(passage).slice(0, 200).join(' ');
-    groqForm.append('prompt', prompt);
-  }
+  // Detect language: pass "tl" for Filipino/Tagalog, otherwise default to "en"
+  const lang = detectPassageLanguage(passage);
+  groqForm.append('language', lang);
+
+  // Prepend verbatim instruction prompt to Whisper
+  const systemPrompt = 'Transcribe oral reading verbatim. Do not omit repetitions, stutters, mispronunciations, or filler words.';
+  const passageSnippet = passage
+    ? ' ' + normalizeWords(passage).slice(0, 100).join(' ')
+    : '';
+  const prompt = `${systemPrompt}${passageSnippet}`.slice(0, 400);
+  groqForm.append('prompt', prompt);
 
   const groqRes = await fetch(GROQ_URL, {
     method: 'POST',
@@ -416,15 +565,6 @@ export async function transcribeGroq(
 /**
  * Shared pipeline: pick transcription source, compute Phil-IRI metrics,
  * given a passage.
- *
- * Key improvements over the old pipeline:
- *   • Accuracy uses Levenshtein alignment (100 − WER) so insertions no
- *     longer cascade into cascading mismatches.
- *   • WPM uses active speech duration from segment timestamps (first word
- *     start → last word end) instead of wall-clock recording time, which
- *     included dead air before/after reading.
- *   • When a comprehension score is provided the combined Phil-IRI level
- *     (stricter of word-recognition and comprehension) is returned.
  */
 export function computeFluencyMetrics(opts: {
   simulate: boolean;
@@ -444,18 +584,16 @@ export function computeFluencyMetrics(opts: {
   const simulation = simulate;
 
   if (simulate) {
-    // Demo fallback: read ~97% of the passage so it lands at Independent.
+    // Demo fallback: simulate reading ~98% of passage accurately
     const words = normalizeWords(passage);
-    const take = Math.max(1, Math.floor(words.length * 0.97));
+    const take = Math.max(1, Math.floor(words.length * 0.98));
     transcript = words.slice(0, take).join(' ');
     segments = [];
   } else if (file) {
-    // transcript/segments must be pre-populated by the caller (transcribeGroq).
+    // transcript/segments populated by caller
   }
 
-  // ── Miscue classification (full Phil-IRI breakdown) ──
-  // Alignment-based, stable even when Whisper inserts filler words that shift
-  // positional indices. Manual miscue mode has no transcript → no breakdown.
+  // ── Miscue classification (Phil-IRI breakdown) ──
   const classified = transcript
     ? classifyMiscues(transcript, passage)
     : {
@@ -470,66 +608,59 @@ export function computeFluencyMetrics(opts: {
         },
         stutters: 0,
         totalMiscues: 0,
+        wordsAttempted: 0,
+        wordsTotal: normalizeWords(passage).length,
+        hesitations: 0,
       };
 
-  // ── Accuracy ──
-  // Manual miscue mode uses the Phil-IRI miscue formula from teacher counts.
-  // Auto mode uses the same Phil-IRI miscue formula from the classifier
-  // ((words − miscues) ÷ words × 100). Both totals are numerically the same
-  // as Levenshtein distance, so accuracy and WER stay consistent.
-  const autoAccuracy = transcript
-    ? Math.max(
-        0,
-        Math.round(
-          ((normalizeWords(passage).length - classified.totalMiscues) /
-            Math.max(1, normalizeWords(passage).length)) *
-            100
-        )
-      )
-    : computeAccuracy(transcript, passage);
+  const wordsAttempted = classified.wordsAttempted > 0
+    ? classified.wordsAttempted
+    : normalizeWords(passage).length;
+
+  const totalMiscues = hasMiscues
+    ? Object.values(miscues).reduce((a, b) => a + (Number(b) || 0), 0)
+    : classified.totalMiscues;
+
+  // ── Strict Phil-IRI Word Reading Accuracy (%) ──
+  // ((Words Attempted - Total Miscues) / Words Attempted) * 100
+  const autoAccuracy = wordsAttempted > 0
+    ? Math.max(0, Math.round(((wordsAttempted - classified.totalMiscues) / wordsAttempted) * 100))
+    : 0;
+
   const accuracy = hasMiscues
-    ? computeAccuracyFromMiscues(passage, miscues)
+    ? computeAccuracyFromMiscues(passage, miscues, classified.wordsAttempted)
     : autoAccuracy;
 
   // ── WER ──
-  // Only makes sense when we actually have a transcription (audio or simulate).
-  // Manual miscue mode has no transcript → leave WER null.
   const wer = transcript ? werFor(transcript, passage) : null;
 
   // ── Active reading duration from segment timestamps ──
-  // Falls back to the caller-provided durationSec when no segments exist.
-  // This excludes dead air before/after the student reads, giving a more
-  // accurate WPM than the old wall-clock approach.
   let activeDurationSec = durationSec;
   if (segments.length >= 2) {
     const speechDuration = segments[segments.length - 1].end - segments[0].start;
     if (speechDuration > 1) activeDurationSec = speechDuration;
   }
 
-  // ── WPM (words per minute of active reading time) ──
-  // "Recorded speech only": every word the reader actually spoke, divided by
-  // the time their voice was active. No target, no rounding against a norm.
-  const minutes = Math.max(0.25, activeDurationSec / 60);
+  // ── Reading Rate (WCPM): Words Correct Per Minute ──
+  // Math.max(0, Math.round((Spoken Words - Total Miscues) / (activeDurationSec / 60)))
+  const activeMinutes = Math.max(1 / 60, activeDurationSec / 60);
   const spokenWords = normalizeWords(transcript).length;
-  const wpm = spokenWords > 0 ? Math.round(spokenWords / minutes) : null;
+  const wordsDecoded = spokenWords - totalMiscues;
+  const wpm = spokenWords > 0
+    ? Math.max(0, Math.round((spokenWords - totalMiscues) / activeMinutes))
+    : 0;
+
   const pauses = countPauses(segments);
 
-  // ── Acoustic fallbacks when the Librosa service is unavailable ──
-  const hesitations = opts.segmentsInput.length
-    ? countHesitations(segments)
-    : 0;
-  const longestPause = opts.segmentsInput.length
-    ? longestPauseFromSegments(segments)
-    : 0;
+  // ── Acoustic fallbacks ──
+  const hesitations = (opts.segmentsInput.length ? countHesitations(segments) : 0) + classified.hesitations;
+  const longestPause = opts.segmentsInput.length ? longestPauseFromSegments(segments) : 0;
 
-  // ── Phil-IRI level ──
-  // When a comprehension score is available, use the combined level
-  // (stricter of word-recognition and comprehension).
+  // ── DepEd Phil-IRI Reading Level ──
   const comp = opts.comprehension;
-  const level =
-    comp != null && !Number.isNaN(comp)
-      ? combinedReadingLevel(accuracy, comp)
-      : readingLevel(accuracy);
+  const level = comp != null && !Number.isNaN(comp)
+    ? combinedReadingLevel(accuracy, comp, wordsDecoded)
+    : readingLevel(accuracy, wordsDecoded);
 
   return {
     transcript,
@@ -540,13 +671,13 @@ export function computeFluencyMetrics(opts: {
     pauses,
     level,
     spokenWords,
+    wordsAttempted,
+    wordsTotal: classified.wordsTotal,
     activeDurationSec,
-    // Full Phil-IRI miscue engine output.
     miscueBreakdown: classified.counts,
     miscueItems: classified.items,
-    miscueTotal: classified.totalMiscues,
+    miscueTotal: totalMiscues,
     stutters: classified.stutters,
-    // Acoustic fallbacks (overwritten by the Librosa service when it's up).
     hesitations,
     longestPause,
   };

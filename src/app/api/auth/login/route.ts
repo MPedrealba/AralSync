@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import connectDB from "../../../../../database/db";
 import User from "../../../../../models/User";
+import LearnerRecord from "../../../../../models/LearnerRecord";
 import { logAudit } from "@/lib/audit";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
@@ -43,8 +44,17 @@ export async function POST(req: Request) {
     // Connect to MongoDB Atlas
     await connectDB();
 
-    // Search for the user by username
-    const user = await User.findOne({ username: String(username).trim() });
+    const trimmedInput = String(username).trim();
+
+    // Search for the user by username, or by student LRN
+    let user = await User.findOne({ username: trimmedInput });
+    if (!user) {
+      const lr = await LearnerRecord.findOne({ lrn: trimmedInput });
+      if (lr?.studentId) {
+        user = await User.findById(lr.studentId);
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { error: "Invalid credentials" },
@@ -89,6 +99,7 @@ export async function POST(req: Request) {
       role: user.role,
       name: user.name,
       specialization: user.specialization || 'all-subjects',
+      mustChangePassword: Boolean(user.mustChangePassword),
     };
 
     // Sign the JWT token using jose
@@ -100,7 +111,13 @@ export async function POST(req: Request) {
 
     // Create a 200 JSON response
     const response = NextResponse.json(
-      { success: true, role: user.role, name: user.name, specialization: user.specialization || 'all-subjects' },
+      {
+        success: true,
+        role: user.role,
+        name: user.name,
+        specialization: user.specialization || 'all-subjects',
+        mustChangePassword: Boolean(user.mustChangePassword),
+      },
       { status: 200 }
     );
 

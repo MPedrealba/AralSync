@@ -69,16 +69,18 @@ export async function POST(req: NextRequest) {
         continue;
       }
       try {
+        const trimmedLrn = data.lrn.trim();
         const userDoc = await User.create({
-          username: data.lrn,
-          password: await bcrypt.hash(data.lrn, 10),
+          username: trimmedLrn,
+          password: await bcrypt.hash(trimmedLrn.toUpperCase(), 10),
           name: data.name,
           role: 'student',
           active: true,
+          mustChangePassword: true,
         });
         await LearnerRecord.create({
           studentId: userDoc._id,
-          lrn: data.lrn,
+          lrn: trimmedLrn,
           gradeLevel: data.gradeLevel ?? undefined,
           section: data.section || undefined,
           guardian: data.guardian || undefined,

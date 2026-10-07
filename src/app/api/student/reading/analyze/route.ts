@@ -159,6 +159,8 @@ export async function POST(req: NextRequest) {
       miscueBreakdown,
       miscueItems,
       miscueTotal,
+      wordsAttempted,
+      wordsTotal,
       stutters,
       hesitations,
       longestPause,
@@ -227,6 +229,7 @@ export async function POST(req: NextRequest) {
       pauseAvgSec: librosaFeatures?.pauseAvgSec ?? undefined,
       pacingMean: librosaFeatures?.pacingMean ?? undefined,
       // Phil-IRI miscue engine output.
+      wordsAttempted,
       miscueBreakdown,
       miscueItems,
       miscueTotal,
@@ -300,7 +303,10 @@ export async function POST(req: NextRequest) {
       librosa: librosaFeatures,
       // Phil-IRI measured output.
       miscueBreakdown,
+      miscueItems,
       miscueTotal,
+      wordsAttempted,
+      wordsTotal,
       stutters,
       hesitations,
       longestPause,

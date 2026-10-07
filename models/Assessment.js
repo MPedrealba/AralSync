@@ -22,6 +22,7 @@ const AssessmentSchema = new mongoose.Schema({
   pauseAvgSec: { type: Number }, // average pause length
   pacingMean: { type: Number }, // mean inter-onset interval (speech rhythm)
   // ── Phil-IRI miscue engine (word-alignment derived) ──
+  wordsAttempted: { type: Number }, // words in passage attempted by reader
   miscueTotal: { type: Number }, // total miscues (formula numerator)
   miscueBreakdown: {
     mispronunciations: { type: Number, default: 0 },

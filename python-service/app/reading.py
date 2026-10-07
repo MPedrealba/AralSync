@@ -146,13 +146,30 @@ def extract_reading_features(audio_path: str) -> dict:
         pacing_mean = 0.0
         pacing_cv = 0.0
 
-    # ── Pause Detection (gaps between speech segments) ──────────────────────
-    # Using non-silent intervals with a threshold
-    intervals = librosa.effects.split(y, top_db=25)
+    # ── Dynamic RMS Noise Floor Adaptation ──────────────────────────────────
+    # Classroom environments often have background ambient noise (fans, distance chatter).
+    # Measure the RMS energy distribution to dynamically adapt top_db.
+    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+    if len(rms) > 0 and np.max(rms) > 1e-5:
+        rms_db = librosa.amplitude_to_db(rms, ref=np.max)
+        # 15th percentile approximates background noise floor; 85th percentile approximates active speech
+        noise_floor_db = float(np.percentile(rms_db, 15))
+        speech_level_db = float(np.percentile(rms_db, 85))
+        # Target a split threshold positioned between noise floor and speech level
+        # Clamped between 14 dB (noisy classroom) and 35 dB (clean audio)
+        adaptive_top_db = float(np.clip(abs(speech_level_db - noise_floor_db) * 0.65 + 6.0, 14.0, 35.0))
+    else:
+        adaptive_top_db = 25.0
 
+    intervals = librosa.effects.split(y, top_db=adaptive_top_db)
+
+    # ── Pause Detection (Phil-IRI Standardized Thresholds) ──────────────────
+    # Phil-IRI standard: >= 2.0 seconds represents significant hesitation / block.
+    # Gaps between 0.5s and 1.5s (or < 2.0s) represent natural cadence and micro-pauses.
     pause_count = 0
     pause_total = 0.0
     pause_lengths = []
+    cadence_micro_pauses = 0
 
     if len(intervals) > 1:
         for i in range(1, len(intervals)):
@@ -160,22 +177,24 @@ def extract_reading_features(audio_path: str) -> dict:
             gap_end = intervals[i][0] / sr
             gap_duration = gap_end - gap_start
 
-            if gap_duration > 0.5:  # pause threshold: 0.5 seconds
+            if gap_duration >= 2.0:
+                # Phil-IRI meaningful reading pause (significant hesitation)
                 pause_count += 1
                 pause_total += gap_duration
                 pause_lengths.append(gap_duration)
+            elif 0.5 <= gap_duration < 2.0:
+                # Natural cadence / micro-pause
+                cadence_micro_pauses += 1
 
     pause_avg = pause_total / pause_count if pause_count > 0 else 0.0
 
     # ── Speech Duration ─────────────────────────────────────────────────────
     speech_duration = sum((end - start) / sr for start, end in intervals)
 
-    # ── Silence Analysis (Librosa non-silent segment detection) ──────────────
-    # More granular: detect all silence below threshold
-    silence_threshold_db = -35
+    # ── Silence Analysis (granular silence intervals) ───────────────────────
+    silence_threshold_db = min(-30.0, -adaptive_top_db - 5.0)
     non_silent = librosa.effects.split(y, top_db=abs(silence_threshold_db))
 
-    # Build silence intervals (complement of non-silent)
     silence_intervals = []
     prev_end = 0
     for start, end in non_silent:
@@ -186,19 +205,18 @@ def extract_reading_features(audio_path: str) -> dict:
         silence_intervals.append((prev_end, len(y)))
 
     silence_total = sum((end - start) / sr for start, end in silence_intervals)
-    silence_longest = max(((end - start) / sr for start, end in silence_intervals), default=0.0)
+    silence_longest = max(
+        max(((end - start) / sr for start, end in silence_intervals), default=0.0),
+        max(pause_lengths, default=0.0)
+    )
     silence_ratio = silence_total / duration if duration > 0 else 0.0
 
     # ── Hesitation Detection ────────────────────────────────────────────────
-    # Hesitations = micro-pauses (0.1–0.5s) between onsets + repeated very short IOIs
-    hesitation_count = 0
+    # Combines cadence micro-pauses (0.5s - 1.5s) with stutter/repetition onsets (< 0.08s)
+    hesitation_count = cadence_micro_pauses
 
     if len(onset_times) >= 2:
         iois = np.diff(onset_times)
-        # Micro-pauses between words (hesitation indicator)
-        micro_pauses = iois[(iois >= 0.1) & (iois <= 0.5)]
-        hesitation_count += len(micro_pauses)
-
         # Repeated very short IOIs (< 0.08s) suggest stuttering/repetition
         very_short = iois[iois < 0.08]
         hesitation_count += len(very_short)
@@ -215,6 +233,8 @@ def extract_reading_features(audio_path: str) -> dict:
         "pacing_mean": round(pacing_mean, 4),
         "pacing_cv": round(pacing_cv, 4),
         "hesitations": hesitation_count,
+        "micro_pauses": cadence_micro_pauses,
+        "adaptive_top_db": round(adaptive_top_db, 1),
         "onset_times": [round(t, 3) for t in onset_times],
     }
 

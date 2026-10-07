@@ -228,13 +228,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Create student user account
-    const hashedPassword = await bcrypt.hash(trimmedLrn, 10);
+    const hashedPassword = await bcrypt.hash(trimmedLrn.toUpperCase(), 10);
     const userDoc = await User.create({
       username: trimmedLrn,
       password: hashedPassword,
       name: trimmedName,
       role: 'student',
       active: true,
+      mustChangePassword: true,
     });
 
     const parsedGrade = Number(gradeLevel) || 7;

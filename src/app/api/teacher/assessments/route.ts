@@ -88,6 +88,8 @@ export async function GET(req: NextRequest) {
         pauseTotalSec: a.pauseTotalSec ?? null,
         pauseAvgSec: a.pauseAvgSec ?? null,
         silentSec: a.silenceSec ?? null,
+        miscueItems: a.miscueItems ?? [],
+        wordsAttempted: a.wordsAttempted ?? null,
         subskills: a.subskills ?? [],
         status: a.status || 'pending',
         notes: a.notes || null,
