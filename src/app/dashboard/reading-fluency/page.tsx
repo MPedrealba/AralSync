@@ -19,7 +19,10 @@ import {
   Sliders,
   Check,
   RotateCcw,
+  Shield,
 } from "lucide-react";
+import { useLiveCaption } from "@/hooks/useLiveCaption";
+import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
@@ -607,9 +610,28 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [recTime, setRecTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [noiseCancellation, setNoiseCancellation] = useState(true);
   const audioUrlRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<number | null>(null);
+
+  /* Live Speech Recognition & Karaoke Tracker */
+  const {
+    isListening: liveIsListening,
+    transcript: liveTranscript,
+    interimText: liveInterimText,
+    fullTranscript: liveFullTranscript,
+    spokenWordCount: liveSpokenWordCount,
+    activeWordIndex: liveActiveWordIndex,
+    isSupported: liveIsSupported,
+    startListening: startLiveCaption,
+    stopListening: stopLiveCaption,
+    reset: resetLiveCaption,
+  } = useLiveCaption({
+    passageText,
+    language: "auto",
+  });
 
   /* Analysis state */
   const [analyzing, setAnalyzing] = useState(false);
@@ -688,14 +710,19 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   /* Clean up on unmount */
   useEffect(() => {
     return () => {
+      stopLiveCaption();
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
     };
-  }, []);
+  }, [stopLiveCaption]);
 
   const startRecording = async () => {
     setError("");
@@ -707,8 +734,62 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      // 1. Hardware/Driver-level WebRTC acoustic constraints
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: noiseCancellation,
+          echoCancellation: noiseCancellation,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
+
+      let recordingStream = stream;
+
+      // 2. Web Audio API Real-Time DSP Filter Chain (filters out fan hum, desk rumble, and hiss)
+      if (noiseCancellation) {
+        try {
+          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtxClass) {
+            const ctx = new AudioCtxClass();
+            audioContextRef.current = ctx;
+            const source = ctx.createMediaStreamSource(stream);
+
+            // High-pass filter (85 Hz): Cuts electric fan hum, AC drone, and desk bumps
+            const highPass = ctx.createBiquadFilter();
+            highPass.type = "highpass";
+            highPass.frequency.value = 85;
+
+            // Low-pass filter (8000 Hz): Cuts high-frequency electrical hiss & coil whine
+            const lowPass = ctx.createBiquadFilter();
+            lowPass.type = "lowpass";
+            lowPass.frequency.value = 8000;
+
+            // Vocal Dynamics Compressor: Stabilizes reading loudness & suppresses sudden ambient spikes
+            const compressor = ctx.createDynamicsCompressor();
+            compressor.threshold.value = -24;
+            compressor.knee.value = 30;
+            compressor.ratio.value = 12;
+            compressor.attack.value = 0.003;
+            compressor.release.value = 0.25;
+
+            const dest = ctx.createMediaStreamDestination();
+            source.connect(highPass);
+            highPass.connect(lowPass);
+            lowPass.connect(compressor);
+            compressor.connect(dest);
+
+            recordingStream = dest.stream;
+          }
+        } catch {
+          recordingStream = stream;
+        }
+      }
+
+      resetLiveCaption();
+      startLiveCaption();
+
+      const mr = new MediaRecorder(recordingStream);
       const chunks: BlobPart[] = [];
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
@@ -720,6 +801,10 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         audioUrlRef.current = url;
         setAudioUrl(url);
         stream.getTracks().forEach((t) => t.stop());
+        if (audioContextRef.current) {
+          audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        }
       };
       mr.start();
       mediaRecorderRef.current = mr;
@@ -734,6 +819,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   };
 
   const stopRecording = () => {
+    stopLiveCaption();
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
     if (timerRef.current) {
@@ -1004,6 +1090,19 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 setActiveWordIdx={setActiveWordIdx}
               />
             </div>
+          ) : isRecording ? (
+            <div className="mt-4">
+              <LiveReadingCaptionViewer
+                passageText={passageText}
+                activeWordIndex={liveActiveWordIndex}
+                transcript={liveTranscript}
+                interimText={liveInterimText}
+                spokenWordCount={liveSpokenWordCount}
+                isListening={liveIsListening}
+                isSupported={liveIsSupported}
+                elapsedSec={recTime}
+              />
+            </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
               <div className="font-serif text-lg sm:text-xl leading-relaxed text-slate-800 tracking-normal space-y-4">
@@ -1121,6 +1220,25 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
           </p>
 
           <div className="flex flex-col items-center">
+            {/* Noise Cancellation Toggle Pill */}
+            <div className="mb-5 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => setNoiseCancellation(!noiseCancellation)}
+                disabled={isRecording}
+                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-all ${
+                  noiseCancellation
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 shadow-xs hover:bg-emerald-100"
+                    : "border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200"
+                } ${isRecording ? "opacity-75 cursor-not-allowed" : ""}`}
+                title="Toggle Active Noise Cancellation & classroom hum suppression"
+              >
+                <Shield className={`h-3.5 w-3.5 ${noiseCancellation ? "text-emerald-600" : "text-slate-400"}`} />
+                <span>Noise Cancellation: {noiseCancellation ? "Active (Filters fan & room hum)" : "Disabled (Raw mic)"}</span>
+                <span className={`h-2 w-2 rounded-full ${noiseCancellation ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+              </button>
+            </div>
+
             {/* Timer */}
             <p className="mb-6 font-mono text-4xl font-bold tracking-tight text-slate-900">
               {fmtTimer(recTime)}
@@ -1155,6 +1273,18 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 <p className="mt-1.5 text-center text-[11px] text-slate-500">
                   Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI transcription
                 </p>
+                {liveFullTranscript && (
+                  <div className="mt-2.5 rounded-lg border border-slate-200/80 bg-white p-2.5 text-left text-xs shadow-xs">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
+                      <span>Live Speech Tracked:</span>
+                      <span className="font-mono text-emerald-700">
+                        {liveSpokenWordCount} {liveSpokenWordCount === 1 ? "word" : "words"}
+                        {recTime > 2 && ` (~${Math.round((liveSpokenWordCount / Math.max(recTime, 1)) * 60)} WPM)`}
+                      </span>
+                    </div>
+                    <p className="font-serif text-slate-800 italic line-clamp-3">“{liveFullTranscript}”</p>
+                  </div>
+                )}
               </div>
             )}
 

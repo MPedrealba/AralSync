@@ -27,6 +27,11 @@ const InterventionSchema = new mongoose.Schema({
   pageEnd: { type: Number, default: null },
   sessionInfo: { type: String, default: null },
 
+  assignmentId: { type: String, index: true, default: null },
+  section: { type: String, default: null },
+  subject: { type: String, default: 'Reading' },
+  maxPoints: { type: Number, default: 100 },
+
   // Activity Submission & Grading
   submissionText: { type: String, default: '' },
   submissionFileUrl: { type: String, default: null },
@@ -38,7 +43,7 @@ const InterventionSchema = new mongoose.Schema({
   assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });
 
-if (mongoose.models.Intervention && !mongoose.models.Intervention.schema.paths.submissionText) {
+if (mongoose.models.Intervention && (!mongoose.models.Intervention.schema.paths.assignmentId || !mongoose.models.Intervention.schema.paths.maxPoints)) {
   delete mongoose.models.Intervention;
 }
 

@@ -2038,10 +2038,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Controls (42% / col-span-5) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs lg:col-span-5">
-          <div className="mb-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+        {/* Controls (Compact & Sticky / col-span-4) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs lg:col-span-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+          <div className="mb-3.5">
             <h3 className="text-base font-bold text-slate-900">
               Generate OMR Assessment
             </h3>
@@ -2051,12 +2051,12 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           </div>
 
           {/* Source toggle */}
-          <div className={`mb-5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-2" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
+          <div className={`mb-3.5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-2" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
             {(assignedSubject === "All" || assignedSubject === "Reading") && (
               <button
                 type="button"
                 onClick={() => setGenType("aral")}
-                className={`h-9 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   genType === "aral"
                     ? "bg-white text-slate-900 shadow-xs font-bold"
                     : "text-slate-600 hover:text-slate-900"
@@ -2069,7 +2069,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             <button
               type="button"
               onClick={() => setGenType("bank")}
-              className={`h-9 rounded-lg text-xs font-semibold transition-all ${
+              className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
                 genType === "bank"
                   ? "bg-white text-slate-900 shadow-xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
@@ -2081,7 +2081,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               <button
                 type="button"
                 onClick={() => setGenType("reading")}
-                className={`h-9 rounded-lg text-xs font-semibold transition-all ${
+                className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
                   genType === "reading"
                     ? "bg-white text-slate-900 shadow-xs font-bold"
                     : "text-slate-600 hover:text-slate-900"
@@ -2093,7 +2093,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             <button
               type="button"
               onClick={() => setGenType("upload")}
-              className={`h-9 rounded-lg text-xs font-semibold transition-all ${
+              className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
                 genType === "upload"
                   ? "bg-white text-slate-900 shadow-xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
@@ -2103,33 +2103,33 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {genType === "aral" ? (
               <>
                 {/* Subject Info Banner */}
-                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <BookOpen className="h-4 w-4 text-red-800" />
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:p-3 text-xs text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-red-800 shrink-0" />
                     <div>
                       <p className="font-bold text-slate-900">Subject: Reading</p>
                       <p className="text-[11px] text-slate-500">Official DepEd ARAL Materials</p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                  <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                     Active
                   </span>
                 </div>
 
                 {/* Assessment Scope Switcher (Quiz vs Exam) */}
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Assessment Scope
                   </label>
                   <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
                     <button
                       type="button"
                       onClick={() => switchAssessmentType("quiz")}
-                      className={`h-9.5 flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all ${
+                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
                         assessmentType === "quiz"
                           ? "bg-red-800 text-white shadow-xs"
                           : "text-slate-600 hover:text-slate-900"
@@ -2141,7 +2141,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     <button
                       type="button"
                       onClick={() => switchAssessmentType("exam")}
-                      className={`h-9.5 flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all ${
+                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
                         assessmentType === "exam"
                           ? "bg-red-800 text-white shadow-xs"
                           : "text-slate-600 hover:text-slate-900"
@@ -2155,7 +2155,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                 {/* Assessment Title (Optional / Custom) */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Assessment Title (Optional)
                     </label>
@@ -2178,9 +2178,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                         ? "e.g. Weekly Quiz #1 — Vocabulary & Context Clues"
                         : "e.g. First Quarter Periodical Exam in Reading"
                     }
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 transition-all"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 transition-all"
                   />
-                  <p className="mt-1 text-[11px] text-slate-400">
+                  <p className="mt-1 text-[10px] text-slate-400">
                     Prints prominently on both the Questionnaire and the OMR Bubble Sheet.
                   </p>
                 </div>
@@ -2188,7 +2188,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 {/* Quiz Mode: 1-2 Topics Selector */}
                 {assessmentType === "quiz" ? (
                   <div>
-                    <div className="mb-1.5 flex items-center justify-between">
+                    <div className="mb-1 flex items-center justify-between">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                         Competencies (Choose 1 or 2)
                       </label>
@@ -2197,7 +2197,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       </span>
                     </div>
 
-                    <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/50 p-2">
+                    <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 p-1.5 scrollbar-thin scrollbar-thumb-slate-200">
                       {topics.map((t) => {
                         const isSelected = selectedTopics.includes(t);
                         const isUsed = usedTopics.includes(t);
@@ -2207,7 +2207,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                         return (
                           <label
                             key={t}
-                            className={`flex items-start gap-2.5 rounded-lg border p-2 text-xs transition-all cursor-pointer ${
+                            className={`flex items-start gap-2 rounded-lg border p-1.5 text-xs transition-all cursor-pointer ${
                               isSelected
                                 ? "border-red-300 bg-red-50 text-red-950 font-semibold"
                                 : isDisabled
@@ -2235,28 +2235,28 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </div>
                 ) : (
                   /* Exam Mode: Whole Curriculum Display */
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3 text-xs text-slate-800">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs text-slate-800">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-bold text-slate-900">
                         <Award className="h-4 w-4 text-emerald-600" />
                         <span>Whole Curriculum Coverage</span>
                       </div>
-                      <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                         All {topics.length} Topics
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
                       {topics.map((t) => (
                         <span
                           key={t}
-                          className="inline-flex items-center gap-1 rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-2xs"
+                          className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700 shadow-2xs"
                         >
                           <Check className="h-3 w-3 text-emerald-600" />
                           <span>{t}</span>
                         </span>
                       ))}
                     </div>
-                    <div className="rounded-lg bg-white p-2.5 text-[11px] font-medium text-slate-600 border border-slate-200">
+                    <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200">
                       Even distribution: ~{Math.floor(count / Math.max(1, topics.length))} items per topic for a {count}-item balanced exam.
                     </div>
                   </div>
@@ -2264,17 +2264,17 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                 {/* Retake Checkbox for Quiz */}
                 {assessmentType === "quiz" && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <label className="flex items-start gap-2.5 cursor-pointer">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                    <label className="flex items-start gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={allowRetake}
                         onChange={(e) => setAllowRetake(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-800 focus:ring-red-800"
+                        className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
                       />
                       <div className="text-xs">
                         <span className="font-semibold text-slate-900">Allow Retake / Re-assess</span>
-                        <p className="text-slate-500 text-[11px]">
+                        <p className="text-slate-500 text-[10px]">
                           Enable previously assessed topics for another quiz administration.
                         </p>
                       </div>
@@ -2283,36 +2283,36 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 )}
 
                 {/* ARAL Reference Documents */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700 space-y-2">
-                  <p className="font-bold text-slate-900 text-[11px] uppercase tracking-wider">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-1.5">
+                  <p className="font-bold text-slate-900 text-[10px] uppercase tracking-wider">
                     DepEd ARAL Reference Materials:
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1">
                     <a
                       href="/learning-materials/ks3-plus/learner-workbook.pdf"
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
                     >
-                      <BookOpen className="h-3.5 w-3.5 text-red-800" />
+                      <BookOpen className="h-3 w-3 text-red-800" />
                       <span>KS3 Plus Workbook</span>
                     </a>
                     <a
                       href="/learning-materials/ks3-plus/tutors-guide.pdf"
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
                     >
-                      <BookOpen className="h-3.5 w-3.5 text-red-800" />
+                      <BookOpen className="h-3 w-3 text-red-800" />
                       <span>KS3 Tutor Guide</span>
                     </a>
                     <a
                       href="/learning-materials/ks2-plus/learner-workbook.pdf"
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
                     >
-                      <BookOpen className="h-3.5 w-3.5 text-red-800" />
+                      <BookOpen className="h-3 w-3 text-red-800" />
                       <span>KS2 Plus Workbook</span>
                     </a>
                   </div>
@@ -2320,13 +2320,13 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                 {/* Items Count */}
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Items Count
                   </label>
                   <select
                     value={count}
                     onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   >
                     {assessmentType === "quiz"
                       ? [5, 10, 15, 20].map((n) => (
@@ -2344,13 +2344,13 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                 {/* Written Items */}
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Written Items (Teacher-Graded)
                   </label>
                   <select
                     value={writtenCount}
                     onChange={(e) => setWrittenCount(parseInt(e.target.value) || 0)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   >
                     {[0, 2, 5].filter((n) => n <= count).map((n) => (
                       <option key={n} value={n}>
@@ -2363,9 +2363,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             ) : genType === "bank" ? (
               <>
                 {/* Math / Science Pending Notice */}
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800 space-y-1">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
                     <span>Materials Pending Upload</span>
                   </div>
                   <p className="text-[11px] leading-relaxed">
@@ -2374,12 +2374,12 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Subject</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Subject</label>
                   <select
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     disabled={assignedSubject !== "All"}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     {assignedSubject === "All" ? (
                       <>
@@ -2394,11 +2394,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Grade Level</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Grade Level</label>
                   <select
                     value={grade}
                     onChange={(e) => setGrade(parseInt(e.target.value) || 7)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[7, 8, 9, 10].map((g) => (
                       <option key={g} value={g}>Grade {g}</option>
@@ -2406,11 +2406,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Number of Items</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Number of Items</label>
                   <select
                     value={count}
                     onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[10, 20, 25, 50].map((n) => (
                       <option key={n} value={n}>{n} items</option>
@@ -2421,11 +2421,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             ) : genType === "reading" ? (
               <>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Reading Passage / Story</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Reading Passage / Story</label>
                   <select
                     value={passageId}
                     onChange={(e) => setPassageId(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     <option value="">Select a passage…</option>
                     {passages.map((p) => (
@@ -2437,11 +2437,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Items</label>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Items</label>
                   <select
                     value={count}
                     onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none focus:border-red-800"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
                   >
                     {[10, 20, 25, 50].map((n) => (
                       <option key={n} value={n}>{n} items</option>
@@ -2471,7 +2471,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   (selectedTopics.length === 0 ||
                     (selectedTopics.some((t) => usedTopics.includes(t)) && !allowRetake)))
               }
-              className="mt-6 h-11 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-800 hover:bg-red-900 text-white font-semibold shadow-xs transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-4 h-10 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-800 hover:bg-red-900 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Wand2 className="h-4 w-4" />
               {generating
@@ -2492,8 +2492,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           )}
         </div>
 
-        {/* Preview (58% / col-span-7) */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-7">
+        {/* Preview (Expanded / col-span-8) */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-8 flex-1 min-w-0">
           {!doc ? (
             <div className="flex h-full min-h-[380px] flex-col items-center justify-center gap-3 py-16 text-center">
               <BookOpen className="h-10 w-10 text-slate-300" />

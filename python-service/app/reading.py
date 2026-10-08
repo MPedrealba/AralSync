@@ -23,6 +23,12 @@ import numpy as np
 import librosa
 import soundfile as sf
 
+try:
+    import noisereduce as nr
+    NOISEREDUCE_AVAILABLE = True
+except ImportError:
+    NOISEREDUCE_AVAILABLE = False
+
 
 # ── ffmpeg Path ──────────────────────────────────────────────────────────────────
 
@@ -121,10 +127,29 @@ def extract_reading_features(audio_path: str) -> dict:
     if duration < 0.1:
         return _empty_features(duration)
 
+    # ── Spectral Gating Noise Cancellation ──────────────────────────────────
+    # Filters out continuous background noise (classroom fans, AC drone, computer hum)
+    # using non-destructive stationary spectral gating before feature extraction.
+    denoise_applied = False
+    y_clean = y
+    if NOISEREDUCE_AVAILABLE and duration >= 0.5:
+        try:
+            y_clean = nr.reduce_noise(
+                y=y,
+                sr=sr,
+                stationary=True,
+                prop_decrease=0.75,
+                n_fft=1024,
+                hop_length=512,
+            )
+            denoise_applied = True
+        except Exception:
+            y_clean = y
+
     # ── Onset Detection (speech rhythm / pacing) ────────────────────────────
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_env = librosa.onset.onset_strength(y=y_clean, sr=sr)
     onset_frames = librosa.onset.onset_detect(
-        y=y, sr=sr, onset_envelope=onset_env,
+        y=y_clean, sr=sr, onset_envelope=onset_env,
         backtrack=True, pre_max=3, post_max=3, pre_avg=3, post_avg=5,
         delta=0.2, wait=2
     )
@@ -148,8 +173,8 @@ def extract_reading_features(audio_path: str) -> dict:
 
     # ── Dynamic RMS Noise Floor Adaptation ──────────────────────────────────
     # Classroom environments often have background ambient noise (fans, distance chatter).
-    # Measure the RMS energy distribution to dynamically adapt top_db.
-    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+    # Measure the RMS energy distribution on the cleaned audio to dynamically adapt top_db.
+    rms = librosa.feature.rms(y=y_clean, frame_length=2048, hop_length=512)[0]
     if len(rms) > 0 and np.max(rms) > 1e-5:
         rms_db = librosa.amplitude_to_db(rms, ref=np.max)
         # 15th percentile approximates background noise floor; 85th percentile approximates active speech
@@ -161,7 +186,7 @@ def extract_reading_features(audio_path: str) -> dict:
     else:
         adaptive_top_db = 25.0
 
-    intervals = librosa.effects.split(y, top_db=adaptive_top_db)
+    intervals = librosa.effects.split(y_clean, top_db=adaptive_top_db)
 
     # ── Pause Detection (Phil-IRI Standardized Thresholds) ──────────────────
     # Phil-IRI standard: >= 2.0 seconds represents significant hesitation / block.
@@ -235,6 +260,7 @@ def extract_reading_features(audio_path: str) -> dict:
         "hesitations": hesitation_count,
         "micro_pauses": cadence_micro_pauses,
         "adaptive_top_db": round(adaptive_top_db, 1),
+        "noise_cancellation_applied": denoise_applied,
         "onset_times": [round(t, 3) for t in onset_times],
     }
 
@@ -253,6 +279,7 @@ def _empty_features(duration: float) -> dict:
         "pacing_mean": 0.0,
         "pacing_cv": 0.0,
         "hesitations": 0,
+        "noise_cancellation_applied": False,
         "onset_times": [],
     }
 

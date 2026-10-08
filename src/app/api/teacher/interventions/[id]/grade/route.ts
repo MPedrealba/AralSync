@@ -36,7 +36,7 @@ export async function PATCH(
       intervention.teacherRemarks = typeof teacherRemarks === 'string' ? teacherRemarks.trim() : '';
     }
 
-    const nextStatus = status || 'Reviewed';
+    const nextStatus = status || 'Completed';
     const allowedStatuses = ['Not Started', 'In Progress', 'Submitted', 'Reviewed', 'Completed'];
     if (allowedStatuses.includes(nextStatus)) {
       intervention.status = nextStatus;

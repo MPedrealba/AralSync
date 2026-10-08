@@ -62,6 +62,18 @@ interface RecommendationItem {
   kind: string;
 }
 
+interface WrittenAiResult {
+  itemIndex: number;
+  transcribedText: string;
+  isConceptUnderstood: boolean;
+  matchType: "exact" | "phonetic_spelling_slip" | "scientific_synonym" | "incorrect" | "blank";
+  conceptBadge: string;
+  evaluationSummary: string;
+  suggestedScore: number;
+  studentFeedback: string;
+  teacherRemediationNote: string;
+}
+
 const COMPETENCIES = [
   { label: "Numeracy", subject: "Math" },
   { label: "Reading Comprehension", subject: "Reading" },
@@ -242,6 +254,12 @@ function OMRWorkstationContent() {
   const [activeFilter, setActiveFilter] = useState<"all" | "flagged" | "incorrect">("all");
   const [focusedQuestionIndex, setFocusedQuestionIndex] = useState<number | null>(null);
 
+  // ── AI Written / Identification Vision Analysis State ──
+  const [isAnalyzingWritten, setIsAnalyzingWritten] = useState(false);
+  const [analyzingItemIndex, setAnalyzingItemIndex] = useState<number | null>(null);
+  const [writtenAiResults, setWrittenAiResults] = useState<Record<number, WrittenAiResult>>({});
+  const [copiedFeedbackIdx, setCopiedFeedbackIdx] = useState<number | null>(null);
+
   // ── Paper Viewer Controls ──
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -276,9 +294,10 @@ function OMRWorkstationContent() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Map competency to subject
+  // Map competency to subject (preferring the active answer key's subject if defined)
   const currentSubject =
-    competency === "Reading Comprehension" ? "Reading" : competency === "Science" ? "Science" : "Math";
+    answerKeys.find((k) => k.id === selectedKeyId)?.subject ||
+    (competency === "Reading Comprehension" ? "Reading" : competency === "Science" ? "Science" : "Math");
 
   // ── 1. Fetch Students & Answer Keys ──
   useEffect(() => {
@@ -737,6 +756,153 @@ function OMRWorkstationContent() {
     setFocusedQuestionIndex(itemIndex);
   };
 
+  // ── AI Vision Written Pre-Grading Handlers ──
+  const handleAiPreGradeWritten = async () => {
+    if (writtenItems.length === 0) return;
+    if (!sheetFile && !sheetImage) {
+      setErrorMessage("Please scan or upload an answer sheet before running AI vision analysis.");
+      return;
+    }
+
+    setIsAnalyzingWritten(true);
+    setErrorMessage("");
+    setInfoMessage(`Analyzing ${writtenItems.length} written responses with Subject-Aware AI Vision...`);
+
+    try {
+      let imageBlob: Blob | File | null = sheetFile;
+      if (!imageBlob && sheetImage) {
+        try {
+          imageBlob = await fetch(sheetImage).then((r) => r.blob());
+        } catch {
+          imageBlob = null;
+        }
+      }
+
+      const activeKey = answerKeys.find((k) => k.id === selectedKeyId);
+      const newResults: Record<number, WrittenAiResult> = { ...writtenAiResults };
+      const newScores: Record<number, number> = { ...writtenScores };
+
+      for (const item of writtenItems) {
+        setAnalyzingItemIndex(item.index);
+        const fd = new FormData();
+        if (imageBlob) {
+          fd.append("image", imageBlob, "sheet.png");
+        } else if (sheetImage) {
+          fd.append("image", sheetImage);
+        }
+        fd.append("subject", currentSubject);
+        fd.append(
+          "itemType",
+          currentSubject.toLowerCase().includes("science") ? "identification" : "solution"
+        );
+        fd.append("problemPrompt", item.prompt || `Item ${item.index + 1}`);
+        const expected =
+          keyAnswers[item.index] ||
+          (activeKey as any)?.questions?.[item.index]?.correctAnswer ||
+          "";
+        fd.append("expectedAnswer", expected);
+        fd.append("maxPoints", String(item.max || 1));
+        fd.append("itemIndex", String(item.index));
+
+        const res = await fetch("/api/teacher/omr/analyze-written", {
+          method: "POST",
+          body: fd,
+        });
+
+        const json = await parseJsonResponse(res);
+        if (json.success && json.data) {
+          newResults[item.index] = json.data;
+          newScores[item.index] = json.data.suggestedScore;
+        }
+      }
+
+      setWrittenAiResults(newResults);
+      setWrittenScores(newScores);
+      setInfoMessage("AI Vision pre-grading complete! Review suggested scores and diagnostic feedback below.");
+    } catch (err) {
+      console.error("AI Written analysis failed:", err);
+      setErrorMessage("AI vision evaluation encountered an error. You can still grade items manually.");
+    } finally {
+      setIsAnalyzingWritten(false);
+      setAnalyzingItemIndex(null);
+    }
+  };
+
+  const handleAnalyzeSingleItem = async (itemIndex: number) => {
+    const item = writtenItems.find((w) => w.index === itemIndex);
+    if (!item) return;
+    if (!sheetFile && !sheetImage) {
+      setErrorMessage("Please scan or upload an answer sheet before running AI vision analysis.");
+      return;
+    }
+
+    setAnalyzingItemIndex(itemIndex);
+    try {
+      let imageBlob: Blob | File | null = sheetFile;
+      if (!imageBlob && sheetImage) {
+        try {
+          imageBlob = await fetch(sheetImage).then((r) => r.blob());
+        } catch {
+          imageBlob = null;
+        }
+      }
+
+      const activeKey = answerKeys.find((k) => k.id === selectedKeyId);
+      const fd = new FormData();
+      if (imageBlob) {
+        fd.append("image", imageBlob, "sheet.png");
+      } else if (sheetImage) {
+        fd.append("image", sheetImage);
+      }
+      fd.append("subject", currentSubject);
+      fd.append(
+        "itemType",
+        currentSubject.toLowerCase().includes("science") ? "identification" : "solution"
+      );
+      fd.append("problemPrompt", item.prompt || `Item ${item.index + 1}`);
+      const expected =
+        keyAnswers[item.index] ||
+        (activeKey as any)?.questions?.[item.index]?.correctAnswer ||
+        "";
+      fd.append("expectedAnswer", expected);
+      fd.append("maxPoints", String(item.max || 1));
+      fd.append("itemIndex", String(item.index));
+
+      const res = await fetch("/api/teacher/omr/analyze-written", {
+        method: "POST",
+        body: fd,
+      });
+
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data) {
+        setWrittenAiResults((prev) => ({ ...prev, [itemIndex]: json.data }));
+        setWrittenScores((prev) => ({
+          ...prev,
+          [itemIndex]: json.data.suggestedScore,
+        }));
+      }
+    } catch (err) {
+      console.error("Single item AI analysis error:", err);
+    } finally {
+      setAnalyzingItemIndex(null);
+    }
+  };
+
+  const handleAppendFeedbackToRemarks = (
+    itemIdx: number,
+    ai: { studentFeedback?: string; teacherRemediationNote?: string }
+  ) => {
+    const note = ai.teacherRemediationNote || ai.studentFeedback || "";
+    if (!note) return;
+    const prefix = `Q${itemIdx + 1}: `;
+    setTeacherNotes((prev) => {
+      if (prev.includes(prefix)) return prev;
+      return prev ? `${prev}\n${prefix}${note}` : `${prefix}${note}`;
+    });
+    setCopiedFeedbackIdx(itemIdx);
+    setTimeout(() => setCopiedFeedbackIdx(null), 2500);
+  };
+
   // ── Cross-Reference Question & Focus ──
   const handleFocusQuestion = (index: number) => {
     setFocusedQuestionIndex(index);
@@ -852,6 +1018,7 @@ function OMRWorkstationContent() {
       setDetectedAnswers([]);
       setVerifiedAnswers([]);
       setWrittenScores({});
+      setWrittenAiResults({});
       setTeacherNotes("");
       setFocusedQuestionIndex(null);
       setErrorMessage("");
@@ -873,6 +1040,7 @@ function OMRWorkstationContent() {
     setDetectedAnswers([]);
     setVerifiedAnswers([]);
     setWrittenScores({});
+    setWrittenAiResults({});
     setTeacherNotes("");
     setFocusedQuestionIndex(null);
     setErrorMessage("");
@@ -1507,6 +1675,49 @@ function OMRWorkstationContent() {
                   </div>
                 )}
 
+                {/* AI Pre-Grade Written & Identification Items Action Banner */}
+                {writtenItems.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50/90 via-indigo-50/70 to-purple-50/90 p-2.5 text-xs text-purple-950 shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-600 text-white shadow-xs shrink-0">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span>AI Vision Pre-Grading</span>
+                          <span className="rounded-full bg-purple-200/90 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
+                            {currentSubject} {currentSubject === "Science" ? "Identification" : "Solutions"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-purple-700">
+                          {writtenItems.length} {writtenItems.length === 1 ? "written item" : "written items"} in this key
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAiPreGradeWritten}
+                      disabled={isAnalyzingWritten || (!sheetFile && !sheetImage)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 px-3 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-purple-800 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
+                    >
+                      {isAnalyzingWritten ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          <span>
+                            Analyzing Q{analyzingItemIndex !== null ? analyzingItemIndex + 1 : ""}...
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3 w-3" />
+                          <span>AI Pre-Grade Written &amp; Identification Items</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 {/* Unsaved / Error Banner if assessmentId is missing */}
                 {!assessmentId && (
                   <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">
@@ -1688,36 +1899,182 @@ function OMRWorkstationContent() {
                             </div>
                           </div>
                         ) : (
-                          /* Written Item Rubric Scoring */
-                          <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
-                            <p className="text-xs text-gray-700 font-medium">
-                              {writtenDef?.prompt || `Item ${qIdx + 1} open-ended response`}
-                            </p>
-                            <div className="mt-2 flex items-center justify-between">
-                              <span className="text-[11px] font-bold uppercase text-amber-800">
-                                Score Rubric (Max: {writtenDef?.max ?? 1} pts):
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {Array.from({ length: (writtenDef?.max ?? 1) + 1 }).map((_, pt) => {
-                                  const isSelected = (writtenScores[qIdx] ?? 0) === pt;
-                                  return (
-                                    <button
-                                      key={pt}
-                                      type="button"
-                                      onClick={() => handleWrittenScoreChange(qIdx, pt)}
-                                      className={`h-7 px-2.5 rounded-md text-xs font-bold transition-colors ${
-                                        isSelected
-                                          ? "bg-amber-600 text-white shadow-xs"
-                                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"
-                                      }`}
-                                    >
-                                      {pt} pt{pt !== 1 ? "s" : ""}
-                                    </button>
-                                  );
-                                })}
+                          /* Written Item Rubric & Subject-Aware AI Vision Evaluation */
+                          (() => {
+                            const aiResult = writtenAiResults[qIdx];
+                            const isAnalyzingThis = analyzingItemIndex === qIdx;
+                            const isScience =
+                              currentSubject === "Science" ||
+                              (writtenDef?.prompt && /identify|name the|what is/i.test(writtenDef.prompt));
+                            const expectedTerm =
+                              keyAnswers[qIdx] ||
+                              (answerKeys.find((k) => k.id === selectedKeyId)?.questions as any)?.[qIdx]?.correctAnswer ||
+                              "";
+
+                            return (
+                              <div className="mt-1.5 rounded-xl border border-amber-200/90 bg-amber-50/40 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                                        {isScience ? "Science Identification" : "Written Response"}
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-slate-500">
+                                        Max {writtenDef?.max ?? 1} pt{writtenDef?.max !== 1 ? "s" : ""}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-xs font-semibold text-slate-800">
+                                      {writtenDef?.prompt || `Item ${qIdx + 1} open-ended response`}
+                                    </p>
+                                    {expectedTerm && (
+                                      <p className="mt-0.5 text-[11px] text-slate-500">
+                                        Expected Key: <span className="font-semibold text-slate-700">{expectedTerm}</span>
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAnalyzeSingleItem(qIdx)}
+                                    disabled={isAnalyzingWritten || isAnalyzingThis || (!sheetFile && !sheetImage)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition-colors disabled:opacity-50 shrink-0"
+                                    title="Run OpenAI Vision analysis on this item"
+                                  >
+                                    {isAnalyzingThis ? (
+                                      <>
+                                        <RefreshCw className="h-3 w-3 animate-spin text-purple-600" />
+                                        <span>Analyzing...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="h-3 w-3 text-purple-600" />
+                                        <span>{aiResult ? "Re-analyze" : "AI Vision"}</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Specialized Science Identification / Math Vision Card */}
+                                {aiResult && (
+                                  <div className="mt-2.5 rounded-xl border border-purple-200 bg-white p-3 shadow-xs">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                                      <div className="flex items-center gap-1.5">
+                                        <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                                        <span className="text-[11px] font-bold text-purple-900">
+                                          AI Vision Evaluation
+                                        </span>
+                                      </div>
+
+                                      {/* Conceptual Match Badges */}
+                                      {aiResult.matchType === "phonetic_spelling_slip" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 shadow-2xs">
+                                          <Check className="h-3 w-3 text-emerald-600" />
+                                          <span>
+                                            Concept Understood (Phonetic: &ldquo;{aiResult.transcribedText}&rdquo; &rarr; {expectedTerm || "Expected"})
+                                          </span>
+                                        </span>
+                                      )}
+                                      {aiResult.matchType === "scientific_synonym" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 shadow-2xs">
+                                          <Check className="h-3 w-3 text-emerald-600" />
+                                          <span>Valid Scientific Synonym</span>
+                                        </span>
+                                      )}
+                                      {aiResult.matchType === "exact" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 shadow-2xs">
+                                          <Check className="h-3 w-3 text-emerald-600" />
+                                          <span>Exact Term Match</span>
+                                        </span>
+                                      )}
+                                      {aiResult.matchType === "incorrect" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-800 shadow-2xs">
+                                          <X className="h-3 w-3 text-rose-600" />
+                                          <span>Incorrect Scientific Concept</span>
+                                        </span>
+                                      )}
+                                      {aiResult.matchType === "blank" && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
+                                          <span>Blank / Unanswered</span>
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Student Transcription */}
+                                    <div className="mt-2 flex items-baseline gap-2">
+                                      <span className="text-xs text-slate-500 shrink-0">Student wrote:</span>
+                                      <span className="font-serif text-sm font-bold text-slate-900 bg-slate-50 border border-slate-200/80 rounded px-2 py-0.5">
+                                        &ldquo;{aiResult.transcribedText}&rdquo;
+                                      </span>
+                                    </div>
+
+                                    {aiResult.evaluationSummary && (
+                                      <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                                        {aiResult.evaluationSummary}
+                                      </p>
+                                    )}
+
+                                    {/* Diagnostic Notes Auto-Append */}
+                                    {(aiResult.studentFeedback || aiResult.teacherRemediationNote) && (
+                                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-[11px] border border-slate-100">
+                                        <span className="text-slate-600 italic">
+                                          {aiResult.studentFeedback || aiResult.teacherRemediationNote}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAppendFeedbackToRemarks(qIdx, aiResult)}
+                                          className="inline-flex items-center gap-1 font-bold text-purple-700 hover:text-purple-900 transition-colors shrink-0"
+                                          title="Copy scientific feedback into Teacher Remarks"
+                                        >
+                                          {copiedFeedbackIdx === qIdx ? (
+                                            <>
+                                              <Check className="h-3 w-3 text-emerald-600" />
+                                              <span className="text-emerald-700">Appended to Remarks</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Sparkles className="h-3 w-3 text-purple-600" />
+                                              <span>+ Append to Remarks</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* 1-Click Score Confirmation Buttons */}
+                                <div className="mt-3 flex items-center justify-between">
+                                  <span className="text-[11px] font-bold uppercase text-amber-900">
+                                    Score Rubric (Max: {writtenDef?.max ?? 1} pts):
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {Array.from({ length: (writtenDef?.max ?? 1) + 1 }).map((_, pt) => {
+                                      const isSelected = (writtenScores[qIdx] ?? 0) === pt;
+                                      const isAiSuggested = aiResult && aiResult.suggestedScore === pt;
+                                      return (
+                                        <button
+                                          key={pt}
+                                          type="button"
+                                          onClick={() => handleWrittenScoreChange(qIdx, pt)}
+                                          className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                                            isSelected
+                                              ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-300"
+                                              : isAiSuggested
+                                              ? "border-2 border-purple-400 bg-purple-50 text-purple-900 font-extrabold hover:bg-purple-100 shadow-2xs"
+                                              : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"
+                                          }`}
+                                          title={isAiSuggested ? "AI Suggested Score (Click to confirm)" : `Award ${pt} pt`}
+                                        >
+                                          {pt} pt{pt !== 1 ? "s" : ""}
+                                          {isAiSuggested && !isSelected && " (AI)"}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
+                            );
+                          })()
                         )}
                       </div>
                     );

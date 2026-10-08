@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, AlertCircle, Mic, Square, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, Mic, Square, CheckCircle2, Shield } from "lucide-react";
 import { legacyBadge as levelBadge } from "@/lib/ui";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { useLiveCaption } from "@/hooks/useLiveCaption";
+import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
 
 interface PassageOption {
   id: string;
@@ -86,13 +88,32 @@ export default function ReadingFluencyPage() {
   const [recTime, setRecTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [noiseCancellation, setNoiseCancellation] = useState(true);
   const audioUrlRef = useRef<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingSim, setAnalyzingSim] = useState(false);
   const [recordError, setRecordError] = useState("");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
+
+  /* Live Speech Recognition & Karaoke Tracker */
+  const {
+    isListening: liveIsListening,
+    transcript: liveTranscript,
+    interimText: liveInterimText,
+    fullTranscript: liveFullTranscript,
+    spokenWordCount: liveSpokenWordCount,
+    activeWordIndex: liveActiveWordIndex,
+    isSupported: liveIsSupported,
+    startListening: startLiveCaption,
+    stopListening: stopLiveCaption,
+    reset: resetLiveCaption,
+  } = useLiveCaption({
+    passageText,
+    language: "auto",
+  });
 
   const load = async () => {
     setLoading(true);
@@ -129,14 +150,19 @@ export default function ReadingFluencyPage() {
   /* Stop tracks on unmount */
   useEffect(() => {
     return () => {
+      stopLiveCaption();
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
     };
-  }, []);
+  }, [stopLiveCaption]);
 
   const startRecording = async () => {
     setRecordError("");
@@ -148,8 +174,62 @@ export default function ReadingFluencyPage() {
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      // 1. Hardware/Driver-level WebRTC acoustic constraints
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: noiseCancellation,
+          echoCancellation: noiseCancellation,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
+
+      let recordingStream = stream;
+
+      // 2. Web Audio API Real-Time DSP Filter Chain (filters fan hum, desk rumble, electrical hiss)
+      if (noiseCancellation) {
+        try {
+          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtxClass) {
+            const ctx = new AudioCtxClass();
+            audioContextRef.current = ctx;
+            const source = ctx.createMediaStreamSource(stream);
+
+            // High-pass filter (85 Hz): Cuts electric fan hum, AC drone, and desk rumble
+            const highPass = ctx.createBiquadFilter();
+            highPass.type = "highpass";
+            highPass.frequency.value = 85;
+
+            // Low-pass filter (8000 Hz): Cuts high-frequency electrical hiss & coil whine
+            const lowPass = ctx.createBiquadFilter();
+            lowPass.type = "lowpass";
+            lowPass.frequency.value = 8000;
+
+            // Vocal Dynamics Compressor: Stabilizes reading loudness & suppresses sudden ambient bursts
+            const compressor = ctx.createDynamicsCompressor();
+            compressor.threshold.value = -24;
+            compressor.knee.value = 30;
+            compressor.ratio.value = 12;
+            compressor.attack.value = 0.003;
+            compressor.release.value = 0.25;
+
+            const dest = ctx.createMediaStreamDestination();
+            source.connect(highPass);
+            highPass.connect(lowPass);
+            lowPass.connect(compressor);
+            compressor.connect(dest);
+
+            recordingStream = dest.stream;
+          }
+        } catch {
+          recordingStream = stream;
+        }
+      }
+
+      resetLiveCaption();
+      startLiveCaption();
+
+      const mr = new MediaRecorder(recordingStream);
       const chunks: BlobPart[] = [];
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
@@ -161,6 +241,10 @@ export default function ReadingFluencyPage() {
         audioUrlRef.current = url;
         setAudioUrl(url);
         stream.getTracks().forEach((t) => t.stop());
+        if (audioContextRef.current) {
+          audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        }
       };
       mr.start();
       mediaRecorderRef.current = mr;
@@ -175,6 +259,7 @@ export default function ReadingFluencyPage() {
   };
 
   const stopRecording = () => {
+    stopLiveCaption();
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
     if (timerRef.current) {
@@ -324,38 +409,101 @@ export default function ReadingFluencyPage() {
           </div>
         </div>
 
+        {/* Live Karaoke Viewer during Recording */}
+        {isRecording && (
+          <div style={{ marginTop: "1.25rem" }}>
+            <LiveReadingCaptionViewer
+              passageText={passageText}
+              activeWordIndex={liveActiveWordIndex}
+              transcript={liveTranscript}
+              interimText={liveInterimText}
+              spokenWordCount={liveSpokenWordCount}
+              isListening={liveIsListening}
+              isSupported={liveIsSupported}
+              elapsedSec={recTime}
+            />
+          </div>
+        )}
+
         {/* Recorder */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginTop: "1.5rem", flexWrap: "wrap" }}>
-          <div style={{ width: "74px", height: "74px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#ef4444" : "#e11d48", color: "#fff", boxShadow: isRecording ? "0 0 0 6px rgba(239,68,68,0.15)" : "0 0 0 6px rgba(225,29,72,0.12)" }}
-            onClick={isRecording ? stopRecording : startRecording}>
-            {isRecording ? <Square size={26} /> : <Mic size={26} />}
-          </div>
-          <div>
-            <div style={{ fontSize: "1.6rem", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#111827" }}>{fmtTimer(recTime)}</div>
-            <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>{isRecording ? "Recording… press stop when done" : "Press the mic to start recording"}</div>
-          </div>
-          {audioUrl && (
-            <audio controls src={audioUrl} style={{ height: "38px", maxWidth: "240px" }} />
-          )}
-          <div style={{ display: "flex", gap: "0.6rem", marginLeft: "auto" }}>
+        <div style={{ marginTop: "1.5rem" }}>
+          {/* Noise Cancellation Toggle Pill */}
+          <div style={{ marginBottom: "0.85rem" }}>
             <button
-              onClick={() => runAnalysis(true)}
-              disabled={analyzing || analyzingSim}
-              className="btn btn-outline"
-              style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              type="button"
+              onClick={() => setNoiseCancellation(!noiseCancellation)}
+              disabled={isRecording}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                padding: "0.35rem 0.8rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                border: noiseCancellation ? "1px solid #a7f3d0" : "1px solid #e5e7eb",
+                background: noiseCancellation ? "#ecfdf5" : "#f9fafb",
+                color: noiseCancellation ? "#065f46" : "#6b7280",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                opacity: isRecording ? 0.75 : 1,
+                transition: "all 0.15s ease",
+              }}
+              title="Toggle Active Noise Cancellation & classroom fan suppression"
             >
-              {analyzingSim ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
-              {analyzingSim ? "Simulating…" : "Simulate"}
+              <Shield size={14} style={{ color: noiseCancellation ? "#059669" : "#9ca3af" }} />
+              <span>Noise Cancellation: {noiseCancellation ? "Active (Filters fan & room hum)" : "Disabled (Raw mic)"}</span>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  background: noiseCancellation ? "#10b981" : "#9ca3af",
+                }}
+              />
             </button>
-            <button
-              onClick={() => runAnalysis(false)}
-              disabled={analyzing || analyzingSim}
-              className="btn btn-primary"
-              style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
-            >
-              {analyzing ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
-              {analyzing ? "Analyzing…" : "Submit Reading"}
-            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
+            <div style={{ width: "74px", height: "74px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#ef4444" : "#e11d48", color: "#fff", boxShadow: isRecording ? "0 0 0 6px rgba(239,68,68,0.15)" : "0 0 0 6px rgba(225,29,72,0.12)" }}
+              onClick={isRecording ? stopRecording : startRecording}>
+              {isRecording ? <Square size={26} /> : <Mic size={26} />}
+            </div>
+            <div>
+              <div style={{ fontSize: "1.6rem", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#111827" }}>{fmtTimer(recTime)}</div>
+              <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>{isRecording ? "Recording… press stop when done" : "Press the mic to start recording"}</div>
+            </div>
+            {audioUrl && (
+              <div>
+                <audio controls src={audioUrl} style={{ height: "38px", maxWidth: "240px" }} />
+                {liveFullTranscript && (
+                  <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#4b5563", maxWidth: "260px" }}>
+                    <strong>Captured: </strong>
+                    <span style={{ fontStyle: "italic" }}>“{liveFullTranscript}”</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.6rem", marginLeft: "auto" }}>
+              <button
+                onClick={() => runAnalysis(true)}
+                disabled={analyzing || analyzingSim}
+                className="btn btn-outline"
+                style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              >
+                {analyzingSim ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
+                {analyzingSim ? "Simulating…" : "Simulate"}
+              </button>
+              <button
+                onClick={() => runAnalysis(false)}
+                disabled={analyzing || analyzingSim}
+                className="btn btn-primary"
+                style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              >
+                {analyzing ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
+                {analyzing ? "Analyzing…" : "Submit Reading"}
+              </button>
+            </div>
           </div>
         </div>
 
