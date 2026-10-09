@@ -47,6 +47,11 @@ const navSections = [
         href: "/coordinator/learner-records",
         icon: Users,
       },
+      {
+        name: "Learning Materials",
+        href: "/coordinator/learning-materials",
+        icon: BookOpen,
+      },
     ],
   },
   {

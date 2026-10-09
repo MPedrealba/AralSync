@@ -1703,10 +1703,34 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const [isSaved, setIsSaved] = useState(false);
   const [saveExamError, setSaveExamError] = useState<string | null>(null);
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
+  const [learningMaterials, setLearningMaterials] = useState<
+    Array<{
+      _id: string;
+      title: string;
+      subject: string;
+      fileUrl: string;
+      edition?: string;
+    }>
+  >([]);
 
   const activeBubbleSheet = getSubjectBubbleSheet(
     doc?.subject || (genType === "reading" || genType === "aral" ? "Reading" : subject)
   );
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const querySubj = subject && subject !== "All" ? `&subject=${encodeURIComponent(subject)}` : "";
+        const res = await fetch(`/api/learning-materials?active=true${querySubj}`);
+        const data = await parseJsonResponse(res);
+        if (data.success && Array.isArray(data.materials)) {
+          setLearningMaterials(data.materials);
+        }
+      } catch (err) {
+        console.error("Failed to load reference materials", err);
+      }
+    })();
+  }, [subject]);
 
   useEffect(() => {
     if (assignedSubjectProp && assignedSubjectProp !== "All") {
@@ -2284,37 +2308,58 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                 {/* ARAL Reference Documents */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-1.5">
-                  <p className="font-bold text-slate-900 text-[10px] uppercase tracking-wider">
-                    DepEd ARAL Reference Materials:
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-900 text-[10px] uppercase tracking-wider">
+                      DepEd ARAL Reference Materials:
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-medium">Curriculum Repo</span>
+                  </div>
                   <div className="flex flex-wrap gap-1">
-                    <a
-                      href="/learning-materials/ks3-plus/learner-workbook.pdf"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                    >
-                      <BookOpen className="h-3 w-3 text-red-800" />
-                      <span>KS3 Plus Workbook</span>
-                    </a>
-                    <a
-                      href="/learning-materials/ks3-plus/tutors-guide.pdf"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                    >
-                      <BookOpen className="h-3 w-3 text-red-800" />
-                      <span>KS3 Tutor Guide</span>
-                    </a>
-                    <a
-                      href="/learning-materials/ks2-plus/learner-workbook.pdf"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                    >
-                      <BookOpen className="h-3 w-3 text-red-800" />
-                      <span>KS2 Plus Workbook</span>
-                    </a>
+                    {learningMaterials.length > 0 ? (
+                      learningMaterials.slice(0, 6).map((mat) => (
+                        <a
+                          key={mat._id}
+                          href={mat.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`${mat.title} (${mat.edition || "Current"})`}
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-red-300 hover:text-red-900 transition-colors"
+                        >
+                          <BookOpen className="h-3 w-3 text-red-800 shrink-0" />
+                          <span className="truncate max-w-[140px]">{mat.title}</span>
+                        </a>
+                      ))
+                    ) : (
+                      <>
+                        <a
+                          href="/learning-materials/ks3-plus/learner-workbook.pdf"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                        >
+                          <BookOpen className="h-3 w-3 text-red-800" />
+                          <span>KS3 Plus Workbook</span>
+                        </a>
+                        <a
+                          href="/learning-materials/ks3-plus/tutors-guide.pdf"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                        >
+                          <BookOpen className="h-3 w-3 text-red-800" />
+                          <span>KS3 Tutor Guide</span>
+                        </a>
+                        <a
+                          href="/learning-materials/ks2-plus/learner-workbook.pdf"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
+                        >
+                          <BookOpen className="h-3 w-3 text-red-800" />
+                          <span>KS2 Plus Workbook</span>
+                        </a>
+                      </>
+                    )}
                   </div>
                 </div>
 

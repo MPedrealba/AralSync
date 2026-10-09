@@ -31,6 +31,7 @@ import {
   Send,
   Loader2,
   Lock,
+  Layers,
 } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
@@ -85,15 +86,21 @@ interface LearnerOption {
    Constants & Subject Helpers
    ========================================================================= */
 
-const WORKBOOK_PRESETS = [
-  { label: "-- Select ARAL Workbook (Optional) --", url: "" },
-  { label: "Key Stage 1 — English Learner Workbook", url: "/learning-materials/ks1-english/learner-workbook.pdf" },
-  { label: "Key Stage 1 — Filipino Learner Workbook", url: "/learning-materials/ks1-filipino/learner-workbook.pdf" },
-  { label: "Key Stage 2 — Basic Math & Reading Workbook", url: "/learning-materials/ks2-basic/learner-workbook.pdf" },
-  { label: "Key Stage 2 — Plus Accelerated Workbook", url: "/learning-materials/ks2-plus/learner-workbook.pdf" },
-  { label: "Key Stage 3 — Basic Science, Math & Reading", url: "/learning-materials/ks3-basic/learner-workbook.pdf" },
-  { label: "Key Stage 3 — Plus Accelerated Workbook", url: "/learning-materials/ks3-plus/learner-workbook.pdf" },
-];
+interface DynamicLearningMaterial {
+  _id: string;
+  title: string;
+  subject: string;
+  keyStage: string;
+  edition: string;
+  type: string;
+  fileUrl: string;
+  sessionDirectory?: Array<{
+    sessionName: string;
+    pageStart: number;
+    pageEnd: number;
+    topic?: string;
+  }>;
+}
 
 const SECTIONS_LIST = ["Rosal", "Sampaguita", "Ilang-Ilang", "Daisy", "Camia"];
 
@@ -163,7 +170,9 @@ export default function InterventionsPage() {
   const [createInstructions, setCreateInstructions] = useState("");
   const [createDueDate, setCreateDueDate] = useState("");
   const [createMaxPoints, setCreateMaxPoints] = useState(100);
-  const [createWorkbookPreset, setCreateWorkbookPreset] = useState("");
+  const [learningMaterials, setLearningMaterials] = useState<DynamicLearningMaterial[]>([]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState("");
+  const [selectedSessionName, setSelectedSessionName] = useState("");
   const [createWorkbookUrl, setCreateWorkbookUrl] = useState("");
   const [createPageStart, setCreatePageStart] = useState("");
   const [createPageEnd, setCreatePageEnd] = useState("");
@@ -173,6 +182,24 @@ export default function InterventionsPage() {
   /* -------------------------------------------------------------------------
      Data Loaders
      ------------------------------------------------------------------------- */
+
+  const loadMaterialsForSubject = useCallback(async (subj: string) => {
+    try {
+      const querySubj = subj !== "All" ? `&subject=${encodeURIComponent(subj)}` : "";
+      const res = await fetch(`/api/learning-materials?active=true${querySubj}`);
+      const json = await parseJsonResponse(res);
+      if (json.success && Array.isArray(json.data)) {
+        setLearningMaterials(json.data);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeSubj = assignedSubject !== "All" ? assignedSubject : createSubject;
+    loadMaterialsForSubject(activeSubj);
+  }, [assignedSubject, createSubject, loadMaterialsForSubject]);
 
   const loadAssignments = useCallback(async () => {
     setLoading(true);
@@ -389,7 +416,8 @@ export default function InterventionsPage() {
         setCreateInstructions("");
         setCreateDueDate("");
         setCreateMaxPoints(100);
-        setCreateWorkbookPreset("");
+        setSelectedMaterialId("");
+        setSelectedSessionName("");
         setCreateWorkbookUrl("");
         setCreatePageStart("");
         setCreatePageEnd("");
@@ -1672,29 +1700,82 @@ export default function InterventionsPage() {
                 </div>
               </div>
 
-              {/* ARAL Workbook Attachment Section */}
+              {/* ARAL Learning Material Attachment Section */}
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <BookOpen className="h-4 w-4 text-slate-500" />
-                    Attach ARAL Learning Workbook (Optional)
+                    Attach ARAL Learning Material / Workbook (Optional)
                   </label>
+                  {learningMaterials.length > 0 && (
+                    <span className="text-[10px] font-bold text-red-800 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+                      Catalog: {learningMaterials.length} Available
+                    </span>
+                  )}
                 </div>
 
+                {/* Primary Workbook Dropdown from Dynamic Catalog */}
                 <select
-                  value={createWorkbookPreset}
+                  value={selectedMaterialId}
                   onChange={(e) => {
-                    setCreateWorkbookPreset(e.target.value);
-                    setCreateWorkbookUrl(e.target.value);
+                    const matId = e.target.value;
+                    setSelectedMaterialId(matId);
+                    setSelectedSessionName("");
+                    const found = learningMaterials.find((m) => m._id === matId);
+                    if (found) {
+                      setCreateWorkbookUrl(found.fileUrl);
+                    } else {
+                      setCreateWorkbookUrl("");
+                      setCreatePageStart("");
+                      setCreatePageEnd("");
+                    }
                   }}
                   className="w-full h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
                 >
-                  {WORKBOOK_PRESETS.map((p) => (
-                    <option key={p.label} value={p.url}>
-                      {p.label}
+                  <option value="">-- Select from Official ARAL Curriculum Catalog --</option>
+                  {learningMaterials.map((m) => (
+                    <option key={m._id} value={m._id}>
+                      {m.title} [{m.edition || "Current"}]
                     </option>
                   ))}
                 </select>
+
+                {/* If selected material has pre-mapped sessions, render Session Dropdown */}
+                {(() => {
+                  const activeMat = learningMaterials.find((m) => m._id === selectedMaterialId);
+                  const sessions = activeMat?.sessionDirectory || [];
+                  if (sessions.length > 0) {
+                    return (
+                      <div className="space-y-1.5 rounded-xl bg-amber-50/80 border border-amber-200 p-2.5">
+                        <label className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-amber-700" />
+                          <span>Pre-Mapped Session Directory (Auto-fills page numbers)</span>
+                        </label>
+                        <select
+                          value={selectedSessionName}
+                          onChange={(e) => {
+                            const sessName = e.target.value;
+                            setSelectedSessionName(sessName);
+                            const matchedSession = sessions.find((s) => s.sessionName === sessName);
+                            if (matchedSession) {
+                              setCreatePageStart(String(matchedSession.pageStart));
+                              setCreatePageEnd(String(matchedSession.pageEnd));
+                            }
+                          }}
+                          className="w-full h-8.5 rounded-lg border border-amber-300 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
+                        >
+                          <option value="">-- Select Session to Auto-Fill Pages (Optional) --</option>
+                          {sessions.map((s, idx) => (
+                            <option key={idx} value={s.sessionName}>
+                              {s.sessionName} (pp. {s.pageStart}–{s.pageEnd}) {s.topic ? `• ${s.topic}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {createWorkbookUrl && (
                   <div className="grid grid-cols-2 gap-3 pt-1">
