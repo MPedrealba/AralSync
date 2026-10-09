@@ -93,7 +93,7 @@ export default function ComprehensionCheckPage() {
       </div>
 
       {/* Top 3 Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.25rem", marginBottom: "2rem" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="card" style={{ textAlign: "center" }} aria-label={`Latest comprehension score: ${latest ? `${latest.score ?? "no data"}%` : "no data"}`}>
           <div className="card-title">LATEST SCORE</div>
           <div className="card-value">{latest ? `${latest.score ?? "—"}%` : "—"}</div>
@@ -132,7 +132,7 @@ export default function ComprehensionCheckPage() {
               return (
                 <div className="card" key={i}>
                   <div
-                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 cursor-pointer"
                     onClick={() => setExpanded(isOpen ? null : key)}
                   >
                     <div>
@@ -142,7 +142,7 @@ export default function ComprehensionCheckPage() {
                       <span className="tag-chip" style={{ marginTop: "0.35rem" }}>{r.subject || "Reading"}</span>
                       <span style={{ fontSize: "0.75rem", color: "#9ca3af", marginLeft: "0.5rem" }} suppressHydrationWarning>{fmtDate(r.date)}</span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <div className="flex items-center gap-3 self-start sm:self-auto">
                       <span className={`badge ${badgeMap[r.masteryLevel] || "badge-beginning"}`}>{r.masteryLevel}</span>
                       <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{r.score ?? "—"}%</span>
                       {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -195,7 +195,7 @@ export default function ComprehensionCheckPage() {
               No comprehension skills recorded yet.
             </p>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[skillsLeft, skillsRight].map((col, ci) => (
                 <div key={ci} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                   {col.map((s, j) => (

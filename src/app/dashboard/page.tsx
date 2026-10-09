@@ -122,7 +122,7 @@ export default function DashboardPage() {
     <>
       <Header title="Home" />
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6 sm:space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
         {/* ── A. Welcome Header ── */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">

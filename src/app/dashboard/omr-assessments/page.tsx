@@ -912,7 +912,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
               return (
                 <div
                   key={ak.id}
-                  className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm transition-all hover:shadow-md"
                 >
                   <div className="flex items-center gap-4">
                     <div
@@ -970,7 +970,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex flex-wrap sm:shrink-0 items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
                     <button
                       type="button"
                       onClick={() => setViewingExamKey(ak)}

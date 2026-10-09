@@ -380,7 +380,7 @@ export default function CoordinatorUserManagementPage() {
     <>
       <PrincipalHeader title="User Management & System Access" />
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6">
         {/* Top Header */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

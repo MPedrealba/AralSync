@@ -1,4 +1,4 @@
-import StudentSidebar from "@/components/StudentSidebar";
+import StudentShell from "@/components/StudentShell";
 import "./student-portal.css";
 import { guardMustChangePassword } from "@/lib/auth";
 
@@ -12,12 +12,5 @@ export default async function StudentLayout({
   children: React.ReactNode;
 }) {
   await guardMustChangePassword();
-  return (
-    <div className="student-portal">
-      <div className="app-container">
-        <StudentSidebar />
-        <main className="main-content">{children}</main>
-      </div>
-    </div>
-  );
+  return <StudentShell>{children}</StudentShell>;
 }

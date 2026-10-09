@@ -71,7 +71,7 @@ export default function CoordinatorDashboardPage() {
   return (
     <>
       <PrincipalHeader title="Coordinator Dashboard" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6 sm:space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
         {/* Title & Quick Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -81,7 +81,7 @@ export default function CoordinatorDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <Link
               href="/coordinator/learners"
               className="inline-flex items-center gap-2 rounded-xl bg-red-800 px-4 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98]"

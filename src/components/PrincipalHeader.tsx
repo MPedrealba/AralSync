@@ -11,10 +11,13 @@ import {
   Info,
   Loader2,
   ChevronRight,
+  Menu,
 } from "lucide-react";
+import { useMobileNav } from "@/components/MobileNavContext";
 
 interface PrincipalHeaderProps {
   title: string;
+  onOpenMobileMenu?: () => void;
 }
 
 interface Notif {
@@ -56,8 +59,10 @@ const markRead = async (ids: string[]) => {
   }
 };
 
-export default function PrincipalHeader({ title }: PrincipalHeaderProps) {
+export default function PrincipalHeader({ title, onOpenMobileMenu }: PrincipalHeaderProps) {
   const router = useRouter();
+  const mobileNav = useMobileNav();
+  const handleOpenMobile = onOpenMobileMenu || mobileNav?.open || (() => {});
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notif[]>([]);
@@ -113,8 +118,22 @@ export default function PrincipalHeader({ title }: PrincipalHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-8 backdrop-blur-sm">
-      <h2 className="text-xl font-bold tracking-tight text-slate-900">{title}</h2>
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 sm:px-6 md:px-8 backdrop-blur-sm">
+      {/* Left: Mobile Menu Button & Page Title */}
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={handleOpenMobile}
+          className="p-2 -ml-2 mr-1 sm:mr-2 text-slate-600 md:hidden hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 truncate">
+          {title}
+        </h2>
+      </div>
+
       <div className="flex items-center gap-4">
         {/* Notification Bell */}
         <div className="relative">
@@ -145,7 +164,7 @@ export default function PrincipalHeader({ title }: PrincipalHeaderProps) {
                 onClick={() => setOpen(false)}
                 aria-label="Close notifications"
               />
-              <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <p className="text-sm font-semibold text-slate-900">Notifications</p>
                   <button

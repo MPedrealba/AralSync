@@ -110,7 +110,7 @@ export default function ProgressPage() {
         <p className="page-subtitle">Track your scores and mastery across all subjects and competencies.</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1.25rem", marginBottom: "2rem" }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <div className="card" style={{ textAlign: "center" }} aria-label={`Overall average: ${overall != null ? `${overall}%` : "no data"}`}>
           <div className="card-title">OVERALL AVERAGE</div>
           <div className="card-value">{overall != null ? `${overall}%` : "—"}</div>
@@ -141,7 +141,7 @@ export default function ProgressPage() {
       ) : total === 0 ? (
         <div style={{ textAlign: "center", color: "#9ca3af", padding: "2rem" }}>No assessments recorded yet.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
           {/* MATH Card */}
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #e5e7eb", paddingBottom: "0.75rem" }}>
@@ -196,7 +196,7 @@ export default function ProgressPage() {
 
       {/* READING */}
       {readingRows.length > 0 && (
-        <div style={{ width: "50%" }}>
+        <div className="w-full lg:w-1/2">
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #e5e7eb", paddingBottom: "0.75rem" }}>
               <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#111827" }}>READING</h3>

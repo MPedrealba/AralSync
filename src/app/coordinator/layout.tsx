@@ -1,5 +1,5 @@
-import CoordinatorSidebar from "@/components/CoordinatorSidebar";
 import { guardMustChangePassword } from "@/lib/auth";
+import CoordinatorShell from "@/components/CoordinatorShell";
 
 export const metadata = {
   title: "AralSync — ARAL Coordinator",
@@ -11,10 +11,5 @@ export default async function CoordinatorLayout({
   children: React.ReactNode;
 }) {
   await guardMustChangePassword();
-  return (
-    <div className="flex min-h-screen">
-      <CoordinatorSidebar />
-      <div className="ml-64 flex flex-1 flex-col">{children}</div>
-    </div>
-  );
+  return <CoordinatorShell>{children}</CoordinatorShell>;
 }

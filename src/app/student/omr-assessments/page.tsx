@@ -69,7 +69,7 @@ export default function OMRAssessmentsPage() {
       </div>
 
       {/* Top 3 Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.25rem", marginBottom: "2rem" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="card" style={{ textAlign: "center" }} aria-label={`Math average score: ${mathAvg != null ? `${mathAvg}%` : "no data"}`}>
           <div className="card-title">MATH AVERAGE SCORE</div>
           <div className="card-value">{mathAvg != null ? `${mathAvg}%` : "—"}</div>
@@ -93,7 +93,7 @@ export default function OMRAssessmentsPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem" }}>
+      <div className="flex flex-wrap gap-2 mb-5">
         {["All", "Math", "Science"].map((tab) => (
           <button
             key={tab}

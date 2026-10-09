@@ -1,5 +1,5 @@
-import Sidebar from "@/components/Sidebar";
 import { guardMustChangePassword } from "@/lib/auth";
+import DashboardShell from "@/components/DashboardShell";
 
 export default async function DashboardLayout({
   children,
@@ -7,12 +7,5 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   await guardMustChangePassword();
-  return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="ml-64 flex flex-1 flex-col overflow-x-hidden overflow-y-auto min-h-0">
-        {children}
-      </div>
-    </div>
-  );
+  return <DashboardShell>{children}</DashboardShell>;
 }

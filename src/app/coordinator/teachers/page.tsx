@@ -160,7 +160,7 @@ export default function CoordinatorTeachersPage() {
     <>
       <PrincipalHeader title="Teacher Rosters & Allocations" />
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 sm:p-8 space-y-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6">
         {/* Top Header */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -256,7 +256,7 @@ export default function CoordinatorTeachersPage() {
           </div>
 
           {/* Subject Filter Tabs */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
             {(
               [
                 { key: "all", label: "All Subjects" },

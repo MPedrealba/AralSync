@@ -332,3 +332,126 @@
 .student-portal .progress-fill-brown { background: #a16207; }
 .student-portal .progress-fill-red { background: #dc2626; }
 .student-portal .progress-fill-green { background: #16a34a; }
+
+/* ── Mobile Header & Responsive Drawer ── */
+.student-portal .student-mobile-header {
+  display: none;
+}
+.student-portal .student-mobile-close-btn {
+  display: none;
+}
+.student-portal .sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .student-portal .student-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    width: 100%;
+  }
+
+  .student-portal .student-mobile-menu-btn {
+    padding: 0.5rem;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .student-portal .student-mobile-menu-btn:hover {
+    background: #f3f4f6;
+  }
+
+  .student-portal .student-mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .student-portal .student-mobile-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    object-fit: contain;
+  }
+
+  .student-portal .student-mobile-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #881337;
+  }
+
+  .student-portal .student-mobile-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  .student-portal .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 45;
+  }
+
+  .student-portal .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: -280px;
+    width: 280px;
+    z-index: 50;
+    transition: left 0.3s ease;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  }
+
+  .student-portal .sidebar.open {
+    left: 0;
+  }
+
+  .student-portal .student-mobile-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+  }
+  .student-portal .student-mobile-close-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .student-portal .app-container {
+    flex-direction: column;
+  }
+
+  .student-portal .main-content {
+    margin-left: 0;
+    padding: 1rem;
+    width: 100%;
+  }
+
+  .student-portal .table-container {
+    overflow-x: auto;
+  }
+}

@@ -380,8 +380,8 @@ export default function ReadingFluencyPage() {
         </div>
 
         {/* Passage selector + text */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1.25rem" }}>
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+          <div className="w-full">
             <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>Passage</label>
             <select
               value={passageTitle}
@@ -390,7 +390,8 @@ export default function ReadingFluencyPage() {
                 setPassageTitle(e.target.value);
                 if (p) setPassageText(p.text || "");
               }}
-              style={{ width: "100%", height: "36px", borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0 0.75rem", fontSize: "0.85rem", background: "#fff" }}
+              className="w-full"
+              style={{ height: "36px", borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0 0.75rem", fontSize: "0.85rem", background: "#fff" }}
             >
               {passages.length === 0 && <option value={passageTitle}>Oral Reading Passage</option>}
               {passages.map((p) => (
@@ -398,13 +399,14 @@ export default function ReadingFluencyPage() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="w-full">
             <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>Passage Text (read this aloud)</label>
             <textarea
               value={passageText}
               onChange={(e) => setPassageText(e.target.value)}
               rows={3}
-              style={{ width: "100%", borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0.6rem 0.75rem", fontSize: "0.85rem", lineHeight: 1.5, resize: "vertical", fontFamily: "inherit" }}
+              className="w-full"
+              style={{ borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0.6rem 0.75rem", fontSize: "0.85rem", lineHeight: 1.5, resize: "vertical", fontFamily: "inherit" }}
             />
           </div>
         </div>
@@ -474,8 +476,8 @@ export default function ReadingFluencyPage() {
               <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>{isRecording ? "Recording… press stop when done" : "Press the mic to start recording"}</div>
             </div>
             {audioUrl && (
-              <div>
-                <audio controls src={audioUrl} style={{ height: "38px", maxWidth: "240px" }} />
+              <div className="w-full sm:w-auto">
+                <audio controls src={audioUrl} style={{ height: "38px", maxWidth: "100%" }} />
                 {liveFullTranscript && (
                   <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#4b5563", maxWidth: "260px" }}>
                     <strong>Captured: </strong>
@@ -484,11 +486,11 @@ export default function ReadingFluencyPage() {
                 )}
               </div>
             )}
-            <div style={{ display: "flex", gap: "0.6rem", marginLeft: "auto" }}>
+            <div className="flex flex-wrap sm:flex-nowrap gap-2.5 sm:ml-auto w-full sm:w-auto mt-2 sm:mt-0">
               <button
                 onClick={() => runAnalysis(true)}
                 disabled={analyzing || analyzingSim}
-                className="btn btn-outline"
+                className="btn btn-outline flex-1 sm:flex-initial"
                 style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
               >
                 {analyzingSim ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
@@ -497,7 +499,7 @@ export default function ReadingFluencyPage() {
               <button
                 onClick={() => runAnalysis(false)}
                 disabled={analyzing || analyzingSim}
-                className="btn btn-primary"
+                className="btn btn-primary flex-1 sm:flex-initial"
                 style={{ padding: "0.4rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
               >
                 {analyzing ? <Loader2 size={14} className="spin" style={{ display: "inline", marginRight: "0.35rem", verticalAlign: "middle" }} /> : null}
@@ -521,7 +523,7 @@ export default function ReadingFluencyPage() {
               <CheckCircle2 size={16} />
               {result.masteryLevel} · {result.accuracy}% accuracy{result.wer != null ? ` · ${result.wer}% WER` : ""}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.9rem" }}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>SPEED</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.wpm != null ? `${result.wpm} WPM` : "—"}</div></div>
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>ACCURACY</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.accuracy}%</div></div>
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>WER</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.wer != null ? `${result.wer}%` : "—"}</div></div>
@@ -555,7 +557,7 @@ export default function ReadingFluencyPage() {
       </div>
 
       {/* Top 4 Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1.25rem", marginBottom: "2rem" }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <div className="card" style={{ textAlign: "center" }} aria-label={`Reading speed: ${wpm != null ? wpm : "no data"} WPM`}>
           <div className="card-title">READING SPEED</div>
           <div className="card-value">{wpm != null ? wpm : "—"}<span className="card-unit">WPM</span></div>
@@ -579,7 +581,7 @@ export default function ReadingFluencyPage() {
       </div>
 
       {/* Middle Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", marginBottom: "2rem" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-6">
         {/* Exact Measurements — every value measured from the recording */}
         <div className="card">
           <div className="card-title" style={{ marginBottom: "1.25rem" }}>EXACT MEASUREMENTS</div>
@@ -588,7 +590,7 @@ export default function ReadingFluencyPage() {
               {rows.length === 0 ? "No fluency assessments yet." : "No measured values recorded for the latest assessment yet."}
             </p>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem 1.25rem" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4">
               {Object.entries(measurements).map(([label, value]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.5rem", paddingBottom: "0.5rem", borderBottom: "1px solid #f3f4f6" }}>
                   <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>{label}</span>
@@ -609,10 +611,10 @@ export default function ReadingFluencyPage() {
               <div style={{ width: "33.3%", background: "#f59e0b" }}></div>
               <div style={{ width: "33.4%", background: "#22c55e" }}></div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#6b7280", fontWeight: 600 }}>
-              <span>Frustration</span>
-              <span>Instructional</span>
-              <span>Independent</span>
+            <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-slate-500">
+              <span className="text-left w-1/3">Frustration</span>
+              <span className="text-center w-1/3">Instructional</span>
+              <span className="text-right w-1/3">Independent</span>
             </div>
           </div>
 

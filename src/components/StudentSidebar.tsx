@@ -9,9 +9,9 @@ import {
   CheckSquare,
   MessageSquare,
   BarChart2,
-  RotateCw,
   User,
   LogOut,
+  X,
 } from "lucide-react";
 
 const navItems = [
@@ -43,7 +43,12 @@ const navItems = [
   },
 ];
 
-export default function StudentSidebar() {
+interface StudentSidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function StudentSidebar({ isOpen = false, onClose }: StudentSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -62,18 +67,32 @@ export default function StudentSidebar() {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? "open" : ""}`}>
       {/* Brand Header */}
       <div className="sidebar-header">
-        <img
-          src="/aral-logo.png"
-          alt="ARAL Program Logo"
-          className="w-12 h-12 rounded-full object-contain"
-        />
-        <div>
-          <div className="sidebar-title">AralSync</div>
-          <div className="sidebar-subtitle">Student Portal</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: 1 }}>
+          <img
+            src="/aral-logo.png"
+            alt="ARAL Program Logo"
+            className="w-10 h-10 rounded-full object-contain"
+          />
+          <div>
+            <div className="sidebar-title">AralSync</div>
+            <div className="sidebar-subtitle">Student Portal</div>
+          </div>
         </div>
+
+        {/* Mobile Close Button */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="student-mobile-close-btn"
+            aria-label="Close navigation"
+          >
+            <X size={18} color="#ffffff" />
+          </button>
+        )}
       </div>
 
       <div className="sidebar-divider" />
@@ -90,6 +109,7 @@ export default function StudentSidebar() {
                 <Link
                   key={item.id}
                   href={item.href}
+                  onClick={onClose}
                   className={`sidebar-nav-item ${active ? "active" : ""}`}
                 >
                   <IconComponent size={18} color={active ? "#e11d48" : "#6b7280"} />
@@ -103,7 +123,7 @@ export default function StudentSidebar() {
 
       {/* Footer */}
       <div className="sidebar-footer">
-        <Link href="/student/profile" className="sidebar-nav-item">
+        <Link href="/student/profile" onClick={onClose} className="sidebar-nav-item">
           <User size={18} color="#6b7280" />
           <span>My Profile</span>
         </Link>

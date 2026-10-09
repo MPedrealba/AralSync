@@ -214,7 +214,7 @@ export default function LearnersPage() {
   return (
     <>
       <Header title="Learners" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8">
         {/* Title Row */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
