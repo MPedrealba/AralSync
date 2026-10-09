@@ -78,7 +78,7 @@ export default function PrincipalDashboardPage() {
         </div>
 
         {/* 4 Stat Cards */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
           <StatCard
             title="Total Enrolled"
             value={overview.totalStudents.toString()}

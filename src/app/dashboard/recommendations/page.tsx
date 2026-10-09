@@ -403,7 +403,7 @@ export default function RecommendationsPage() {
   return (
     <>
       <Header title="Recommendations &amp; Assignments" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-6">
         {/* Top Header & Actions */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -435,8 +435,8 @@ export default function RecommendationsPage() {
         )}
 
         {/* Tabs Bar */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
-          <div className="flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs">
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto no-scrollbar whitespace-nowrap">
+          <div className="flex gap-1 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-xs shrink-0">
             {tabs.map((tab) => (
               <button
                 key={tab}
@@ -444,7 +444,7 @@ export default function RecommendationsPage() {
                   setActiveTab(tab);
                   setMessage("");
                 }}
-                className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all cursor-pointer ${
+                className={`relative inline-flex items-center gap-2 shrink-0 rounded-lg sm:rounded-xl px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                   activeTab === tab
                     ? "bg-red-800 text-white shadow-xs"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -732,8 +732,8 @@ export default function RecommendationsPage() {
 
       {/* ━━━ MODAL: ASSIGN ACTIVITY WITH STUDENT SELECTOR ━━━ */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="flex max-h-[90vh] w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 m-3 sm:m-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
               <div>
@@ -752,7 +752,7 @@ export default function RecommendationsPage() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleAssignSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form onSubmit={handleAssignSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {assignError && (
                 <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -776,7 +776,7 @@ export default function RecommendationsPage() {
               </div>
 
               {/* Subject & Type Grid */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                     Subject {assignedSubject !== "All" && "(Assigned)"}
@@ -966,10 +966,10 @@ export default function RecommendationsPage() {
 
       {/* ━━━ DRAWER / MODAL: REVIEW & GRADE SUBMISSION ━━━ */}
       {reviewingSubmission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 m-3 sm:m-auto">
             {/* Drawer Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 py-3.5 sm:py-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusConfig[reviewingSubmission.status]?.bg} ${statusConfig[reviewingSubmission.status]?.text} ${statusConfig[reviewingSubmission.status]?.border}`}>
@@ -992,7 +992,7 @@ export default function RecommendationsPage() {
             </div>
 
             {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
               {gradingError && (
                 <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -1100,7 +1100,7 @@ export default function RecommendationsPage() {
                   <span>Teacher Assessment &amp; Feedback</span>
                 </span>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                       Score / Grade (e.g., 95/100, 10/10, Satisfactory)

@@ -80,7 +80,7 @@ export default function ComprehensionCheckPage() {
   return (
     <>
       <Header title="Comprehension Check" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Page Title */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -95,12 +95,12 @@ export default function ComprehensionCheckPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
+        <div className="mb-4 sm:mb-6 flex gap-1 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-full sm:w-fit overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
           {(["New Check", "Results History"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
+              className={`shrink-0 rounded-lg sm:rounded-xl px-3.5 sm:px-5 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === tab
                   ? "bg-red-800 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"

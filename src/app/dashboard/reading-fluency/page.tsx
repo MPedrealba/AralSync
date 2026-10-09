@@ -98,7 +98,7 @@ export default function ReadingFluencyPage() {
   return (
     <>
       <Header title="Reading Fluency" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Title */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -112,12 +112,12 @@ export default function ReadingFluencyPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
+        <div className="mb-4 sm:mb-6 flex gap-1 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-full sm:w-fit overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-xl px-5 py-2 text-xs font-semibold transition-all ${
+              className={`shrink-0 rounded-lg sm:rounded-xl px-3.5 sm:px-5 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === tab
                   ? "bg-red-800 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -1720,9 +1720,9 @@ function FluencyReportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative z-10 w-[calc(100vw-1.5rem)] sm:w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] overflow-y-auto m-3 sm:m-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
@@ -1800,7 +1800,7 @@ function FluencyReportModal({
           )}
 
           {/* Score Cards — raw measured values, no invented /10 benchmarks */}
-          <div className="mb-6 grid grid-cols-4 gap-3">
+          <div className="mb-4 sm:mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <ScoreCard label="Fluency (WCPM)" value={wpmVal} isText />
             <ScoreCard label="Accuracy" value={`${accuracyPct}%`} isText />
             <ScoreCard label="Words Err" value={`${errPct.toFixed(1)}%`} isText />

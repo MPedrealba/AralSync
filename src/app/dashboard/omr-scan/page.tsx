@@ -1073,21 +1073,21 @@ function OMRWorkstationContent() {
 
       <main className="flex flex-1 flex-col overflow-y-auto min-h-0 pb-12 bg-slate-50">
         {/* ── TOP SETUP & BATCH BAR ── */}
-        <section className="shrink-0 border-b border-slate-200 bg-white px-6 py-4 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <section className="shrink-0 border-b border-slate-200 bg-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
             {/* Left: Title + Mode Indicator */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={() => router.push("/dashboard/omr-assessments")}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                 title="Back to OMR Assessments"
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
-                <div className="flex items-center gap-2.5">
-                  <h1 className="text-base font-bold text-slate-900 sm:text-lg">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                  <h1 className="text-sm font-bold text-slate-900 sm:text-lg">
                     OMR Grading &amp; Verification Workstation
                   </h1>
                   <span
@@ -1100,18 +1100,18 @@ function OMRWorkstationContent() {
                     {sheetImage ? "Verification Active" : "Intake Ready"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 sm:line-clamp-none">
                   Inspect scanned bubble markings, override ambiguous items, and finalize official scores
                 </p>
               </div>
             </div>
 
             {/* Right: Batch Action Buttons */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
               <button
                 type="button"
                 onClick={handleNextStudent}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+                className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 sm:px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300 active:scale-95"
                 title="Keep answer key and advance to the next student in section"
               >
                 <UserCheck className="h-4 w-4 text-red-800" />
@@ -1122,7 +1122,7 @@ function OMRWorkstationContent() {
                 <button
                   type="button"
                   onClick={handleDiscard}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 active:scale-95"
+                  className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:px-3.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 active:scale-95"
                   title="Discard current scan"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -1497,16 +1497,16 @@ function OMRWorkstationContent() {
           </div>
         ) : (
           /* ── SPLIT-SCREEN WORKSTATION MODE ── */
-          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-[750px] lg:min-h-[calc(100vh-280px)]">
+          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-[400px] lg:min-h-[calc(100vh-280px)]">
             {/* ══════════════════════════════════════════════════════
                 LEFT COLUMN (55%): High-Resolution Scanned Paper Viewer
                ══════════════════════════════════════════════════════ */}
             <div
               ref={viewerContainerRef}
-              className="relative flex flex-col border-b border-gray-200 bg-slate-950 lg:w-[55%] lg:border-b-0 lg:border-r"
+              className="relative flex flex-col border-b border-gray-200 bg-slate-950 lg:w-[55%] lg:border-b-0 lg:border-r min-h-[360px] lg:min-h-0"
             >
               {/* Viewer Control Toolbar */}
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 text-white backdrop-blur-xs">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 sm:px-4 py-2 sm:py-2.5 text-white backdrop-blur-xs overflow-x-auto no-scrollbar gap-2">
                 {/* Paper Info */}
                 <div className="flex items-center gap-2 text-xs">
                   <FileImage className="h-4 w-4 text-blue-400" />
@@ -1577,7 +1577,7 @@ function OMRWorkstationContent() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                className={`relative flex flex-1 items-start justify-center overflow-y-auto select-none p-6 ${
+                className={`relative flex flex-1 items-start justify-center overflow-y-auto select-none p-3 sm:p-6 min-h-[300px] lg:min-h-0 ${
                   isDragging ? "cursor-grabbing" : "cursor-grab"
                 }`}
               >
@@ -1601,7 +1601,7 @@ function OMRWorkstationContent() {
               </div>
 
               {/* Helper Instructions Pill */}
-              <div className="pointer-events-none absolute bottom-3 left-4 z-10 rounded-lg bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm shadow-sm">
+              <div className="pointer-events-none hidden sm:block absolute bottom-3 left-4 z-10 rounded-lg bg-black/60 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm shadow-sm">
                 Scroll to view &bull; Ctrl+Scroll to zoom &bull; Drag to pan &bull; Press R to rotate &bull; Press 0 to reset
               </div>
             </div>

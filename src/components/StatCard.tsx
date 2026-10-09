@@ -47,38 +47,38 @@ export default function StatCard({
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all duration-200 hover:border-slate-300 hover:shadow-sm"
+      className="group relative overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 lg:p-6 shadow-xs transition-all duration-200 hover:border-slate-300 hover:shadow-sm"
       aria-label={`${title}: ${value}${trend ? ` (${trendUp ? "up" : "down"} ${trend})` : ""}`}
     >
       {/* Top accent bar */}
       <span
         className={`absolute inset-x-0 top-0 h-1 ${palette.bar} opacity-90`}
       />
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
-          <p className={`text-3xl font-extrabold tracking-tight ${valueColor}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-1 sm:space-y-2">
+          <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">{title}</p>
+          <p className={`text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight ${valueColor}`}>
             {value}
           </p>
           {trend ? (
             <p
-              className={`inline-flex items-center gap-1 text-xs font-semibold ${
+              className={`inline-flex items-center gap-1 text-[10px] sm:text-xs font-semibold ${
                 trendUp ? "text-emerald-600" : "text-rose-600"
               }`}
             >
               <span>{trendUp ? "↑" : "↓"}</span>
-              {trend}
+              <span className="line-clamp-1">{trend}</span>
             </p>
           ) : subtext ? (
-            <p className="text-xs text-slate-400">{subtext}</p>
+            <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-1">{subtext}</p>
           ) : null}
         </div>
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl border border-slate-100 ${
+          className={`flex h-8 w-8 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl border border-slate-100 ${
             iconBg ?? palette.tile
           } transition-transform duration-200 group-hover:scale-105`}
         >
-          <Icon className={`h-5 w-5 ${iconColor ?? palette.icon}`} />
+          <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${iconColor ?? palette.icon}`} />
         </div>
       </div>
     </div>

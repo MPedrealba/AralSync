@@ -60,7 +60,7 @@ export default function LearningRecoveryPage() {
   return (
     <>
       <Header title="Learning Recovery" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-6">
         {/* Title + Actions */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -104,7 +104,7 @@ export default function LearningRecoveryPage() {
         </div>
 
         {/* 3 Modern Executive Metric Cards */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <div className="flex items-start justify-between">
               <div>

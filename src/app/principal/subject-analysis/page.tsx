@@ -147,20 +147,20 @@ export default function SubjectAnalysisPage() {
               </div>
 
               {/* Charts */}
-              <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2">
                 {/* Proficiency Distribution */}
                 <div>
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Proficiency Distribution
                   </p>
-                  <div className="h-52">
+                  <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={subj.proficiency} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                         <XAxis dataKey="level" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f9fafb" }} />
-                        <Bar dataKey="count" name="Learners" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        <Bar dataKey="count" name="Learners" radius={[6, 6, 0, 0]} maxBarSize={44}>
                           {subj.proficiency.map((p, i) => (
                             <Cell key={i} fill={p.color} />
                           ))}
@@ -176,11 +176,11 @@ export default function SubjectAnalysisPage() {
                     Grade Level Averages
                   </p>
                   {subj.gradeAvg.length === 0 ? (
-                    <div className="flex h-52 items-center justify-center text-sm text-gray-400">
+                    <div className="flex h-64 items-center justify-center text-sm text-gray-400">
                       No grade-level data yet.
                     </div>
                   ) : (
-                    <div className="h-52">
+                    <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={subj.gradeAvg} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />

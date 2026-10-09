@@ -214,7 +214,7 @@ export default function LearnersPage() {
   return (
     <>
       <Header title="Learners" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Title Row */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -241,9 +241,9 @@ export default function LearnersPage() {
         </div>
 
         {/* Filters */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[240px]">
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+            <div className="relative w-full sm:flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -253,24 +253,28 @@ export default function LearnersPage() {
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               />
             </div>
-            <FilterSelect
-              label="All Grades"
-              value={gradeFilter}
-              onChange={setGradeFilter}
-              options={["Grade 7", "Grade 8", "Grade 9", "Grade 10"]}
-            />
-            <FilterSelect
-              label="All Sections"
-              value={sectionFilter}
-              onChange={setSectionFilter}
-              options={["Rosal", "Sampaguita", "Ilang-Ilang"]}
-            />
-            <FilterSelect
-              label="All Risk Levels"
-              value={riskFilter}
-              onChange={setRiskFilter}
-              options={["High", "At Risk", "Moderate", "Low", "Pending Assessment"]}
-            />
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+              <FilterSelect
+                label="All Grades"
+                value={gradeFilter}
+                onChange={setGradeFilter}
+                options={["Grade 7", "Grade 8", "Grade 9", "Grade 10"]}
+              />
+              <FilterSelect
+                label="All Sections"
+                value={sectionFilter}
+                onChange={setSectionFilter}
+                options={["Rosal", "Sampaguita", "Ilang-Ilang"]}
+              />
+              <div className="col-span-2 sm:col-span-1">
+                <FilterSelect
+                  label="All Risk Levels"
+                  value={riskFilter}
+                  onChange={setRiskFilter}
+                  options={["High", "At Risk", "Moderate", "Low", "Pending Assessment"]}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -298,22 +302,22 @@ export default function LearnersPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80">
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     LRN
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Learner Name
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Grade &amp; Section
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Risk Level
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-6 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Actions
                   </th>
                 </tr>
@@ -357,10 +361,10 @@ export default function LearnersPage() {
                       key={learner.id}
                       className="transition-colors hover:bg-slate-50/80"
                     >
-                      <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-500">
+                      <td className="whitespace-nowrap px-3.5 sm:px-6 py-3 sm:py-4 font-mono text-xs text-slate-500">
                         {learner.lrn}
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                      <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-sm font-semibold text-slate-900">
                         <Link
                           href={`/dashboard/learners/${learner.id}`}
                           className="hover:text-red-900 hover:underline transition-colors"
@@ -368,24 +372,24 @@ export default function LearnersPage() {
                           {learner.name}
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                      <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-xs font-medium text-slate-600">
                         {learner.gradeLevel} &bull; {learner.section}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3.5 sm:px-6 py-3 sm:py-4">
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${risk.bg} ${risk.text} ${risk.border}`}
                         >
                           {riskLabel}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3.5 sm:px-6 py-3 sm:py-4">
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${status.bg} ${status.text} ${status.border}`}
                         >
                           {statusLabel}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-right">
                         <ActionDropdown
                           learnerId={learner.id}
                           onEdit={() =>

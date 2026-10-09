@@ -113,7 +113,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
   return (
     <>
       <Header title="Progress Monitoring" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
+      <main className="flex-1 overflow-y-auto bg-gray-50 p-3.5 sm:p-6 md:p-8 space-y-6 sm:space-y-8">
         {/* Title + Filters */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -192,16 +192,16 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
         </div>
 
         {/* Stat cards — mirrors the overall dashboard, scoped to this learner */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
           {[
             { label: "Total Interventions", value: (data as LearnerData)?.summary.total ?? 0, color: "text-gray-900" },
             { label: "Not Started", value: (data as LearnerData)?.summary.notStarted ?? 0, color: "text-gray-600" },
             { label: "In Progress", value: (data as LearnerData)?.summary.inProgress ?? 0, color: "text-amber-600" },
             { label: "Completed", value: (data as LearnerData)?.summary.completed ?? 0, color: "text-emerald-600" },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-              <p className="text-sm text-gray-500">{s.label}</p>
-              <p className={`mt-1 text-3xl font-bold ${s.color}`}>
+            <div key={s.label} className="rounded-xl border border-gray-100 bg-white p-3.5 sm:p-6 shadow-sm">
+              <p className="text-xs sm:text-sm text-gray-500">{s.label}</p>
+              <p className={`mt-1 text-xl sm:text-3xl font-bold ${s.color}`}>
                 {loading ? "…" : s.value}
               </p>
             </div>
@@ -328,16 +328,16 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
         {isOverview && data && (
           <>
             {/* Stat cards */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
               {[
                 { label: "Total Interventions", value: data.overall.summary.total, color: "text-gray-900", bg: "bg-gray-100" },
                 { label: "Not Started", value: data.overall.summary.notStarted, color: "text-gray-600", bg: "bg-gray-100" },
                 { label: "In Progress", value: data.overall.summary.inProgress, color: "text-amber-600", bg: "bg-amber-100" },
                 { label: "Completed", value: data.overall.summary.completed, color: "text-emerald-600", bg: "bg-emerald-100" },
               ].map((s) => (
-                <div key={s.label} className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-                  <p className="text-sm text-gray-500">{s.label}</p>
-                  <p className={`mt-1 text-3xl font-bold ${s.color}`}>{s.value}</p>
+                <div key={s.label} className="rounded-xl border border-gray-100 bg-white p-3.5 sm:p-6 shadow-sm">
+                  <p className="text-xs sm:text-sm text-gray-500">{s.label}</p>
+                  <p className={`mt-1 text-xl sm:text-3xl font-bold ${s.color}`}>{s.value}</p>
                 </div>
               ))}
             </div>

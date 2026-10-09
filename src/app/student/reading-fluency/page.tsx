@@ -25,6 +25,12 @@ interface AnalyzeResult {
   masteryLevel: string;
   simulation: boolean;
   miscueBreakdown?: MiscueCounts | null;
+  miscueItems?: Array<{
+    position: number | null;
+    expected?: string | null;
+    spoken?: string | null;
+    type: string;
+  }> | null;
   miscueTotal?: number | null;
   stutters?: number | null;
   hesitations?: number | null;
@@ -362,7 +368,7 @@ export default function ReadingFluencyPage() {
       </div>
 
       {/* ── Record & Submit a Reading ── */}
-      <div className="card" style={{ marginBottom: "2rem", padding: "1.5rem" }}>
+      <div className="card mb-4 sm:mb-8 !p-3.5 sm:!p-6">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
           <div>
             <div className="card-title" style={{ marginBottom: "0.25rem" }}>RECORD &amp; SUBMIT A READING</div>
@@ -379,101 +385,77 @@ export default function ReadingFluencyPage() {
           )}
         </div>
 
-        {/* Passage selector + text */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
-          <div className="w-full">
-            <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>Passage</label>
+        {/* Top Controls: Passage Selector & Noise Cancellation Pill */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 my-4">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0">Passage:</label>
             <select
               value={passageTitle}
               onChange={(e) => {
                 const p = passages.find((x) => x.title === e.target.value);
                 setPassageTitle(e.target.value);
-                if (p) setPassageText(p.text || "");
+                if (p) {
+                  setPassageText(p.text || "");
+                  setResult(null);
+                }
               }}
-              className="w-full"
-              style={{ height: "36px", borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0 0.75rem", fontSize: "0.85rem", background: "#fff" }}
+              className="h-10 w-full sm:w-80 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:border-red-800"
             >
-              {passages.length === 0 && <option value={passageTitle}>Oral Reading Passage</option>}
               {passages.map((p) => (
                 <option key={p.id} value={p.title}>{p.title}{p.gradeLevel ? ` · Grade ${p.gradeLevel}` : ""}</option>
               ))}
             </select>
           </div>
-          <div className="w-full">
-            <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>Passage Text (read this aloud)</label>
-            <textarea
-              value={passageText}
-              onChange={(e) => setPassageText(e.target.value)}
-              rows={3}
-              className="w-full"
-              style={{ borderRadius: "8px", border: "1px solid #e5e7eb", padding: "0.6rem 0.75rem", fontSize: "0.85rem", lineHeight: 1.5, resize: "vertical", fontFamily: "inherit" }}
-            />
-          </div>
-        </div>
 
-        {/* Live Karaoke Viewer during Recording */}
-        {isRecording && (
-          <div style={{ marginTop: "1.25rem" }}>
-            <LiveReadingCaptionViewer
-              passageText={passageText}
-              activeWordIndex={liveActiveWordIndex}
-              transcript={liveTranscript}
-              interimText={liveInterimText}
-              spokenWordCount={liveSpokenWordCount}
-              isListening={liveIsListening}
-              isSupported={liveIsSupported}
-              elapsedSec={recTime}
-            />
-          </div>
-        )}
-
-        {/* Recorder */}
-        <div style={{ marginTop: "1.5rem" }}>
-          {/* Noise Cancellation Toggle Pill */}
-          <div style={{ marginBottom: "0.85rem" }}>
+          {/* Noise cancellation pill on the right */}
+          <div>
             <button
               type="button"
               onClick={() => setNoiseCancellation(!noiseCancellation)}
               disabled={isRecording}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.45rem",
-                padding: "0.35rem 0.8rem",
-                borderRadius: "9999px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                border: noiseCancellation ? "1px solid #a7f3d0" : "1px solid #e5e7eb",
-                background: noiseCancellation ? "#ecfdf5" : "#f9fafb",
-                color: noiseCancellation ? "#065f46" : "#6b7280",
-                cursor: isRecording ? "not-allowed" : "pointer",
-                opacity: isRecording ? 0.75 : 1,
-                transition: "all 0.15s ease",
-              }}
-              title="Toggle Active Noise Cancellation & classroom fan suppression"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                noiseCancellation ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-500"
+              }`}
             >
-              <Shield size={14} style={{ color: noiseCancellation ? "#059669" : "#9ca3af" }} />
-              <span>Noise Cancellation: {noiseCancellation ? "Active (Filters fan & room hum)" : "Disabled (Raw mic)"}</span>
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "7px",
-                  height: "7px",
-                  borderRadius: "50%",
-                  background: noiseCancellation ? "#10b981" : "#9ca3af",
-                }}
-              />
+              <Shield size={14} className={noiseCancellation ? "text-emerald-600" : "text-slate-400"} />
+              <span>Noise Cancellation: {noiseCancellation ? "Active" : "Off"}</span>
+              <span className={`w-2 h-2 rounded-full ${noiseCancellation ? "bg-emerald-500" : "bg-slate-400"}`} />
             </button>
           </div>
+        </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
-            <div style={{ width: "74px", height: "74px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: isRecording ? "#ef4444" : "#e11d48", color: "#fff", boxShadow: isRecording ? "0 0 0 6px rgba(239,68,68,0.15)" : "0 0 0 6px rgba(225,29,72,0.12)" }}
-              onClick={isRecording ? stopRecording : startRecording}>
-              {isRecording ? <Square size={26} /> : <Mic size={26} />}
+        {/* Dedicated Interactive Reading Card */}
+        <div className="mb-4">
+          <LiveReadingCaptionViewer
+            passageText={passageText}
+            activeWordIndex={liveActiveWordIndex}
+            transcript={liveTranscript}
+            interimText={liveInterimText}
+            spokenWordCount={liveSpokenWordCount}
+            isListening={liveIsListening}
+            isSupported={liveIsSupported}
+            elapsedSec={recTime}
+            miscueItems={result?.miscueItems}
+          />
+        </div>
+
+        {/* Recorder Controls */}
+        <div className="pt-1">
+          <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
+            <div
+              className="w-14 h-14 sm:w-[74px] sm:h-[74px] rounded-full flex items-center justify-center cursor-pointer shrink-0 transition-transform active:scale-95"
+              style={{
+                background: isRecording ? "#ef4444" : "#e11d48",
+                color: "#fff",
+                boxShadow: isRecording ? "0 0 0 5px rgba(239,68,68,0.15)" : "0 0 0 5px rgba(225,29,72,0.12)",
+              }}
+              onClick={isRecording ? stopRecording : startRecording}
+            >
+              {isRecording ? <Square className="h-5 w-5 sm:h-6 sm:w-6" /> : <Mic className="h-5 w-5 sm:h-6 sm:w-6" />}
             </div>
             <div>
-              <div style={{ fontSize: "1.6rem", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#111827" }}>{fmtTimer(recTime)}</div>
-              <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>{isRecording ? "Recording… press stop when done" : "Press the mic to start recording"}</div>
+              <div className="text-xl sm:text-2xl font-extrabold tabular-nums text-slate-900">{fmtTimer(recTime)}</div>
+              <div className="text-[11px] sm:text-xs text-slate-500">{isRecording ? "Recording… press stop when done" : "Press the mic to start recording"}</div>
             </div>
             {audioUrl && (
               <div className="w-full sm:w-auto">
@@ -569,12 +551,12 @@ export default function ReadingFluencyPage() {
         <div className="card" style={{ textAlign: "center" }} aria-label={`Reading level: ${level}`}>
           <div className="card-title">READING LEVEL</div>
           <div style={{ marginTop: "0.5rem" }}>
-            <span className={`badge ${levelClass}`} style={{ fontSize: "1rem", padding: "0.4rem 1.25rem" }}>{level}</span>
+            <span className={`badge ${levelClass} text-xs sm:text-sm px-2.5 sm:px-4 py-1`}>{level}</span>
           </div>
         </div>
         <div className="card" style={{ textAlign: "center" }} aria-label={`Last assessed: ${latest ? fmtDate(latest.date) : "not yet assessed"}`}>
           <div className="card-title">LAST ASSESSED</div>
-          <div className="card-value" style={{ fontSize: "1.5rem", marginTop: "0.4rem" }} suppressHydrationWarning>
+          <div className="text-sm sm:text-base font-bold text-slate-800 mt-1" suppressHydrationWarning>
             {latest ? fmtDate(latest.date) : "—"}
           </div>
         </div>
@@ -584,7 +566,7 @@ export default function ReadingFluencyPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-6">
         {/* Exact Measurements — every value measured from the recording */}
         <div className="card">
-          <div className="card-title" style={{ marginBottom: "1.25rem" }}>EXACT MEASUREMENTS</div>
+          <div className="card-title mb-2 sm:mb-4">EXACT MEASUREMENTS</div>
           {rows.length === 0 || Object.keys(measurements).length === 0 ? (
             <p style={{ fontSize: "0.85rem", color: "#6b7280" }}>
               {rows.length === 0 ? "No fluency assessments yet." : "No measured values recorded for the latest assessment yet."}
@@ -603,18 +585,64 @@ export default function ReadingFluencyPage() {
 
         {/* Reading Level Classification */}
         <div className="card">
-          <div className="card-title" style={{ marginBottom: "1.25rem" }}>READING LEVEL CLASSIFICATION</div>
+          <div className="card-title mb-2 sm:mb-4">READING LEVEL CLASSIFICATION</div>
 
-          <div style={{ marginBottom: "1.25rem" }}>
-            <div style={{ display: "flex", height: "10px", borderRadius: "9999px", overflow: "hidden", background: "#e5e7eb", marginBottom: "0.5rem" }}>
-              <div style={{ width: "33.3%", background: "#ef4444" }}></div>
-              <div style={{ width: "33.3%", background: "#f59e0b" }}></div>
-              <div style={{ width: "33.4%", background: "#22c55e" }}></div>
+          <div className="mb-4">
+            {/* Active Level Pin */}
+            <div className="relative mb-1.5 h-6">
+              {["Frustration", "Instructional", "Independent"].includes(level) && (
+                <div
+                  className="absolute -translate-x-1/2 flex flex-col items-center transition-all duration-300"
+                  style={{
+                    left:
+                      level === "Frustration"
+                        ? "16.6%"
+                        : level === "Instructional"
+                        ? "50%"
+                        : "83.3%",
+                  }}
+                >
+                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs whitespace-nowrap">
+                    Active: {level}
+                  </span>
+                  <span className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900" />
+                </div>
+              )}
             </div>
-            <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-slate-500">
-              <span className="text-left w-1/3">Frustration</span>
-              <span className="text-center w-1/3">Instructional</span>
-              <span className="text-right w-1/3">Independent</span>
+
+            {/* 3-Color Phil-IRI Spectrum Bar */}
+            <div className="flex h-3.5 rounded-full overflow-hidden bg-slate-100 p-0.5 border border-slate-200">
+              <div
+                className={`h-full rounded-l-full transition-all ${
+                  level === "Frustration" ? "bg-rose-500 shadow-sm ring-2 ring-rose-400" : "bg-rose-400/80"
+                }`}
+                style={{ width: "33.3%" }}
+              />
+              <div
+                className={`h-full transition-all ${
+                  level === "Instructional" ? "bg-amber-500 shadow-sm ring-2 ring-amber-400" : "bg-amber-400/80"
+                }`}
+                style={{ width: "33.4%" }}
+              />
+              <div
+                className={`h-full rounded-r-full transition-all ${
+                  level === "Independent" ? "bg-emerald-500 shadow-sm ring-2 ring-emerald-400" : "bg-emerald-400/80"
+                }`}
+                style={{ width: "33.3%" }}
+              />
+            </div>
+
+            {/* Stage Labels */}
+            <div className="flex justify-between text-[11px] sm:text-xs font-bold text-slate-500 mt-1.5">
+              <span className={`text-left w-1/3 ${level === "Frustration" ? "text-rose-700 font-extrabold" : ""}`}>
+                Frustration
+              </span>
+              <span className={`text-center w-1/3 ${level === "Instructional" ? "text-amber-700 font-extrabold" : ""}`}>
+                Instructional
+              </span>
+              <span className={`text-right w-1/3 ${level === "Independent" ? "text-emerald-700 font-extrabold" : ""}`}>
+                Independent
+              </span>
             </div>
           </div>
 
@@ -629,7 +657,7 @@ export default function ReadingFluencyPage() {
           </div>
 
           <div>
-            <div className="card-title" style={{ marginBottom: "0.75rem" }}>RECOMMENDATIONS</div>
+            <div className="card-title mb-2 sm:mb-3">RECOMMENDATIONS</div>
             <ul style={{ listStyle: "none", fontSize: "0.82rem", color: "#374151", lineHeight: 1.6, padding: 0 }}>
               <li style={{ marginBottom: "0.5rem", display: "flex", gap: "0.4rem" }}><span>•</span><span>Read aloud daily for 10-15 minutes to build pacing and fluency.</span></li>
               <li style={{ marginBottom: "0.5rem", display: "flex", gap: "0.4rem" }}><span>•</span><span>Focus on reducing hesitations — pause before unfamiliar words instead of skipping.</span></li>
@@ -639,45 +667,76 @@ export default function ReadingFluencyPage() {
         </div>
       </div>
 
-      {/* Assessment History Table */}
-      <div>
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#1f2937", marginBottom: "1rem" }}>Assessment History</h3>
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>DATE</th>
-                <th>RECORDING</th>
-                <th>WPM</th>
-                <th>ACCURACY</th>
-                <th>WER</th>
-                <th>LEVEL</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: "center", color: "#9ca3af", padding: "2rem" }}>No reading fluency assessments recorded yet.</td></tr>
-              ) : (
-                rows.map((r, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }} suppressHydrationWarning>{fmtDate(r.date)}</td>
-                    <td>{r.title}</td>
-                    <td style={{ fontWeight: 600 }}>{r.wpm ?? "—"}</td>
-                    <td style={{ fontWeight: 600 }}>{r.accuracy != null ? `${r.accuracy}%` : "—"}</td>
-                    <td style={{ fontWeight: 600 }}>{r.wer != null ? `${r.wer}%` : "—"}</td>
-                    <td><span className={`badge ${levelBadge[r.masteryLevel] || "badge-beginning"}`}>{r.masteryLevel}</span></td>
-                    <td>
-                      <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: r.status === "approved" ? "#047857" : r.status === "flagged" ? "#b45309" : "#92400e" }}>
-                        {r.status === "approved" ? "Approved" : r.status === "flagged" ? "Flagged" : "Pending"}
-                      </span>
-                    </td>
+      {/* Assessment History */}
+      <div className="mt-4 sm:mt-6">
+        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">
+          Assessment History
+        </h3>
+
+        {rows.length === 0 ? (
+          /* Compact Mobile-Friendly Empty State (Fits 100% width, no clipping, minimal height) */
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-3.5 sm:p-5 text-center text-xs text-slate-400 shadow-2xs">
+            No reading fluency assessments recorded yet.
+          </div>
+        ) : (
+          <>
+            {/* Mobile View: Compact Card Stack (< 640px) */}
+            <div className="space-y-2 sm:hidden">
+              {rows.map((r, i) => (
+                <div key={i} className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-900 mb-1">
+                    <span className="truncate max-w-[200px]">{r.title}</span>
+                    <span className={`badge ${levelBadge[r.masteryLevel] || "badge-beginning"} text-[10px] px-2 py-0.5`}>
+                      {r.masteryLevel}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span suppressHydrationWarning>{fmtDate(r.date)}</span>
+                    <div className="flex items-center gap-2 font-bold text-slate-700">
+                      <span>{r.wpm ?? "—"} WPM</span>
+                      <span>·</span>
+                      <span>{r.accuracy != null ? `${r.accuracy}%` : "—"} acc</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Full 7-Column Table (>= 640px) */}
+            <div className="hidden sm:block table-container overflow-x-auto">
+              <table className="table min-w-[600px]">
+                <thead>
+                  <tr>
+                    <th>DATE</th>
+                    <th>RECORDING</th>
+                    <th>WPM</th>
+                    <th>ACCURACY</th>
+                    <th>WER</th>
+                    <th>LEVEL</th>
+                    <th>STATUS</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }} suppressHydrationWarning>{fmtDate(r.date)}</td>
+                      <td>{r.title}</td>
+                      <td style={{ fontWeight: 600 }}>{r.wpm ?? "—"}</td>
+                      <td style={{ fontWeight: 600 }}>{r.accuracy != null ? `${r.accuracy}%` : "—"}</td>
+                      <td style={{ fontWeight: 600 }}>{r.wer != null ? `${r.wer}%` : "—"}</td>
+                      <td><span className={`badge ${levelBadge[r.masteryLevel] || "badge-beginning"}`}>{r.masteryLevel}</span></td>
+                      <td>
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: r.status === "approved" ? "#047857" : r.status === "flagged" ? "#b45309" : "#92400e" }}>
+                          {r.status === "approved" ? "Approved" : r.status === "flagged" ? "Flagged" : "Pending"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

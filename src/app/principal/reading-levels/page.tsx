@@ -132,25 +132,25 @@ export default function ReadingLevelsPage() {
         {/* Charts Row */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Donut */}
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-xl border border-gray-100 bg-white p-5 sm:p-6 shadow-sm">
             <h3 className="text-base font-semibold text-gray-900">Overall Distribution</h3>
             <p className="mt-0.5 text-sm text-gray-400">{stats.total} learners assessed in Reading</p>
-            <div className="mt-4 flex items-center justify-center gap-8">
-              <div className="h-48 w-48">
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+              <div className="h-52 w-52 sm:h-56 sm:w-56 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={overallDist} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" strokeWidth={0}>
+                    <Pie data={overallDist} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" strokeWidth={0}>
                       {overallDist.map((e, i) => <Cell key={i} fill={e.color} />)}
                     </Pie>
                     <Tooltip formatter={(v: any, n: any) => [`${v}`, n]} contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-3">
+              <div className="flex flex-wrap sm:flex-col justify-center gap-3 sm:space-y-3">
                 {overallDist.map((item) => (
                   <div key={item.name} className="flex items-center gap-2 text-sm">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-gray-700">{item.name}</span>
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="font-medium text-gray-700">{item.name}</span>
                   </div>
                 ))}
               </div>
@@ -158,30 +158,32 @@ export default function ReadingLevelsPage() {
           </div>
 
           {/* Stacked Bar */}
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-gray-900">Level Breakdown by Grade</h3>
-            <p className="mt-0.5 text-sm text-gray-400">Number of learners at each reading level per grade</p>
-            <div className="mt-4 flex items-center gap-6">
-              <div className="h-56 flex-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={gradeBreakdown} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                    <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
-                    <Bar dataKey="Independent" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Instructional" stackId="a" fill="#f59e0b" />
-                    <Bar dataKey="Frustration" stackId="a" fill="#ef4444" />
-                    <Bar dataKey="NonReader" stackId="a" fill="#6b7280" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          <div className="rounded-xl border border-gray-100 bg-white p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Level Breakdown by Grade</h3>
+                <p className="mt-0.5 text-sm text-gray-400">Number of learners at each reading level per grade</p>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Independent</div>
-                <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Instructional</div>
-                <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Frustration</div>
-                <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-gray-500" /> Non-Reader</div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Independent</div>
+                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Instructional</div>
+                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Frustration</div>
+                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gray-500" /> Non-Reader</div>
               </div>
+            </div>
+            <div className="mt-4 h-64 sm:h-76 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={gradeBreakdown} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #f3f4f6" }} />
+                  <Bar dataKey="Independent" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Instructional" stackId="a" fill="#f59e0b" />
+                  <Bar dataKey="Frustration" stackId="a" fill="#ef4444" />
+                  <Bar dataKey="NonReader" stackId="a" fill="#6b7280" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>

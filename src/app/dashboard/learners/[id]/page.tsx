@@ -121,7 +121,7 @@ export default function LearnerViewPage() {
   return (
     <>
       <Header title="Learners" />
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
+      <main className="flex-1 overflow-y-auto bg-gray-50 p-3.5 sm:p-6 md:p-8">
         {/* Back link */}
         <div className="mb-6">
           <Link
@@ -140,9 +140,9 @@ export default function LearnerViewPage() {
         <div className="mb-6 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="h-20 bg-gradient-to-r from-blue-600 to-blue-500" />
 
-          <div className="px-6 pb-6">
+          <div className="px-4 sm:px-6 pb-4 sm:pb-6">
             {/* Avatar + Name */}
-            <div className="-mt-8 flex items-end gap-5">
+            <div className="-mt-8 flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-5 text-center sm:text-left">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-white bg-blue-600 text-xl font-bold text-white shadow-md">
                 {initials}
               </div>
@@ -155,7 +155,7 @@ export default function LearnerViewPage() {
             </div>
 
             {/* Info Row */}
-            <div className="mt-5 grid grid-cols-2 gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4 sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-4 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:p-4 text-xs sm:grid-cols-4">
               <InfoItem
                 label="Grade & Section"
                 value={`Grade ${l.gradeLevel} - ${l.section}`}
@@ -168,7 +168,7 @@ export default function LearnerViewPage() {
         </div>
 
         {/* 3 Metric Cards */}
-        <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
           <MetricCard
             title="Performance Level"
             value={data.performanceLevel}
@@ -179,7 +179,7 @@ export default function LearnerViewPage() {
             value={latestOmr ? `${latestOmr.score}%` : "—"}
             icon={<FileCheck2 className="h-5 w-5 text-emerald-600" />}
           />
-          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-3.5 sm:p-5 shadow-sm transition-all hover:shadow-md">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Risk Classification
@@ -384,7 +384,7 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+    <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-3.5 sm:p-5 shadow-sm transition-all hover:shadow-md">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {title}

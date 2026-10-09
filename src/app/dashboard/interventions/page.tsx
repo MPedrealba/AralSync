@@ -450,6 +450,9 @@ export default function InterventionsPage() {
     setScoreInput(sub.gradeScore ?? "");
     setRemarksInput(sub.teacherRemarks ?? "");
     setSaveSuccessMsg(null);
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      document.getElementById("grading-panel")?.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   const handleSaveGrade = async (advanceNext = false) => {
@@ -592,7 +595,7 @@ export default function InterventionsPage() {
         }
       />
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
         {/* =====================================================================
             VIEW A: CLASSWORK & ACTIVITIES DASHBOARD
             ===================================================================== */}
@@ -903,14 +906,14 @@ export default function InterventionsPage() {
                 </button>
 
                 {activeAssignment && (
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="rounded-full bg-slate-100 px-2.5 sm:px-3 py-1 text-xs font-bold text-slate-700">
                       Total: {submissions.length} Students
                     </span>
-                    <span className="rounded-full bg-amber-100 border border-amber-200 px-3 py-1 text-xs font-bold text-amber-900">
+                    <span className="rounded-full bg-amber-100 border border-amber-200 px-2.5 sm:px-3 py-1 text-xs font-bold text-amber-900">
                       {submissions.filter((s) => s.status === "Submitted").length} Turned In
                     </span>
-                    <span className="rounded-full bg-emerald-100 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-900">
+                    <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 sm:px-3 py-1 text-xs font-bold text-emerald-900">
                       {submissions.filter((s) => s.status === "Completed" || s.status === "Reviewed").length} Graded
                     </span>
                   </div>
@@ -990,7 +993,7 @@ export default function InterventionsPage() {
                 {/* ---------------------------------------------------------------
                     LEFT COLUMN (35-40% / 4 of 12 cols): Student Roster List
                     --------------------------------------------------------------- */}
-                <div className="lg:col-span-4 rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden flex flex-col min-h-[600px] max-h-[800px]">
+                <div className="lg:col-span-4 rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden flex flex-col min-h-[280px] lg:min-h-[600px] max-h-[450px] lg:max-h-[800px]">
                   {/* Roster Search & Filters */}
                   <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
                     <div className="relative">
@@ -1005,10 +1008,10 @@ export default function InterventionsPage() {
                     </div>
 
                     {/* Filter Tabs */}
-                    <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-xl text-[11px] font-bold">
+                    <div className="flex gap-1 p-1 bg-slate-200/60 rounded-xl text-[11px] font-bold overflow-x-auto no-scrollbar whitespace-nowrap">
                       <button
                         onClick={() => setRosterFilter("all")}
-                        className={`py-1.5 rounded-lg transition-all ${
+                        className={`shrink-0 px-3 py-1.5 rounded-lg transition-all ${
                           rosterFilter === "all"
                             ? "bg-white text-slate-900 shadow-2xs font-extrabold"
                             : "text-slate-600 hover:text-slate-900"
@@ -1018,7 +1021,7 @@ export default function InterventionsPage() {
                       </button>
                       <button
                         onClick={() => setRosterFilter("turned_in")}
-                        className={`py-1.5 rounded-lg transition-all ${
+                        className={`shrink-0 px-3 py-1.5 rounded-lg transition-all ${
                           rosterFilter === "turned_in"
                             ? "bg-white text-amber-800 shadow-2xs font-extrabold"
                             : "text-slate-600 hover:text-amber-800"
@@ -1028,7 +1031,7 @@ export default function InterventionsPage() {
                       </button>
                       <button
                         onClick={() => setRosterFilter("assigned")}
-                        className={`py-1.5 rounded-lg transition-all ${
+                        className={`shrink-0 px-3 py-1.5 rounded-lg transition-all ${
                           rosterFilter === "assigned"
                             ? "bg-white text-slate-800 shadow-2xs font-extrabold"
                             : "text-slate-600 hover:text-slate-900"
@@ -1038,7 +1041,7 @@ export default function InterventionsPage() {
                       </button>
                       <button
                         onClick={() => setRosterFilter("graded")}
-                        className={`py-1.5 rounded-lg transition-all ${
+                        className={`shrink-0 px-3 py-1.5 rounded-lg transition-all ${
                           rosterFilter === "graded"
                             ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
                             : "text-slate-600 hover:text-emerald-700"
@@ -1132,7 +1135,7 @@ export default function InterventionsPage() {
                 {/* ---------------------------------------------------------------
                     RIGHT COLUMN (60-65% / 8 of 12 cols): Grading & Submission Inspector
                     --------------------------------------------------------------- */}
-                <div className="lg:col-span-8 space-y-6">
+                <div id="grading-panel" className="lg:col-span-8 space-y-6">
                   {activeSubmission ? (
                     <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
                       {/* Top Inspector Bar */}
@@ -1452,10 +1455,10 @@ export default function InterventionsPage() {
           MODAL: CREATE ASSIGNMENT / ACTIVITY
           ===================================================================== */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl my-auto animate-in fade-in zoom-in-95 duration-150 m-3 sm:m-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 sm:px-6 py-3.5 sm:py-4">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900">
                   Create Activity / Assignment
@@ -1473,7 +1476,7 @@ export default function InterventionsPage() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleCreateAssignment} className="p-6 space-y-4">
+            <form onSubmit={handleCreateAssignment} className="p-4 sm:p-6 space-y-4">
               {createError && (
                 <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
                   {createError}

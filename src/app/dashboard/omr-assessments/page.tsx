@@ -130,7 +130,7 @@ export default function OMRAssessmentsPage() {
   return (
     <>
       <Header title="OMR Assessments" />
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Title */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">OMR Assessments</h1>
@@ -140,12 +140,12 @@ export default function OMRAssessmentsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-xs w-fit">
+        <div className="mb-4 sm:mb-6 flex gap-1 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-full sm:w-fit overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all ${
+              className={`shrink-0 rounded-lg px-3.5 sm:px-5 py-2 text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === tab
                   ? "bg-red-800 text-white shadow-xs"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -450,8 +450,8 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
 
     {/* ━━━ WRITTEN GRADING MODAL ━━━ */}
     {grading && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+        <div className="w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl m-3 sm:m-auto">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
             <div>
@@ -1023,9 +1023,9 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
 
       {/* Manual Add Answer Key Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+          <div className="relative z-10 w-[calc(100vw-1.5rem)] sm:w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-2xl m-3 sm:m-auto">
             <h2 className="text-lg font-bold text-gray-900">Add Answer Key</h2>
             <p className="mt-1 text-sm text-gray-400">
               Type or paste the answer letters — one per item.
@@ -1042,7 +1042,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                   className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Format</label>
                   <select
@@ -1125,9 +1125,9 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
 
       {/* Scan Key Sheet Modal */}
       {showScanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowScanModal(false)} />
-          <div className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+          <div className="relative z-10 max-h-[90vh] w-[calc(100vw-1.5rem)] sm:w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-2xl m-3 sm:m-auto">
             <h2 className="text-lg font-bold text-gray-900">Scan Key Sheet</h2>
             <p className="mt-1 text-sm text-gray-400">
               Upload the scanned sheet where the correct answers are pre-bubbled.
@@ -1147,7 +1147,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                     className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Format</label>
                     <select

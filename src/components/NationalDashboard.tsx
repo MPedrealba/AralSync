@@ -145,7 +145,7 @@ function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-gray-100 bg-white p-6 shadow-sm print-break-inside-avoid ${className}`}>
+    <div className={`rounded-xl border border-gray-100 bg-white p-5 sm:p-6 shadow-sm print-break-inside-avoid ${className}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-base font-semibold text-gray-900">{title}</h3>
@@ -161,17 +161,17 @@ function ChartCard({
 function DonutChart({ slices, subtitle }: { slices: DonutSlice[]; subtitle: string }) {
   return (
     <ChartCard title="Overall Distribution" subtitle={subtitle}>
-      <div className="mt-4 flex items-center justify-center gap-8">
-        <div className="h-48 w-48">
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
+        <div className="h-52 w-52 sm:h-56 sm:w-56 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={slices}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={3}
+                innerRadius={60}
+                outerRadius={90}
+                paddingAngle={4}
                 dataKey="value"
                 strokeWidth={0}
               >
@@ -186,11 +186,11 @@ function DonutChart({ slices, subtitle }: { slices: DonutSlice[]; subtitle: stri
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="space-y-3">
+        <div className="flex flex-wrap sm:flex-col justify-center gap-3 sm:space-y-3">
           {slices.map((item) => (
             <div key={item.name} className="flex items-center gap-2 text-sm">
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-              <span className="text-gray-700">{item.name}</span>
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+              <span className="font-medium text-gray-700">{item.name}</span>
             </div>
           ))}
         </div>
@@ -374,28 +374,31 @@ function RmaSection({ rma, periodLabel }: { rma: RmaPayload; periodLabel: string
           {/* Donut + per-grade stacked bar */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <DonutChart slices={overallDist} subtitle={rma.totalLabel} />
-            <ChartCard title="Mastery Level by Grade" subtitle="Number of learners at each mastery band per grade">
-              <div className="mt-4 flex items-center gap-6">
-                <div className="h-56 flex-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={gradeBreakdown} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                      <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="Proficient" stackId="a" fill="#22c55e" />
-                      <Bar dataKey="Approaching" stackId="a" fill="#f59e0b" />
-                      <Bar dataKey="Developing" stackId="a" fill="#f97316" />
-                      <Bar dataKey="Beginning" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+            <ChartCard
+              title="Mastery Level by Grade"
+              subtitle="Number of learners at each mastery band per grade"
+              action={
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Proficient</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Approaching</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Developing</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Beginning</div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Proficient</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Approaching</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Developing</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Beginning</div>
-                </div>
+              }
+            >
+              <div className="mt-4 h-70 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={gradeBreakdown} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                    <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="Proficient" stackId="a" fill="#22c55e" />
+                    <Bar dataKey="Approaching" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Developing" stackId="a" fill="#f97316" />
+                    <Bar dataKey="Beginning" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </ChartCard>
           </div>
@@ -699,28 +702,31 @@ function PhilIriSection({ philIri, periodLabel }: { philIri: PhilIriPayload; per
           {/* Donut + per-grade stacked bar */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <DonutChart slices={overallDist} subtitle={philIri.totalLabel} />
-            <ChartCard title="Level Breakdown by Grade" subtitle="Number of learners at each reading level per grade">
-              <div className="mt-4 flex items-center gap-6">
-                <div className="h-56 flex-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={gradeBreakdown} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                      <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="Independent" stackId="a" fill="#22c55e" />
-                      <Bar dataKey="Instructional" stackId="a" fill="#f59e0b" />
-                      <Bar dataKey="Frustration" stackId="a" fill="#ef4444" />
-                      <Bar dataKey="NonReader" stackId="a" fill="#6b7280" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+            <ChartCard
+              title="Level Breakdown by Grade"
+              subtitle="Number of learners at each reading level per grade"
+              action={
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Independent</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Instructional</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Frustration</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gray-500" /> Non-Reader</div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Independent</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Instructional</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Frustration</div>
-                  <div className="flex items-center gap-2 text-xs"><span className="h-2.5 w-2.5 rounded-full bg-gray-500" /> Non-Reader</div>
-                </div>
+              }
+            >
+              <div className="mt-4 h-70 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={gradeBreakdown} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                    <XAxis dataKey="grade" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="Independent" stackId="a" fill="#22c55e" />
+                    <Bar dataKey="Instructional" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Frustration" stackId="a" fill="#ef4444" />
+                    <Bar dataKey="NonReader" stackId="a" fill="#6b7280" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </ChartCard>
           </div>

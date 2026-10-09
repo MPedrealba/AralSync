@@ -127,7 +127,7 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
         <StatCard
           title="Overall Score"
           value={`${metrics?.overallScore ?? 0}%`}

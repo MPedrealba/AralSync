@@ -447,11 +447,54 @@
 
   .student-portal .main-content {
     margin-left: 0;
-    padding: 1rem;
+    padding: 0.85rem 1rem;
     width: 100%;
+  }
+
+  .student-portal .page-header {
+    margin-bottom: 0.85rem;
+  }
+
+  .student-portal .page-title {
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+
+  .student-portal .page-subtitle {
+    font-size: 0.78rem;
+    margin-top: 0.2rem;
+  }
+
+  .student-portal .card {
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .student-portal .card-title {
+    font-size: 0.68rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .student-portal .card-value {
+    font-size: 1.45rem;
+    line-height: 1.1;
   }
 
   .student-portal .table-container {
     overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .student-portal .table th {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.65rem;
+  }
+
+  .student-portal .table td {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.78rem;
   }
 }

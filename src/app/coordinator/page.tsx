@@ -100,7 +100,7 @@ export default function CoordinatorDashboardPage() {
         </div>
 
         {/* 4 Stat Cards */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
           <StatCard
             title="Total Accounts"
             value={overview.totalUsers}

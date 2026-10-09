@@ -35,17 +35,20 @@ const CustomTooltip = ({
 }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-gray-100 bg-white px-3 py-2.5 shadow-lg">
-        <p className="mb-1.5 text-xs font-semibold text-gray-700">{label}</p>
-        {payload.map((entry, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: entry.color }}
-            />
-            {entry.name}: <span className="font-semibold">{entry.value}%</span>
-          </div>
-        ))}
+      <div className="rounded-xl border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur-sm text-xs">
+        <p className="mb-1.5 font-bold text-slate-800">{label}</p>
+        <div className="space-y-1">
+          {payload.map((entry, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="font-medium">{entry.name}:</span>
+              <span className="font-bold text-slate-900">{entry.value}%</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -122,7 +125,7 @@ export default function DashboardPage() {
     <>
       <Header title="Home" />
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
+      <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
         {/* ── A. Welcome Header ── */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -134,7 +137,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── B. Quick Stat Cards ── */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
           <StatCard
             title="Total Learners"
             value={overview.totalLearners.toString()}
@@ -169,7 +172,7 @@ export default function DashboardPage() {
         {/* ── C. Middle Section: Chart + Alerts ── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Chart Card */}
-          <div className="col-span-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs lg:col-span-2">
+          <div className="col-span-1 rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-xs lg:col-span-2">
             <div className="mb-6 flex items-start justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -183,12 +186,12 @@ export default function DashboardPage() {
                 This Week
               </span>
             </div>
-            <div className="h-72">
+            <div className="h-80 sm:h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
                   margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
-                  barCategoryGap="20%"
+                  barCategoryGap="24%"
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -197,7 +200,7 @@ export default function DashboardPage() {
                   />
                   <XAxis
                     dataKey="name"
-                    tick={{ fontSize: 12, fill: "#64748b" }}
+                    tick={{ fontSize: 12, fill: "#475569" }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -220,20 +223,20 @@ export default function DashboardPage() {
                   <Bar
                     dataKey="Numeracy"
                     fill="#991b1b"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={32}
                   />
                   <Bar
                     dataKey="Reading"
                     fill="#2563eb"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={32}
                   />
                   <Bar
                     dataKey="Science"
                     fill="#d97706"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={32}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -308,25 +311,25 @@ export default function DashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/60">
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Date Scanned
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Assessment Title
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Subject
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Cohort / Section
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Class Average
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Action
                   </th>
                 </tr>
@@ -347,30 +350,30 @@ export default function DashboardPage() {
                     key={i}
                     className="transition-colors hover:bg-slate-50/70"
                   >
-                    <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-500">
+                    <td className="whitespace-nowrap px-3.5 sm:px-6 py-3 sm:py-4 text-xs text-slate-500">
                       {scan.date}
                     </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-sm font-semibold text-slate-900">
                       {scan.title}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4">
                       <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                         {scan.subject}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-sm text-slate-600">
                       {scan.cohort}
                     </td>
-                    <td className="px-6 py-4 text-sm font-bold text-slate-900">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-sm font-bold text-slate-900">
                       {scan.average}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         {scan.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3.5 sm:px-6 py-3 sm:py-4">
                       <Link
                         href="/dashboard/omr-assessments"
                         className="inline-flex items-center gap-1 text-xs font-bold text-red-800 transition-colors hover:text-red-900"
