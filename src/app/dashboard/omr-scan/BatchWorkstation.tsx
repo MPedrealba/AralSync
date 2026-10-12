@@ -26,8 +26,10 @@ import {
   SlidersHorizontal,
   ExternalLink,
 } from "lucide-react";
+import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 
 export interface Learner {
+
   _id: string;
   name: string;
   section?: string;
@@ -417,29 +419,60 @@ export default function BatchWorkstation({
         })),
       };
 
-      const res = await fetch("/api/teacher/omr/batch/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await parseJsonResponse(res);
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to commit batch assessments.");
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        enqueueOfflineSubmission({
+          url: "/api/teacher/omr/batch/commit",
+          method: "POST",
+          body: payload,
+          type: "omr-assessment",
+          title: `Batch OMR Exam (${validSheets.length} students)`,
+        });
+        setSuccessModal({
+          isOpen: true,
+          savedCount: validSheets.length,
+          totalSubmitted: validSheets.length,
+        });
+        return;
       }
 
-      setSuccessModal({
-        isOpen: true,
-        savedCount: json.data.savedCount || validSheets.length,
-        totalSubmitted: validSheets.length,
-      });
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to finalize batch assessments.");
+      try {
+        const res = await fetch("/api/teacher/omr/batch/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const json = await parseJsonResponse(res);
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Failed to commit batch assessments.");
+        }
+
+        setSuccessModal({
+          isOpen: true,
+          savedCount: json.data.savedCount || validSheets.length,
+          totalSubmitted: validSheets.length,
+        });
+      } catch (err: any) {
+        // Enqueue offline if network failed or server unreachable
+        enqueueOfflineSubmission({
+          url: "/api/teacher/omr/batch/commit",
+          method: "POST",
+          body: payload,
+          type: "omr-assessment",
+          title: `Batch OMR Exam (${validSheets.length} students)`,
+        });
+        setSuccessModal({
+          isOpen: true,
+          savedCount: validSheets.length,
+          totalSubmitted: validSheets.length,
+        });
+      }
     } finally {
       setIsCommitting(false);
     }
   };
+
 
   // ── Computed Summary Stats ──
   const activeBatchSheets = useMemo(() => {

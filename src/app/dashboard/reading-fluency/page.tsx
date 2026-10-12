@@ -21,12 +21,22 @@ import {
   RotateCcw,
   Shield,
   Pause,
+  WifiOff,
 } from "lucide-react";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
+import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
+import {
+  getCachedPassages,
+  cachePassages,
+  getCachedLearners,
+  cacheLearners,
+  computeLocalPhilIriEvaluation,
+} from "@/lib/offlineStorage";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
+
 
 /* ──── Types ──── */
 export interface MiscueItem {
@@ -883,6 +893,8 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [finalizeSuccess, setFinalizeSuccess] = useState(false);
   const [finalizeError, setFinalizeError] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
+  const [isOfflineQueued, setIsOfflineQueued] = useState(false);
 
   /* Phil-IRI miscue tracker (manual mode) */
   const [miscues, setMiscues] = useState<Miscues>({
@@ -913,35 +925,61 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     setCompDone(true);
   };
 
+  /* Online / Offline Network Monitoring */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsOnline(navigator.onLine);
+      const onOn = () => setIsOnline(true);
+      const onOff = () => setIsOnline(false);
+      window.addEventListener("online", onOn);
+      window.addEventListener("offline", onOff);
+      return () => {
+        window.removeEventListener("online", onOn);
+        window.removeEventListener("offline", onOff);
+      };
+    }
+  }, []);
+
+  /* Pre-cache and load rosters and passages with offline fallback */
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/teacher/learners");
         const json = await parseJsonResponse(res);
-        if (json.success) {
-          setLearners(
-            json.data
-              .filter((l: any) => l.studentId)
-              .map((l: any) => ({
-                studentId: l.studentId,
-                name: l.name,
-                gradeLevel: l.gradeLevel,
-                section: l.section,
-              }))
-          );
+        if (json.success && Array.isArray(json.data)) {
+          const mapped = json.data
+            .filter((l: any) => l.studentId)
+            .map((l: any) => ({
+              studentId: l.studentId,
+              name: l.name,
+              gradeLevel: l.gradeLevel,
+              section: l.section,
+            }));
+          setLearners(mapped);
+          cacheLearners(mapped);
+        } else {
+          const cached = getCachedLearners();
+          if (cached.length > 0) setLearners(cached);
         }
       } catch {
-        /* learners list is optional — recorder still usable */
+        const cached = getCachedLearners();
+        if (cached.length > 0) setLearners(cached);
       }
       try {
         const res = await fetch("/api/teacher/reading/passages");
         const json = await parseJsonResponse(res);
-        if (json.success) setPassages(json.data);
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          setPassages(json.data);
+          cachePassages(json.data);
+        } else {
+          setPassages(getCachedPassages());
+        }
       } catch {
-        /* passages list is optional */
+        setPassages(getCachedPassages());
       }
     })();
   }, []);
+
 
   /* Clean up on unmount */
   useEffect(() => {
@@ -1081,6 +1119,52 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     }
 
     simulate ? setAnalyzingSim(true) : setAnalyzing(true);
+
+    // If completely offline, run client-side Phil-IRI evaluation directly
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const localEval = computeLocalPhilIriEvaluation({
+        passageText,
+        durationSec: Math.max(recTime, 1),
+        miscues,
+      });
+
+      const mockResult: AnalyzeResult = {
+        id: `offline-${Date.now()}`,
+        transcript: passageText.slice(0, 200),
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        miscues: {
+          substitutions: localEval.miscueBreakdown.substitutions,
+          omissions: localEval.miscueBreakdown.omissions,
+          insertions: localEval.miscueBreakdown.insertions,
+          repetitions: localEval.miscueBreakdown.repetitions,
+        },
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        simulation: true,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+        wordsAttempted: localEval.wordsAttempted,
+        wordsTotal: localEval.wordsTotal,
+      };
+
+      setResult(mockResult);
+      setCalibratedItems(localEval.miscueItems);
+      setOverrideCount(0);
+      setActiveWordIdx(null);
+      setFinalizeSuccess(false);
+      setFinalizeError("");
+      setIsOfflineQueued(false);
+      if (localEval.miscueItems.length > 0) {
+        setViewMode("calibration");
+      }
+      setAnalyzing(false);
+      setAnalyzingSim(false);
+      return;
+    }
+
     try {
       const fd = new FormData();
       if (audioBlob) fd.append("file", audioBlob, "recording.webm");
@@ -1105,15 +1189,54 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         setActiveWordIdx(null);
         setFinalizeSuccess(false);
         setFinalizeError("");
+        setIsOfflineQueued(false);
         if (items.length > 0) {
           setViewMode("calibration");
         }
         onAnalyzed();
       } else {
-        setError(json.error || "Analysis failed.");
+        throw new Error(json.error || "Analysis failed.");
       }
     } catch {
-      setError("Analysis failed. Check your connection and try again.");
+      // Offline fallback: compute client-side metrics and allow calibration
+      const localEval = computeLocalPhilIriEvaluation({
+        passageText,
+        durationSec: Math.max(recTime, 1),
+        miscues,
+      });
+
+      const mockResult: AnalyzeResult = {
+        id: `offline-${Date.now()}`,
+        transcript: passageText.slice(0, 200),
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        miscues: {
+          substitutions: localEval.miscueBreakdown.substitutions,
+          omissions: localEval.miscueBreakdown.omissions,
+          insertions: localEval.miscueBreakdown.insertions,
+          repetitions: localEval.miscueBreakdown.repetitions,
+        },
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        simulation: true,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+        wordsAttempted: localEval.wordsAttempted,
+        wordsTotal: localEval.wordsTotal,
+      };
+
+      setResult(mockResult);
+      setCalibratedItems(localEval.miscueItems);
+      setOverrideCount(0);
+      setActiveWordIdx(null);
+      setFinalizeSuccess(false);
+      setFinalizeError("");
+      setIsOfflineQueued(false);
+      if (localEval.miscueItems.length > 0) {
+        setViewMode("calibration");
+      }
     } finally {
       setAnalyzing(false);
       setAnalyzingSim(false);
@@ -1169,37 +1292,91 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     setIsFinalizing(true);
     setFinalizeError("");
     setFinalizeSuccess(false);
+
+    const learnerObj = learners.find((l) => l.studentId === studentId);
+    const studentName = learnerObj?.name || "Learner";
+
+    const assessmentPayload = {
+      studentId,
+      type: "READING_FLUENCY",
+      title: passageTitle || "Oral Reading Passage",
+      passageTitle: passageTitle || "Oral Reading Passage",
+      score: liveMetrics.accuracy,
+      accuracy: liveMetrics.accuracy,
+      wpm: liveMetrics.wpm,
+      masteryLevel: liveMetrics.masteryLevel,
+      miscueBreakdown: liveMetrics.counts,
+      miscueItems: calibratedItems,
+      miscueTotal: liveMetrics.totalMiscues,
+      wordsAttempted: result.wordsAttempted ?? wordCount,
+      durationSec: result.durationSec || recTime || 60,
+      status: "approved",
+      notes:
+        overrideCount > 0
+          ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Approved.`
+          : "Verified and approved by teacher.",
+    };
+
+    // If offline or if the assessment was computed locally offline:
+    if (
+      (typeof navigator !== "undefined" && !navigator.onLine) ||
+      result.id.startsWith("offline-")
+    ) {
+      enqueueOfflineSubmission({
+        url: "/api/teacher/assessments",
+        method: "POST",
+        body: assessmentPayload,
+        type: "reading-assessment",
+        title: `${passageTitle} - ${studentName}`,
+        studentName,
+      });
+      setIsOfflineQueued(true);
+      setFinalizeSuccess(true);
+      setIsFinalizing(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/teacher/assessments/${result.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accuracy: liveMetrics.accuracy,
-          wpm: liveMetrics.wpm,
-          masteryLevel: liveMetrics.masteryLevel,
-          miscueBreakdown: liveMetrics.counts,
-          miscueItems: calibratedItems,
-          miscueTotal: liveMetrics.totalMiscues,
-          status: "approved",
-          notes:
-            overrideCount > 0
-              ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Approved.`
-              : "Verified and approved by teacher.",
-        }),
+        body: JSON.stringify(assessmentPayload),
       });
       const json = await parseJsonResponse(res);
       if (json.success) {
+        setIsOfflineQueued(false);
         setFinalizeSuccess(true);
         onAnalyzed();
       } else {
-        setFinalizeError(json.error || "Failed to finalize assessment.");
+        // If server failed, safely enqueue in offline queue
+        enqueueOfflineSubmission({
+          url: "/api/teacher/assessments",
+          method: "POST",
+          body: assessmentPayload,
+          type: "reading-assessment",
+          title: `${passageTitle} - ${studentName}`,
+          studentName,
+        });
+        setIsOfflineQueued(true);
+        setFinalizeSuccess(true);
       }
     } catch {
-      setFinalizeError("Failed to finalize assessment. Check connection.");
+      // Network failure: enqueue in offline queue
+      enqueueOfflineSubmission({
+        url: "/api/teacher/assessments",
+        method: "POST",
+        body: assessmentPayload,
+        type: "reading-assessment",
+        title: `${passageTitle} - ${studentName}`,
+        studentName,
+      });
+      setIsOfflineQueued(true);
+      setFinalizeSuccess(true);
     } finally {
       setIsFinalizing(false);
     }
   };
+
 
   const levelColor = (lv?: string) =>
     lv === "Independent"
@@ -1228,8 +1405,15 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                     Grade {currentPassageObj.gradeLevel}
                   </span>
                 )}
+                {!isOnline && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                    <WifiOff className="h-3 w-3 text-amber-600" />
+                    Offline Mode
+                  </span>
+                )}
               </div>
               <p className="mt-0.5 text-xs text-slate-500">
+
                 Learner reads aloud from this passage during the session
               </p>
             </div>
@@ -1779,9 +1963,12 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
 
               {finalizeSuccess && (
                 <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-800 animate-in fade-in-50">
-                  Assessment calibrated &amp; approved! Learner record updated.
+                  {isOfflineQueued
+                    ? "Assessment saved to offline queue! It will sync automatically when connection is restored."
+                    : "Assessment calibrated & approved! Learner record updated."}
                 </div>
               )}
+
 
               {finalizeError && (
                 <div className="mt-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-800 animate-in fade-in-50">

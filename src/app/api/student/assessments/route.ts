@@ -65,3 +65,74 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+/**
+ * POST /api/student/assessments
+ * Supports creating student reading assessments submitted or replayed
+ * from the PWA offline queue. Assessments start in 'pending' status
+ * awaiting teacher calibration/validation.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const { id: userId } = await requireAuth(req, ['student']);
+    const body = await req.json();
+
+    const {
+      type = 'READING_FLUENCY',
+      title,
+      passageTitle,
+      score,
+      accuracy,
+      wpm,
+      pauses,
+      wer,
+      durationSec,
+      miscueBreakdown,
+      miscueItems,
+      miscueTotal,
+      masteryLevel,
+      notes,
+      date,
+    } = body || {};
+
+    await connectDB();
+
+    const finalScore =
+      typeof score === "number"
+        ? score
+        : typeof accuracy === "number"
+        ? accuracy
+        : 0;
+    const finalTitle = title || passageTitle || "Oral Reading Practice";
+
+    const assessment = await Assessment.create({
+      studentId: userId,
+      type: TYPES.includes(type) ? type : "READING_FLUENCY",
+      subject: "Reading",
+      title: finalTitle,
+      passageTitle: passageTitle || finalTitle,
+      score: finalScore,
+      accuracy: typeof accuracy === "number" ? accuracy : finalScore,
+      wpm: typeof wpm === "number" ? wpm : undefined,
+      pauses: typeof pauses === "number" ? pauses : undefined,
+      wer: typeof wer === "number" ? wer : undefined,
+      durationSec: typeof durationSec === "number" ? durationSec : undefined,
+      miscueBreakdown: miscueBreakdown || undefined,
+      miscueItems: Array.isArray(miscueItems) ? miscueItems : [],
+      miscueTotal: typeof miscueTotal === "number" ? miscueTotal : undefined,
+      masteryLevel: masteryLevel || "—",
+      status: "pending",
+      notes: notes || "Submitted offline via AralSync PWA. Awaiting teacher review.",
+      date: date ? new Date(date) : new Date(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: toRow(assessment.toObject ? assessment.toObject() : assessment),
+    });
+  } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    console.error("Student offline assessment submit error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}

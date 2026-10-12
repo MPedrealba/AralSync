@@ -5,7 +5,15 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import BatchWorkstation from "./BatchWorkstation";
+import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 import {
+  getCachedLearners,
+  cacheLearners,
+  getCachedAnswerKeys,
+  cacheAnswerKeys,
+} from "@/lib/offlineStorage";
+import {
+
   Upload,
   Camera,
   X,
@@ -343,6 +351,28 @@ function OMRWorkstationContent() {
           }
         }
 
+        // Offline fallback for learners
+        if (loadedStudents.length === 0) {
+          const cachedL = getCachedLearners();
+          if (cachedL.length > 0) {
+            loadedStudents = cachedL.map((c) => ({
+              _id: c.studentId,
+              name: c.name,
+              gradeLevel: c.gradeLevel,
+              section: c.section,
+            }));
+          }
+        } else {
+          cacheLearners(
+            loadedStudents.map((s) => ({
+              studentId: s._id,
+              name: s.name,
+              gradeLevel: s.gradeLevel || 7,
+              section: s.section || "Rosal",
+            }))
+          );
+        }
+
         setStudents(loadedStudents);
 
         if (loadedStudents.length > 0 && !selectedStudentId) {
@@ -358,6 +388,7 @@ function OMRWorkstationContent() {
           const kJson = await parseJsonResponse(keysRes);
           if (kJson.success && Array.isArray(kJson.data)) {
             setAnswerKeys(kJson.data);
+            cacheAnswerKeys(kJson.data);
             const paramKey = searchParams.get("keyId");
             if (paramKey && kJson.data.some((k: any) => k.id === paramKey)) {
               setSelectedKeyId(paramKey);
@@ -365,11 +396,33 @@ function OMRWorkstationContent() {
               setSelectedKeyId(kJson.data[0].id);
             }
           }
+        } else {
+          const cachedKeys = getCachedAnswerKeys();
+          if (cachedKeys.length > 0) {
+            setAnswerKeys(cachedKeys);
+            if (!selectedKeyId) setSelectedKeyId(cachedKeys[0].id);
+          }
         }
       } catch (err) {
         console.error("Failed to load OMR workstation data:", err);
+        const cachedL = getCachedLearners();
+        if (cachedL.length > 0) {
+          setStudents(
+            cachedL.map((c) => ({
+              _id: c.studentId,
+              name: c.name,
+              gradeLevel: c.gradeLevel,
+              section: c.section,
+            }))
+          );
+        }
+        const cachedKeys = getCachedAnswerKeys();
+        if (cachedKeys.length > 0) {
+          setAnswerKeys(cachedKeys);
+        }
       }
     }
+
     loadData();
   }, [searchParams]);
 
@@ -954,33 +1007,72 @@ function OMRWorkstationContent() {
         title: assessmentTitle,
       };
 
-      const res = await fetch("/api/teacher/omr", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await parseJsonResponse(res);
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to save assessment.");
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        enqueueOfflineSubmission({
+          url: "/api/teacher/omr",
+          method: "PUT",
+          body: payload,
+          type: "omr-assessment",
+          title: `${assessmentTitle} - ${studentObj?.name || "Student"}`,
+          studentName: studentObj?.name,
+        });
+        setFinalizedModal({
+          isOpen: true,
+          score: livePercentage,
+          masteryLevel: `${liveMastery.label} (Queued Offline)`,
+          studentName: studentObj?.name || "Student",
+          recommendations: [],
+          assignedIds: [],
+        });
+        return;
       }
 
-      const savedData = json.data;
-      setFinalizedModal({
-        isOpen: true,
-        score: savedData.assessment?.score ?? livePercentage,
-        masteryLevel: savedData.assessment?.masteryLevel ?? liveMastery.label,
-        studentName: studentObj?.name || "Student",
-        recommendations: savedData.recommendations || [],
-        assignedIds: [],
-      });
-    } catch (err: any) {
-      setErrorMessage(err.message || "An error occurred while saving assessment.");
+      try {
+        const res = await fetch("/api/teacher/omr", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const json = await parseJsonResponse(res);
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Failed to save assessment.");
+        }
+
+        const savedData = json.data;
+        setFinalizedModal({
+          isOpen: true,
+          score: savedData.assessment?.score ?? livePercentage,
+          masteryLevel: savedData.assessment?.masteryLevel ?? liveMastery.label,
+          studentName: studentObj?.name || "Student",
+          recommendations: savedData.recommendations || [],
+          assignedIds: [],
+        });
+      } catch (err: any) {
+        // Enqueue offline if network failed or server unreachable
+        enqueueOfflineSubmission({
+          url: "/api/teacher/omr",
+          method: "PUT",
+          body: payload,
+          type: "omr-assessment",
+          title: `${assessmentTitle} - ${studentObj?.name || "Student"}`,
+          studentName: studentObj?.name,
+        });
+        setFinalizedModal({
+          isOpen: true,
+          score: livePercentage,
+          masteryLevel: `${liveMastery.label} (Queued Offline)`,
+          studentName: studentObj?.name || "Student",
+          recommendations: [],
+          assignedIds: [],
+        });
+      }
     } finally {
       setIsSaving(false);
     }
   };
+
 
   // ── 1-Click Assign ARAL Intervention ──
   const handleAssignIntervention = async (recId: string) => {

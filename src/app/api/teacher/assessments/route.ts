@@ -5,6 +5,8 @@ import LearnerRecord from "../../../../../models/LearnerRecord";
 import User from "../../../../../models/User";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
 import { getTeacherSubject } from "@/lib/teacherScope";
+import { logAudit } from "@/lib/audit";
+import { syncLearnerPhilIriMetrics } from "@/lib/philIriSync";
 
 export async function GET(req: NextRequest) {
   try {
@@ -105,3 +107,118 @@ export async function GET(req: NextRequest) {
     return authErrorResponse(e);
   }
 }
+
+/**
+ * POST /api/teacher/assessments
+ * Supports creating assessments replayed from the PWA offline queue
+ * or teacher manual entry.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const teacher = await requireAuth(req, ["teacher"]);
+    const body = await req.json();
+
+    const {
+      studentId,
+      type = "READING_FLUENCY",
+      title,
+      passageTitle,
+      score,
+      accuracy,
+      wpm,
+      pauses,
+      wer,
+      durationSec,
+      miscueBreakdown,
+      miscueItems,
+      miscueTotal,
+      wordsAttempted,
+      masteryLevel,
+      status = "approved",
+      notes,
+      date,
+      assessmentCategory,
+      topics,
+      subject,
+      scoredItems,
+      totalItems,
+      detectedAnswers,
+    } = body || {};
+
+    if (!studentId) {
+      return NextResponse.json(
+        { success: false, error: "studentId is required" },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const finalScore =
+      typeof score === "number"
+        ? score
+        : typeof accuracy === "number"
+        ? accuracy
+        : 0;
+    const finalTitle = title || passageTitle || "Assessment";
+    const finalSubject =
+      subject ||
+      (type === "READING_FLUENCY"
+        ? "Reading"
+        : type === "COMPREHENSION"
+        ? "Reading"
+        : "General");
+
+    const assessment = await Assessment.create({
+      studentId,
+      type,
+      subject: finalSubject,
+      title: finalTitle,
+      passageTitle: passageTitle || finalTitle,
+      score: finalScore,
+      accuracy: typeof accuracy === "number" ? accuracy : finalScore,
+      wpm: typeof wpm === "number" ? wpm : undefined,
+      pauses: typeof pauses === "number" ? pauses : undefined,
+      wer: typeof wer === "number" ? wer : undefined,
+      durationSec: typeof durationSec === "number" ? durationSec : undefined,
+      miscueBreakdown: miscueBreakdown || undefined,
+      miscueItems: Array.isArray(miscueItems) ? miscueItems : [],
+      miscueTotal: typeof miscueTotal === "number" ? miscueTotal : undefined,
+      wordsAttempted:
+        typeof wordsAttempted === "number" ? wordsAttempted : undefined,
+      masteryLevel: masteryLevel || "—",
+      status: status || "approved",
+      notes: notes || "Submitted via AralSync Offline Queue synchronization",
+      date: date ? new Date(date) : new Date(),
+      assessmentCategory,
+      topics: Array.isArray(topics) ? topics : [],
+      scoredItems: Array.isArray(scoredItems) ? scoredItems : undefined,
+      totalItems: typeof totalItems === "number" ? totalItems : undefined,
+      detectedAnswers: Array.isArray(detectedAnswers) ? detectedAnswers : undefined,
+    });
+
+    if (["READING_FLUENCY", "COMPREHENSION"].includes(type) && status === "approved") {
+      try {
+        await syncLearnerPhilIriMetrics(studentId);
+      } catch (err) {
+        console.warn("syncLearnerPhilIriMetrics failed during offline sync:", err);
+      }
+    }
+
+    await logAudit({
+      actorId: teacher.id,
+      actorName: teacher.name,
+      role: "teacher",
+      action: "offline_sync_assessment",
+      targetType: "Assessment",
+      targetId: String(assessment._id),
+      meta: { studentId, type, title: finalTitle },
+    });
+
+    return NextResponse.json({ success: true, data: assessment });
+
+  } catch (e: any) {
+    return authErrorResponse(e);
+  }
+}
+

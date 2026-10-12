@@ -1,11 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Loader2, AlertCircle, Mic, Square, CheckCircle2, Shield } from "lucide-react";
+import { Loader2, AlertCircle, Mic, Square, CheckCircle2, Shield, WifiOff, CloudUpload } from "lucide-react";
 import { legacyBadge as levelBadge } from "@/lib/ui";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
+import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
+import {
+  getCachedPassages,
+  cachePassages,
+  getCachedStudentFluency,
+  cacheStudentFluency,
+  computeLocalPhilIriEvaluation,
+} from "@/lib/offlineStorage";
 
 interface PassageOption {
   id: string;
@@ -85,6 +93,8 @@ export default function ReadingFluencyPage() {
   const [rows, setRows] = useState<FluencyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineQueued, setOfflineQueued] = useState(false);
 
   /* Recorder state */
   const [passages, setPassages] = useState<PassageOption[]>([]);
@@ -103,6 +113,21 @@ export default function ReadingFluencyPage() {
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
+
+  /* Online / Offline Network Monitoring */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsOnline(navigator.onLine);
+      const onOn = () => setIsOnline(true);
+      const onOff = () => setIsOnline(false);
+      window.addEventListener("online", onOn);
+      window.addEventListener("offline", onOff);
+      return () => {
+        window.removeEventListener("online", onOn);
+        window.removeEventListener("offline", onOff);
+      };
+    }
+  }, []);
 
   /* Live Speech Recognition & Karaoke Tracker */
   const {
@@ -127,10 +152,18 @@ export default function ReadingFluencyPage() {
     try {
       const res = await fetch("/api/student/assessments?type=READING_FLUENCY");
       const json = await parseJsonResponse(res);
-      if (json.success && json.data?.assessments) setRows(json.data.assessments);
-      else setError(json.error || "Failed to load fluency results.");
+      if (json.success && json.data?.assessments) {
+        setRows(json.data.assessments);
+        cacheStudentFluency(json.data.assessments);
+      } else {
+        const cached = getCachedStudentFluency();
+        if (cached.length > 0) setRows(cached);
+        else setError(json.error || "Failed to load fluency results.");
+      }
     } catch {
-      setError("Failed to load fluency results.");
+      const cached = getCachedStudentFluency();
+      if (cached.length > 0) setRows(cached);
+      else setError("Failed to load fluency results.");
     } finally {
       setLoading(false);
     }
@@ -144,14 +177,28 @@ export default function ReadingFluencyPage() {
         const json = await parseJsonResponse(res);
         if (json.success && json.data && json.data.length > 0) {
           setPassages(json.data);
+          cachePassages(json.data);
           setPassageTitle(json.data[0].title);
           setPassageText(json.data[0].text || "");
+        } else {
+          const cached = getCachedPassages();
+          setPassages(cached);
+          if (cached.length > 0) {
+            setPassageTitle(cached[0].title);
+            setPassageText(cached[0].text || "");
+          }
         }
       } catch {
-        /* passages list is optional — sample passage stays */
+        const cached = getCachedPassages();
+        setPassages(cached);
+        if (cached.length > 0) {
+          setPassageTitle(cached[0].title);
+          setPassageText(cached[0].text || "");
+        }
       }
     })();
   }, []);
+
 
   /* Stop tracks on unmount */
   useEffect(() => {
@@ -277,6 +324,7 @@ export default function ReadingFluencyPage() {
   const runAnalysis = async (simulate: boolean) => {
     setRecordError("");
     setResult(null);
+    setOfflineQueued(false);
     if (!simulate && !audioBlob) {
       setRecordError("Record your reading first (or use Simulate).");
       return;
@@ -287,6 +335,79 @@ export default function ReadingFluencyPage() {
     }
 
     simulate ? setAnalyzingSim(true) : setAnalyzing(true);
+
+    // If completely offline, run client-side evaluation & enqueue immediately
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const localEval = computeLocalPhilIriEvaluation({
+        passageText,
+        durationSec: Math.max(recTime, 1),
+      });
+
+      const studentPayload = {
+        type: "READING_FLUENCY",
+        title: passageTitle || "Oral Reading Passage",
+        passageTitle: passageTitle || "Oral Reading Passage",
+        score: localEval.accuracy,
+        accuracy: localEval.accuracy,
+        wpm: localEval.wpm,
+        masteryLevel: localEval.masteryLevel,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+        durationSec: localEval.durationSec,
+        notes: "Recorded offline via AralSync PWA. Awaiting teacher validation.",
+        status: "pending",
+        date: new Date().toISOString(),
+      };
+
+      enqueueOfflineSubmission({
+        url: "/api/student/assessments",
+        method: "POST",
+        body: studentPayload,
+        type: "reading-assessment",
+        title: `${passageTitle} (Self-Assessment)`,
+      });
+
+      const offlineRow: FluencyRow = {
+        title: passageTitle || "Oral Reading Passage",
+        score: localEval.accuracy,
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        wer: 0,
+        status: "pending (offline)",
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        date: new Date().toISOString(),
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueTotal: localEval.miscueTotal,
+      };
+
+      const updated = [offlineRow, ...rows];
+      setRows(updated);
+      cacheStudentFluency(updated);
+
+      setResult({
+        id: `offline-${Date.now()}`,
+        transcript: passageText.slice(0, 200),
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        wer: null,
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        simulation: true,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+      });
+
+      setOfflineQueued(true);
+      setAnalyzing(false);
+      setAnalyzingSim(false);
+      return;
+    }
+
     try {
       const fd = new FormData();
       if (audioBlob) fd.append("file", audioBlob, "recording.webm");
@@ -304,15 +425,81 @@ export default function ReadingFluencyPage() {
         setResult(json.data);
         await load(); // refresh history immediately
       } else {
-        setRecordError(json.error || "Analysis failed.");
+        throw new Error(json.error || "Analysis failed.");
       }
     } catch {
-      setRecordError("Analysis failed. Check your connection and try again.");
+      // Offline fallback: score locally and enqueue!
+      const localEval = computeLocalPhilIriEvaluation({
+        passageText,
+        durationSec: Math.max(recTime, 1),
+      });
+
+      const studentPayload = {
+        type: "READING_FLUENCY",
+        title: passageTitle || "Oral Reading Passage",
+        passageTitle: passageTitle || "Oral Reading Passage",
+        score: localEval.accuracy,
+        accuracy: localEval.accuracy,
+        wpm: localEval.wpm,
+        masteryLevel: localEval.masteryLevel,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+        durationSec: localEval.durationSec,
+        notes: "Recorded offline via AralSync PWA. Awaiting teacher validation.",
+        status: "pending",
+        date: new Date().toISOString(),
+      };
+
+      enqueueOfflineSubmission({
+        url: "/api/student/assessments",
+        method: "POST",
+        body: studentPayload,
+        type: "reading-assessment",
+        title: `${passageTitle} (Self-Assessment)`,
+      });
+
+      const offlineRow: FluencyRow = {
+        title: passageTitle || "Oral Reading Passage",
+        score: localEval.accuracy,
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        wer: 0,
+        status: "pending (offline)",
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        date: new Date().toISOString(),
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueTotal: localEval.miscueTotal,
+      };
+
+      const updated = [offlineRow, ...rows];
+      setRows(updated);
+      cacheStudentFluency(updated);
+
+      setResult({
+        id: `offline-${Date.now()}`,
+        transcript: passageText.slice(0, 200),
+        wpm: localEval.wpm,
+        accuracy: localEval.accuracy,
+        pauses: 0,
+        wer: null,
+        durationSec: localEval.durationSec,
+        masteryLevel: localEval.masteryLevel,
+        simulation: true,
+        miscueBreakdown: localEval.miscueBreakdown,
+        miscueItems: localEval.miscueItems,
+        miscueTotal: localEval.miscueTotal,
+      });
+
+      setOfflineQueued(true);
     } finally {
       setAnalyzing(false);
       setAnalyzingSim(false);
     }
   };
+
 
   if (loading && rows.length === 0) {
     return (
@@ -377,7 +564,12 @@ export default function ReadingFluencyPage() {
               against the Phi-IRI framework. Results start as <em>Pending</em> until your teacher approves.
             </p>
           </div>
-          {result && (
+          {offlineQueued ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", padding: "0.3rem 0.8rem", borderRadius: "9999px", fontSize: "0.78rem", fontWeight: 600 }}>
+              <CloudUpload size={15} />
+              Session queued offline — will sync when reconnected
+            </div>
+          ) : result && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#dcfce7", color: "#166534", border: "1px solid #86efac", padding: "0.3rem 0.8rem", borderRadius: "9999px", fontSize: "0.78rem", fontWeight: 600 }}>
               <CheckCircle2 size={15} />
               {result.simulation ? "Simulated result saved" : "Submitted for teacher review"}
@@ -407,8 +599,14 @@ export default function ReadingFluencyPage() {
             </select>
           </div>
 
-          {/* Noise cancellation pill on the right */}
-          <div>
+          {/* Status pills on the right */}
+          <div className="flex items-center gap-2">
+            {!isOnline && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border border-amber-300 bg-amber-50 text-amber-800">
+                <WifiOff size={14} className="text-amber-600" />
+                <span>Offline Mode</span>
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setNoiseCancellation(!noiseCancellation)}
@@ -423,6 +621,7 @@ export default function ReadingFluencyPage() {
             </button>
           </div>
         </div>
+
 
         {/* Dedicated Interactive Reading Card */}
         <div className="mb-4">

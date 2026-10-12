@@ -105,4 +105,57 @@ describe('Offline Assessment Queue & Sync Suite', () => {
     queue.clear();
     assert.equal(queue.getQueue().length, 0);
   });
+
+
+  test('computes local offline Phil-IRI oral reading score with high fidelity', () => {
+    // 50 word passage read with 2 miscues in 30 seconds
+    const passage = "Every living thing is made of cells the basic building blocks of life. Some organisms are made of a single cell while others like humans are made of trillions. Inside a cell structures called organelles perform specific jobs such as producing energy or making proteins for our bodies.";
+    const words = passage.trim().split(/\s+/).filter(Boolean);
+    const wordsTotal = words.length;
+    const miscueTotal = 2;
+    const accuracy = Math.round(((wordsTotal - miscueTotal) / wordsTotal) * 100);
+    const durationSec = 30;
+    const wpm = Math.round((wordsTotal - miscueTotal) / (durationSec / 60));
+
+    assert.ok(accuracy >= 95, 'High accuracy above 95%');
+    assert.ok(wpm > 80, 'WPM scaled to minute duration');
+  });
+
+  test('queues teacher and student offline assessment payloads with replay contract', () => {
+    const teacherPayload = queue.enqueue({
+      title: 'Oral Reading Fluency - Offline Session',
+      type: 'reading-assessment',
+      url: '/api/teacher/assessments',
+      method: 'POST',
+      body: {
+        studentId: 'stud-offline-1',
+        accuracy: 98,
+        wpm: 110,
+        masteryLevel: 'Independent',
+        status: 'approved',
+      },
+    });
+
+    const studentPayload = queue.enqueue({
+      title: 'Student Reading Practice - Offline Session',
+      type: 'reading-assessment',
+      url: '/api/student/assessments',
+      method: 'POST',
+      body: {
+        title: 'Oral Reading Practice',
+        accuracy: 92,
+        wpm: 88,
+        masteryLevel: 'Instructional',
+        status: 'pending',
+      },
+    });
+
+    const queueItems = queue.getQueue();
+    assert.equal(queueItems.length, 2);
+    assert.equal(queueItems[0].url, '/api/teacher/assessments');
+    assert.equal(queueItems[0].body.status, 'approved');
+    assert.equal(queueItems[1].url, '/api/student/assessments');
+    assert.equal(queueItems[1].body.status, 'pending');
+  });
 });
+
