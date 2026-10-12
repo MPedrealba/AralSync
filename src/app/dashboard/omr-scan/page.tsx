@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import BatchWorkstation from "./BatchWorkstation";
 import {
   Upload,
   Camera,
@@ -121,6 +122,9 @@ function getMasteryBand(percentage: number): {
 function OMRWorkstationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // ── Workstation Mode (Single Sheet vs Batch Class Upload) ──
+  const [workstationMode, setWorkstationMode] = useState<"single" | "batch">("single");
 
   // ── Setup & Selector State ──
   const [students, setStudents] = useState<Learner[]>([]);
@@ -1106,38 +1110,71 @@ function OMRWorkstationContent() {
               </div>
             </div>
 
-            {/* Right: Batch Action Buttons */}
+            {/* Right: Mode Switcher + Batch Action Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-              <button
-                type="button"
-                onClick={handleNextStudent}
-                className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 sm:px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300 active:scale-95"
-                title="Keep answer key and advance to the next student in section"
-              >
-                <UserCheck className="h-4 w-4 text-red-800" />
-                <span>Next Student in Section</span>
-              </button>
-
-              {sheetImage && (
+              {/* Mode Switcher Pill */}
+              <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200">
                 <button
                   type="button"
-                  onClick={handleDiscard}
-                  className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:px-3.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 active:scale-95"
-                  title="Discard current scan"
+                  onClick={() => setWorkstationMode("single")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    workstationMode === "single"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span>Re-scan</span>
+                  <FileImage className="w-3.5 h-3.5 text-red-800" />
+                  <span>Single Sheet</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setWorkstationMode("batch")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    workstationMode === "batch"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-red-800" />
+                  <span>Batch Class Upload</span>
+                </button>
+              </div>
+
+              {workstationMode === "single" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleNextStudent}
+                    className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 sm:px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+                    title="Keep answer key and advance to the next student in section"
+                  >
+                    <UserCheck className="h-4 w-4 text-red-800" />
+                    <span>Next Student in Section</span>
+                  </button>
+
+                  {sheetImage && (
+                    <button
+                      type="button"
+                      onClick={handleDiscard}
+                      className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:px-3.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 active:scale-95"
+                      title="Discard current scan"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Re-scan</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
 
-          {/* Configuration Form: Clean 2-Row Layout */}
-          <div className="mt-4 space-y-3 pt-3 border-t border-slate-100">
-            {/* Row 1: Cohort Selection (Grade, Section, Searchable Student Combobox) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
-              {/* 1. Grade Level */}
-              <div className="lg:col-span-3">
+          {/* Configuration Form: Clean 2-Row Layout (Single Sheet Mode) */}
+          {workstationMode === "single" && (
+            <div className="mt-4 space-y-3 pt-3 border-t border-slate-100">
+              {/* Row 1: Cohort Selection (Grade, Section, Searchable Student Combobox) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+                {/* 1. Grade Level */}
+                <div className="lg:col-span-3">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   Grade Level
                 </label>
@@ -1375,10 +1412,27 @@ function OMRWorkstationContent() {
               </div>
             </div>
           </div>
-        </section>
+        )}
+      </section>
 
-        {/* Global Notifications */}
-        {errorMessage && (
+      {/* ── WORKSTATION VIEW (BATCH vs SINGLE) ── */}
+      {workstationMode === "batch" ? (
+        <BatchWorkstation
+          students={students}
+          answerKeys={answerKeys}
+          selectedGrade={selectedGrade}
+          selectedSection={selectedSection}
+          onGradeChange={handleGradeChange}
+          onSectionChange={setSelectedSection}
+          availableGrades={availableGrades}
+          availableSections={availableSections}
+          filteredStudents={filteredStudents}
+          onSwitchToSingle={() => setWorkstationMode("single")}
+        />
+      ) : (
+        <>
+          {/* Global Notifications */}
+          {errorMessage && (
           <div className="flex shrink-0 items-center justify-between border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-700">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -2131,7 +2185,9 @@ function OMRWorkstationContent() {
             </div>
           </div>
         )}
-      </main>
+      </>
+    )}
+  </main>
 
       {/* ── CAMERA CAPTURE MODAL ── */}
       {isCameraOpen && (

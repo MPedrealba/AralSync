@@ -10,6 +10,7 @@ import {
 } from '@/lib/reading';
 import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
@@ -90,6 +91,18 @@ async function fetchLibrosaFeatures(
  */
 export async function POST(req: NextRequest) {
   try {
+    const rl = checkRateLimit(req, {
+      windowMs: 60 * 1000,
+      max: 30,
+      keyPrefix: 'eval-reading-teacher',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'Audio evaluation rate limit reached. Please wait a moment before analyzing more recordings.'
+      );
+    }
+
     const teacher = await requireAuth(req, ['teacher']);
 
     const formData = await req.formData();

@@ -75,6 +75,44 @@ async def omr_detect(
     return result
 
 
+@app.post("/omr/detect-pdf")
+async def omr_detect_pdf(
+    file: UploadFile = File(...),
+    num_questions: int = Form(50),
+):
+    """
+    Detect answers from each page of a scanned multi-page PDF bubble sheet document.
+    Renders each page to PNG pixmap and detects answers.
+    Returns: list of results per page, with base64 encoded PNG for preview.
+    """
+    import pymupdf
+    import base64
+
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(400, "PDF too large (max 50MB)")
+
+    try:
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse PDF document: {str(e)}")
+
+    pages = []
+    for page_idx in range(len(doc)):
+        page = doc[page_idx]
+        pix = page.get_pixmap(dpi=150)
+        png_bytes = pix.tobytes("png")
+        res = detect_omr_sheet(png_bytes, num_questions)
+        pages.append({
+            "page_index": page_idx,
+            "png_base64": base64.b64encode(png_bytes).decode("ascii"),
+            "answers": res.get("answers", []),
+            "detected_count": res.get("detected_count", 0),
+        })
+
+    return {"success": True, "page_count": len(pages), "pages": pages}
+
+
 # ── Reading Audio Analysis ──────────────────────────────────────────────────────
 
 @app.post("/reading/analyze")

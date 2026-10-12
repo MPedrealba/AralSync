@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { User, Lock, Eye, EyeOff, Users, ChevronDown, LogIn } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
@@ -191,6 +192,19 @@ export default function LoginPage() {
               </>
             )}
           </button>
+
+          {/* Student Forgot Password Link */}
+          <div className="pt-2 text-center">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-slate-500 hover:text-[#DE2B2B] transition-colors"
+            >
+              Forgot password?{" "}
+              <span className="underline decoration-slate-300 hover:decoration-[#DE2B2B]">
+                Reset student password
+              </span>
+            </Link>
+          </div>
         </form>
       </div>
     </div>

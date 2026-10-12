@@ -1,11 +1,61 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── 1. API Rate Limiting Guards ──
+  if (
+    pathname.startsWith('/api/auth/login') ||
+    pathname.startsWith('/api/auth/reset-password')
+  ) {
+    const rl = checkRateLimit(request, {
+      windowMs: 60 * 1000,
+      max: 10,
+      keyPrefix: 'auth',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'Too many authentication or reset attempts. Please wait a minute before trying again.'
+      );
+    }
+  }
+
+  if (
+    pathname.startsWith('/api/teacher/reading/analyze') ||
+    pathname.startsWith('/api/student/reading/analyze')
+  ) {
+    const rl = checkRateLimit(request, {
+      windowMs: 60 * 1000,
+      max: 30,
+      keyPrefix: 'eval-audio',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'Audio analysis rate limit reached. Please wait a moment before submitting more recordings.'
+      );
+    }
+  }
+
+  if (pathname.startsWith('/api/teacher/omr')) {
+    const rl = checkRateLimit(request, {
+      windowMs: 60 * 1000,
+      max: 30,
+      keyPrefix: 'eval-omr',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'OMR scan rate limit reached. Please wait a moment before processing more sheets.'
+      );
+    }
+  }
 
   // Define paths that require protection
   const isStudentRoute = pathname.startsWith('/student');
@@ -85,6 +135,11 @@ export const config = {
     '/dashboard/:path*',
     '/principal/:path*',
     '/coordinator/:path*',
-    '/login'
+    '/login',
+    '/api/auth/login',
+    '/api/auth/reset-password/:path*',
+    '/api/teacher/reading/analyze',
+    '/api/student/reading/analyze',
+    '/api/teacher/omr/:path*',
   ],
 };

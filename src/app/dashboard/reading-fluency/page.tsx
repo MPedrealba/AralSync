@@ -20,6 +20,7 @@ import {
   Check,
   RotateCcw,
   Shield,
+  Pause,
 } from "lucide-react";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
@@ -343,52 +344,107 @@ function recalculateCalibration(
   };
 }
 
-function AudioPlayerSync({ audioUrl }: { audioUrl?: string | null }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
+const fmtAudioTime = (s: number) => {
+  if (!s || Number.isNaN(s) || s < 0) return "0:00";
+  const mins = Math.floor(s / 60);
+  const secs = Math.floor(s % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+};
 
+function AudioPlayerSync({
+  audioUrl,
+  audioRef,
+  currentTime,
+  duration,
+  isPlaying,
+  playbackRate,
+  onPlayPause,
+  onRateChange,
+  onSeek,
+}: {
+  audioUrl?: string | null;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
+  playbackRate: number;
+  onPlayPause: () => void;
+  onRateChange: (rate: number) => void;
+  onSeek: (seconds: number) => void;
+}) {
   if (!audioUrl) return null;
-
-  const handleRateChange = (rate: number) => {
-    setPlaybackRate(rate);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = rate;
-    }
-  };
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-white shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
         <div className="flex items-center gap-2">
           <Volume2 className="h-4 w-4 text-emerald-400 shrink-0" />
           <span className="text-xs font-bold text-slate-200">
             Audio Playback Sync
           </span>
           <span className="text-[10px] text-slate-400 hidden sm:inline">
-            Listen &amp; verify learner oral reading
+            Click any word or miscue below to jump audio
           </span>
         </div>
-        <div className="flex items-center gap-1 text-[11px] font-semibold">
-          <span className="text-slate-400 mr-1">Speed:</span>
-          {[0.75, 1.0, 1.25].map((rate) => (
-            <button
-              key={rate}
-              type="button"
-              onClick={() => handleRateChange(rate)}
-              className={`rounded-md px-2 py-0.5 transition-colors ${
-                playbackRate === rate
-                  ? "bg-red-800 text-white font-bold"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-              }`}
-            >
-              {rate}x
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-[11px] font-semibold">
+            <span className="text-slate-400 mr-1">Speed:</span>
+            {[0.75, 1.0, 1.25, 1.5].map((rate) => (
+              <button
+                key={rate}
+                type="button"
+                onClick={() => onRateChange(rate)}
+                className={`rounded-md px-2 py-0.5 transition-colors ${
+                  playbackRate === rate
+                    ? "bg-red-800 text-white font-bold"
+                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
+              >
+                {rate}x
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="mt-2">
-        <audio ref={audioRef} controls src={audioUrl} className="w-full h-8" />
+
+      <div className="flex items-center gap-3">
+        {/* Play/Pause Button */}
+        <button
+          type="button"
+          onClick={onPlayPause}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-800 text-white hover:bg-red-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+          title={isPlaying ? "Pause audio" : "Play audio"}
+        >
+          {isPlaying ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4 ml-0.5 fill-current" />
+          )}
+        </button>
+
+        {/* Time display */}
+        <span className="font-mono text-xs text-slate-300 shrink-0 min-w-16">
+          {fmtAudioTime(currentTime)} / {fmtAudioTime(duration || 0)}
+        </span>
+
+        {/* Scrubber Range Bar */}
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          step={0.1}
+          value={currentTime}
+          onChange={(e) => onSeek(Number(e.target.value))}
+          className="w-full accent-red-700 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+        />
       </div>
+
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        preload="metadata"
+        className="hidden"
+      />
     </div>
   );
 }
@@ -408,10 +464,110 @@ function WordByWordReader({
   setActiveWordIdx: (idx: number | null) => void;
   readOnly?: boolean;
 }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      if (audio.duration && !Number.isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+    const handleEnded = () => {
+      setIsPlaying(false);
+    };
+    const handlePlay = () => {
+      setIsPlaying(true);
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+    };
+  }, [audioUrl]);
+
+  const handlePlayPause = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const handleRateChange = (rate: number) => {
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+  };
+
+  const handleSeek = (seconds: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = seconds;
+      setCurrentTime(seconds);
+    }
+  };
+
+  const jumpToWord = (idx: number, autoPlay: boolean = true) => {
+    if (!audioRef.current || items.length === 0) return;
+    const audioDur = audioRef.current.duration || duration || 60;
+    const targetSec = Math.max(0, (idx / items.length) * audioDur - 0.35);
+    audioRef.current.currentTime = targetSec;
+    setCurrentTime(targetSec);
+    if (autoPlay) {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const activeWordTimestamp =
+    activeWordIdx !== null && items.length > 0
+      ? Math.max(0, (activeWordIdx / items.length) * (duration || 60) - 0.35)
+      : 0;
+
+  // Real-time cursor index of word currently being spoken
+  const currentPlayingWordIdx =
+    isPlaying && duration > 0 && items.length > 0
+      ? Math.floor((currentTime / duration) * items.length)
+      : -1;
+
   return (
     <div className="space-y-3.5">
       {/* ── Audio Playback Sync Bar ── */}
-      {audioUrl && <AudioPlayerSync audioUrl={audioUrl} />}
+      {audioUrl && (
+        <AudioPlayerSync
+          audioUrl={audioUrl}
+          audioRef={audioRef}
+          currentTime={currentTime}
+          duration={duration}
+          isPlaying={isPlaying}
+          playbackRate={playbackRate}
+          onPlayPause={handlePlayPause}
+          onRateChange={handleRateChange}
+          onSeek={handleSeek}
+        />
+      )}
 
       {/* ── Legend ── */}
       <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] font-medium border-b border-slate-200/80 pb-2.5">
@@ -448,14 +604,29 @@ function WordByWordReader({
           {items.map((item, idx) => {
             const style = getMiscueStyle(item.type);
             const isSelected = activeWordIdx === idx;
+            const isCurrentlyPlaying = currentPlayingWordIdx === idx;
+            const wordEstimatedSec = items.length > 0
+              ? Math.max(0, (idx / items.length) * (duration || 60) - 0.35)
+              : 0;
+
             return (
               <span
                 key={idx}
-                onClick={() => !readOnly && setActiveWordIdx(isSelected ? null : idx)}
+                onClick={() => {
+                  if (readOnly) return;
+                  setActiveWordIdx(isSelected ? null : idx);
+                  if (audioUrl) {
+                    jumpToWord(idx, true);
+                  }
+                }}
                 className={`relative inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-sm sm:text-base transition-all select-none ${
                   readOnly ? "cursor-default" : "cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                } ${style.bg} ${isSelected ? "ring-2 ring-slate-900 shadow-sm" : ""}`}
-                title={`Word #${idx + 1}: ${style.label}${item.spoken ? ` (Spoken: "${item.spoken}")` : ""}`}
+                } ${style.bg} ${
+                  isSelected ? "ring-2 ring-slate-900 shadow-sm" : ""
+                } ${
+                  isCurrentlyPlaying ? "ring-2 ring-emerald-500 bg-emerald-100 shadow-xs" : ""
+                }`}
+                title={`Word #${idx + 1}: ${style.label}${item.spoken ? ` (Spoken: "${item.spoken}")` : ""}${audioUrl ? ` • Click to jump audio (${fmtAudioTime(wordEstimatedSec)})` : ""}`}
               >
                 <span>{item.expected || item.spoken}</span>
                 {item.type !== "match" && item.type !== "unattempted" && (
@@ -515,6 +686,26 @@ function WordByWordReader({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Replay Word Audio at calculated timestamp */}
+          {audioUrl && (
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200/80 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Volume2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-semibold text-slate-700">
+                  Hear spoken audio for this word:
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => jumpToWord(activeWordIdx, true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>Replay at {fmtAudioTime(activeWordTimestamp)}</span>
+              </button>
+            </div>
+          )}
 
           <p className="mt-2.5 text-xs text-slate-500">
             Click to calibrate AI classification. Accept regional accents or dialect pronunciation as correct:
@@ -601,9 +792,54 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [learners, setLearners] = useState<LearnerOption[]>([]);
   const [passages, setPassages] = useState<PassageOption[]>([]);
   const [studentId, setStudentId] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState<string>("");
+  const [selectedSection, setSelectedSection] = useState<string>("");
   const [passageTitle, setPassageTitle] = useState("Oral Reading Passage");
   const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
   const [isEditingPassage, setIsEditingPassage] = useState(false);
+
+  /* Derive unique sorted grade levels */
+  const availableGrades = useMemo(() => {
+    const set = new Set<number>();
+    learners.forEach((l) => {
+      if (l.gradeLevel) set.add(l.gradeLevel);
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [learners]);
+
+  /* Derive available sections based on selected grade */
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    learners
+      .filter((l) => !selectedGrade || String(l.gradeLevel) === selectedGrade)
+      .forEach((l) => {
+        if (l.section) set.add(l.section);
+      });
+    return Array.from(set).sort();
+  }, [learners, selectedGrade]);
+
+  /* Reset selectedSection if no longer valid under selected grade */
+  useEffect(() => {
+    if (selectedSection && !availableSections.includes(selectedSection)) {
+      setSelectedSection("");
+    }
+  }, [availableSections, selectedSection]);
+
+  /* Filter learners by grade and section */
+  const filteredLearners = useMemo(() => {
+    return learners.filter((l) => {
+      if (selectedGrade && String(l.gradeLevel) !== selectedGrade) return false;
+      if (selectedSection && l.section !== selectedSection) return false;
+      return true;
+    });
+  }, [learners, selectedGrade, selectedSection]);
+
+  /* Clear studentId if filtered out */
+  useEffect(() => {
+    if (studentId && !filteredLearners.some((l) => l.studentId === studentId)) {
+      setStudentId("");
+    }
+  }, [filteredLearners, studentId]);
 
   /* Recording state */
   const [isRecording, setIsRecording] = useState(false);
@@ -1193,21 +1429,94 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       <div className="lg:col-span-5 space-y-6">
         {/* Learner Selection Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Assigned Learner
-          </label>
-          <select
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-          >
-            <option value="">Select learner to assess...</option>
-            {learners.map((l) => (
-              <option key={l.studentId} value={l.studentId}>
-                {l.name} — Grade {l.gradeLevel} {l.section}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Assigned Learner
+              </label>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                {filteredLearners.length} available
+              </span>
+            </div>
+            {(selectedGrade || selectedSection) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedGrade("");
+                  setSelectedSection("");
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-800 hover:text-red-900 transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset Filters
+              </button>
+            )}
+          </div>
+
+          {/* Filter Controls Row */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Grade Level
+              </label>
+              <select
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value)}
+                className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs font-medium text-slate-700 outline-none transition-all focus:border-red-800 focus:bg-white focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">All Grades</option>
+                {availableGrades.map((g) => (
+                  <option key={g} value={String(g)}>
+                    Grade {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Section
+              </label>
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs font-medium text-slate-700 outline-none transition-all focus:border-red-800 focus:bg-white focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">All Sections</option>
+                {availableSections.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Filtered Learner Dropdown */}
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Select Student
+            </label>
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+            >
+              <option value="">
+                Select learner to assess ({filteredLearners.length})...
               </option>
-            ))}
-          </select>
+              {filteredLearners.map((l) => (
+                <option key={l.studentId} value={l.studentId}>
+                  {l.name} — Grade {l.gradeLevel} {l.section}
+                </option>
+              ))}
+            </select>
+            {filteredLearners.length === 0 && (
+              <p className="mt-2 text-[11px] text-amber-600 font-medium">
+                No learners found matching the selected grade and section.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Recording Deck */}

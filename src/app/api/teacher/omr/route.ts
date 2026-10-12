@@ -11,6 +11,7 @@ import LearnerRecord from '../../../../../models/LearnerRecord';
 import Recommendation from '../../../../../models/Recommendation';
 import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics, calculateRiskLevelFromScore } from '@/lib/philIriSync';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 /* ──────────────────────────────────────────────────────────────
  *  OMR Processing — OpenCV via Python microservice
@@ -68,6 +69,18 @@ function masteryLevel(pct: number): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const rl = checkRateLimit(req, {
+      windowMs: 60 * 1000,
+      max: 30,
+      keyPrefix: 'eval-omr-single',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'OMR scan rate limit reached. Please wait a moment before scanning more sheets.'
+      );
+    }
+
     const teacher = await requireAuth(req, ['teacher']);
 
     const formData = await req.formData();

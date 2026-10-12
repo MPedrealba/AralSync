@@ -5,6 +5,7 @@ const LearnerRecordSchema = new mongoose.Schema({
   lrn: { type: String, required: true, unique: true },
   gradeLevel: { type: Number },
   section: { type: String },
+  birthDate: { type: String }, // Format YYYY-MM-DD for student verification
   riskLevel: {
     type: String,
     enum: ['Low Risk', 'Moderate Risk', 'High Risk', 'Pending Assessment'],

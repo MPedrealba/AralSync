@@ -5,6 +5,7 @@ import connectDB from "../../../../../database/db";
 import User from "../../../../../models/User";
 import LearnerRecord from "../../../../../models/LearnerRecord";
 import { logAudit } from "@/lib/audit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
 
@@ -17,6 +18,19 @@ const ROLE_LABELS: Record<string, string> = {
 
 export async function POST(req: Request) {
   try {
+    // Rate limit login attempts: max 10 per minute per IP
+    const rl = checkRateLimit(req, {
+      windowMs: 60 * 1000,
+      max: 10,
+      keyPrefix: 'login',
+    });
+    if (!rl.allowed) {
+      return rateLimitResponse(
+        rl,
+        'Too many login attempts. Please wait a minute before trying again.'
+      );
+    }
+
     const { username, password, role } = await req.json();
 
     if (!username || !password) {
