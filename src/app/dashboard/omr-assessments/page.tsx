@@ -2319,7 +2319,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       learningMaterials.slice(0, 6).map((mat) => (
                         <a
                           key={mat._id}
-                          href={mat.fileUrl}
+                          href={
+                            mat._id
+                              ? `/api/learning-materials/view?id=${mat._id}`
+                              : `/api/learning-materials/view?path=${encodeURIComponent(mat.fileUrl)}`
+                          }
                           target="_blank"
                           rel="noreferrer"
                           title={`${mat.title} (${mat.edition || "Current"})`}
@@ -2332,7 +2336,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     ) : (
                       <>
                         <a
-                          href="/learning-materials/ks3-plus/learner-workbook.pdf"
+                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks3-plus%2Flearner-workbook.pdf"
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
@@ -2341,7 +2345,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                           <span>KS3 Plus Workbook</span>
                         </a>
                         <a
-                          href="/learning-materials/ks3-plus/tutors-guide.pdf"
+                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks3-plus%2Ftutors-guide.pdf"
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
@@ -2350,7 +2354,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                           <span>KS3 Tutor Guide</span>
                         </a>
                         <a
-                          href="/learning-materials/ks2-plus/learner-workbook.pdf"
+                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks2-plus%2Flearner-workbook.pdf"
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"

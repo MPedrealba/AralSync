@@ -382,7 +382,14 @@ export default function StudentInterventionsPage() {
     const statusInfo = getStatusBadge(s.status);
 
     const pdfTargetPage = s.pageStart || 1;
-    const pdfEmbedUrl = s.workbookUrl ? `${s.workbookUrl}#page=${pdfTargetPage}` : null;
+    const formatPdfUrl = (url?: string | null, page?: number) => {
+      if (!url) return null;
+      const base = url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `/api/learning-materials/view?path=${encodeURIComponent(url)}`;
+      return page ? `${base}#page=${page}` : base;
+    };
+    const pdfEmbedUrl = formatPdfUrl(s.workbookUrl, pdfTargetPage);
 
     return (
       <div className="space-y-6">
@@ -566,7 +573,7 @@ export default function StudentInterventionsPage() {
 
                     {/* Open in new tab */}
                     <a
-                      href={pdfEmbedUrl || s.workbookUrl}
+                      href={pdfEmbedUrl || formatPdfUrl(s.workbookUrl) || '#'}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-900 transition-colors shadow-2xs"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Header from "@/components/Header";
 import {
   BookOpen,
@@ -67,6 +67,7 @@ export default function CoordinatorLearningMaterialsPage() {
   const [uploadEdition, setUploadEdition] = useState("DepEd ARAL SY 2026-2027");
   const [uploadType, setUploadType] = useState<"Learner Workbook" | "Tutors Guide" | "Reading Selection" | "Supplementary Module">("Learner Workbook");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadCustomUrl, setUploadCustomUrl] = useState("");
   const [uploadSessions, setUploadSessions] = useState<SessionDirectoryItem[]>([
     { sessionName: "Session 1", pageStart: 1, pageEnd: 5, topic: "Introductory Exercises" },
@@ -218,6 +219,7 @@ export default function CoordinatorLearningMaterialsPage() {
         setUploadKeyStage("KS3");
         setUploadGrades([7, 8, 9, 10]);
         setUploadFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setUploadCustomUrl("");
         setUploadSessions([
           { sessionName: "Session 1", pageStart: 1, pageEnd: 5, topic: "Introductory Exercises" },
@@ -631,7 +633,11 @@ export default function CoordinatorLearningMaterialsPage() {
                           <div className="flex items-center justify-end gap-2">
                             {/* PDF View Link */}
                             <a
-                              href={item.fileUrl}
+                              href={
+                                item._id
+                                  ? `/api/learning-materials/view?id=${item._id}`
+                                  : `/api/learning-materials/view?path=${encodeURIComponent(item.fileUrl)}`
+                              }
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
@@ -691,7 +697,11 @@ export default function CoordinatorLearningMaterialsPage() {
                 </p>
               </div>
               <button
-                onClick={() => setIsUploadOpen(false)}
+                onClick={() => {
+                  setIsUploadOpen(false);
+                  setUploadFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
                 className="rounded-xl p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
               >
                 <X className="h-5 w-5" />
@@ -806,30 +816,94 @@ export default function CoordinatorLearningMaterialsPage() {
               </div>
 
               {/* PDF File Picker */}
-              <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-                <label className="text-xs font-bold text-slate-700 block">
-                  PDF Document File
-                </label>
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    PDF Document File <span className="text-rose-500">*</span>
+                  </label>
+                  {uploadFile && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Ready for upload
+                    </span>
+                  )}
+                </div>
+
+                {uploadFile ? (
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 shadow-2xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-slate-900" title={uploadFile.name}>
+                          {uploadFile.name}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <span>
+                            {uploadFile.size > 1024 * 1024
+                              ? `${(uploadFile.size / (1024 * 1024)).toFixed(2)} MB`
+                              : `${(uploadFile.size / 1024).toFixed(1)} KB`}
+                          </span>
+                          <span>&bull;</span>
+                          <span className="text-emerald-700 font-medium">PDF Document</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="ml-3 inline-flex items-center gap-1 shrink-0 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer"
+                      title="Remove selected file"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center cursor-pointer hover:border-red-500 hover:bg-red-50/30 transition-all"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-800 mb-2">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-800">
+                      Click to choose PDF file
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Accepts official DepEd ARAL workbook and tutor guide .pdf files
+                    </p>
+                  </div>
+                )}
+
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".pdf"
                   onChange={(e) => {
                     const f = e.target.files?.[0] || null;
                     setUploadFile(f);
                   }}
-                  className="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-100 file:text-red-800 hover:file:bg-red-200"
+                  className="hidden"
                 />
 
-                <div className="mt-2 text-[11px] text-slate-500">
-                  Or link an existing static / public PDF URL:
+                <div className="mt-3 pt-3 border-t border-slate-200/60">
+                  <div className="text-[11px] font-semibold text-slate-600 mb-1">
+                    Or link an existing static / public PDF URL:
+                  </div>
+                  <input
+                    type="text"
+                    value={uploadCustomUrl}
+                    onChange={(e) => setUploadCustomUrl(e.target.value)}
+                    placeholder="e.g. /learning-materials/ks3-plus/learner-workbook.pdf"
+                    className="w-full h-8.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={uploadCustomUrl}
-                  onChange={(e) => setUploadCustomUrl(e.target.value)}
-                  placeholder="e.g. /learning-materials/ks3-plus/learner-workbook.pdf"
-                  className="w-full h-8.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                />
               </div>
 
               {/* Pre-mapped Session Directory Table */}
@@ -1078,7 +1152,24 @@ export default function CoordinatorLearningMaterialsPage() {
 
               {/* File URL */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">PDF File Path / URL</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">PDF File Path / URL</label>
+                  {editFileUrl && (
+                    <a
+                      href={
+                        editingMaterial?._id
+                          ? `/api/learning-materials/view?id=${editingMaterial._id}`
+                          : `/api/learning-materials/view?path=${encodeURIComponent(editFileUrl)}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-red-800 hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span>Test View PDF</span>
+                    </a>
+                  )}
+                </div>
                 <input
                   type="text"
                   required

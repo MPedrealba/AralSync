@@ -77,16 +77,16 @@ export async function POST(req: NextRequest) {
       // Check uploaded file
       const file = formData.get('file') as File | null;
       if (file && file.size > 0) {
-        const origName = file.name || 'material.pdf';
-        const ext = path.extname(origName).toLowerCase() || '.pdf';
+        const ext = path.extname(file.name || 'material.pdf').toLowerCase() || '.pdf';
         const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'materials');
         await fs.mkdir(uploadDir, { recursive: true });
 
-        const safeBase = origName
+        const cleanBase = (file.name || 'material')
           .replace(ext, '')
           .toLowerCase()
-          .replace(/[^a-z0-9_-]/g, '-');
-        const filename = `${safeBase}-${Date.now()}${ext}`;
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        const filename = `aral_mat_${cleanBase || 'doc'}_${Date.now()}${ext}`;
         const filePath = path.join(uploadDir, filename);
         const buffer = Buffer.from(await file.arrayBuffer());
         await fs.writeFile(filePath, buffer);

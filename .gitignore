@@ -54,3 +54,8 @@ swarm.py
 
 # capstone research paper (private academic material)
 context/
+
+# runtime user uploads
+/public/uploads/**
+!/public/uploads/**/
+!/public/uploads/**/.gitkeep

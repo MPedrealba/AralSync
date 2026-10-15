@@ -954,7 +954,13 @@ export default function InterventionsPage() {
                   {activeAssignment.workbookUrl && (
                     <div className="flex-shrink-0">
                       <a
-                        href={activeAssignment.workbookUrl}
+                        href={
+                          activeAssignment.workbookUrl.startsWith("http://") || activeAssignment.workbookUrl.startsWith("https://")
+                            ? activeAssignment.workbookUrl
+                            : `/api/learning-materials/view?path=${encodeURIComponent(activeAssignment.workbookUrl)}${
+                                activeAssignment.pageStart ? `#page=${activeAssignment.pageStart}` : ""
+                              }`
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-800 shadow-2xs hover:bg-red-100 transition-colors"
