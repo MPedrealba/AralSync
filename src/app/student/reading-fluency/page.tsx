@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Loader2, AlertCircle, Mic, Square, CheckCircle2, Shield, WifiOff, CloudUpload } from "lucide-react";
 import { legacyBadge as levelBadge } from "@/lib/ui";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
+import { classifyMiscues } from "@/lib/reading";
 import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 import {
   getCachedPassages,
@@ -31,6 +32,9 @@ interface AnalyzeResult {
   wer: number | null;
   durationSec: number;
   masteryLevel: string;
+  masteryBand?: string;
+  philIriLevel?: string;
+  level?: string;
   simulation: boolean;
   miscueBreakdown?: MiscueCounts | null;
   miscueItems?: Array<{
@@ -66,6 +70,9 @@ interface FluencyRow {
   status: string;
   durationSec: number | null;
   masteryLevel: string;
+  masteryBand?: string;
+  philIriLevel?: string;
+  level?: string;
   date: string;
   miscueBreakdown?: MiscueCounts | null;
   miscueTotal?: number | null;
@@ -146,6 +153,13 @@ export default function ReadingFluencyPage() {
     language: "auto",
   });
 
+  /* Live real-time Phil-IRI miscue computation during recording */
+  const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
+  const liveMiscueResult = useMemo(() => {
+    if (!isRecording || !liveSpeech || !passageText) return null;
+    return classifyMiscues(liveSpeech, passageText);
+  }, [isRecording, liveSpeech, passageText]);
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -173,7 +187,7 @@ export default function ReadingFluencyPage() {
     load();
     (async () => {
       try {
-        const res = await fetch("/api/teacher/reading/passages");
+        const res = await fetch("/api/teacher/reading/passages?keyStage=KS3");
         const json = await parseJsonResponse(res);
         if (json.success && json.data && json.data.length > 0) {
           setPassages(json.data);
@@ -634,7 +648,7 @@ export default function ReadingFluencyPage() {
             isListening={liveIsListening}
             isSupported={liveIsSupported}
             elapsedSec={recTime}
-            miscueItems={result?.miscueItems}
+            miscueItems={isRecording ? (liveMiscueResult?.items || null) : (result?.miscueItems || null)}
           />
         </div>
 
@@ -702,13 +716,13 @@ export default function ReadingFluencyPage() {
           <div style={{ marginTop: "1.25rem", border: "1px solid #86efac", background: "#f0fdf4", borderRadius: "10px", padding: "1rem 1.25rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#166534", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.75rem" }}>
               <CheckCircle2 size={16} />
-              {result.masteryLevel} · {result.accuracy}% accuracy{result.wer != null ? ` · ${result.wer}% WER` : ""}
+              {result.masteryBand || result.masteryLevel} · {result.accuracy}% accuracy{result.philIriLevel || result.level ? ` · Phil-IRI 2024: ${result.philIriLevel || result.level}` : ""}{result.wer != null ? ` · ${result.wer}% WER` : ""}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>SPEED</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.wpm != null ? `${result.wpm} WPM` : "—"}</div></div>
               <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>ACCURACY</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.accuracy}%</div></div>
-              <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>WER</div><div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827" }}>{result.wer != null ? `${result.wer}%` : "—"}</div></div>
-              <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>LEVEL</div><div style={{ marginTop: "0.15rem" }}><span className={`badge ${levelBadge[result.masteryLevel] || "badge-beginning"}`}>{result.masteryLevel}</span></div></div>
+              <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>PHIL-IRI 2024 LEVEL</div><div style={{ marginTop: "0.15rem" }}><span className={`badge ${levelBadge[result.philIriLevel || result.level || "Instructional"] || "badge-approaching"}`}>{result.philIriLevel || result.level || (result.accuracy >= 97 ? "Independent" : result.accuracy >= 90 ? "Instructional" : "Frustration")}</span></div></div>
+              <div><div style={{ fontSize: "0.72rem", color: "#6b7280" }}>MASTERY</div><div style={{ marginTop: "0.15rem" }}><span className={`badge ${levelBadge[result.masteryBand || result.masteryLevel] || "badge-beginning"}`}>{result.masteryBand || result.masteryLevel}</span></div></div>
             </div>
             {result.miscueBreakdown &&
               (result.stutters != null ||

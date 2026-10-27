@@ -193,15 +193,15 @@ export default function LoginPage() {
             )}
           </button>
 
-          {/* Student Forgot Password Link */}
+          {/* Universal Forgot Password Link */}
           <div className="pt-2 text-center">
             <Link
-              href="/forgot-password"
+              href={`/forgot-password${role ? `?role=${role}` : ""}`}
               className="text-xs font-semibold text-slate-500 hover:text-[#DE2B2B] transition-colors"
             >
               Forgot password?{" "}
               <span className="underline decoration-slate-300 hover:decoration-[#DE2B2B]">
-                Reset student password
+                Reset your password
               </span>
             </Link>
           </div>

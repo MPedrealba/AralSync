@@ -12,6 +12,7 @@ import {
   User,
   LogOut,
   X,
+  Laptop,
 } from "lucide-react";
 
 const navItems = [
@@ -24,6 +25,7 @@ const navItems = [
   {
     section: "ASSESSMENTS",
     items: [
+      { id: "online-exams", label: "Online Exams (CBT)", icon: Laptop, href: "/student/exams" },
       { id: "omr", label: "OMR Assessments", icon: Grid, href: "/student/omr-assessments" },
       { id: "fluency", label: "Reading Fluency", icon: BookOpen, href: "/student/reading-fluency" },
       { id: "comprehension", label: "Comprehension Check", icon: CheckSquare, href: "/student/comprehension" },

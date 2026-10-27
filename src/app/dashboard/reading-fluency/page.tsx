@@ -33,6 +33,7 @@ import {
   cacheLearners,
   computeLocalPhilIriEvaluation,
 } from "@/lib/offlineStorage";
+import { evaluateReadingPerformance, classifyMiscues } from "@/lib/reading";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
@@ -117,7 +118,7 @@ export default function ReadingFluencyPage() {
               AI Reading Fluency Screener
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Record a learner&apos;s oral reading session, analyze Phil-IRI metrics with speech-to-text, and track mastery.
+              Record a learner&apos;s oral reading session, analyze Phil-IRI 2024 metrics with speech-to-text, and track mastery.
             </p>
           </div>
         </div>
@@ -210,6 +211,9 @@ interface AnalyzeResult {
   miscues: Miscues;
   durationSec: number;
   masteryLevel: string;
+  masteryBand?: string;
+  philIriLevel?: string;
+  level?: string;
   simulation?: boolean;
   comprehension?: { id: string; score: number; masteryLevel: string; combinedLevel?: string } | null;
   miscueBreakdown?: MiscueCounts;
@@ -340,17 +344,18 @@ function recalculateCalibration(
   const wordsDecoded = Math.max(0, spoken - totalMiscues);
   const wpm = spoken > 0 ? Math.max(0, Math.round(wordsDecoded / activeMinutes)) : 0;
 
-  let masteryLevel = "Frustration";
-  if (wordsDecoded <= 0) masteryLevel = "Non-Reader";
-  else if (accuracy >= 97) masteryLevel = "Independent";
-  else if (accuracy >= 90) masteryLevel = "Instructional";
+  const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
+  const evaluation = evaluateReadingPerformance(accuracy, null, baseWords, decodedForEval);
 
   return {
     counts,
     totalMiscues,
     accuracy,
     wpm,
-    masteryLevel,
+    masteryLevel: evaluation.masteryBand, // Standard DepEd Mastery Band
+    masteryBand: evaluation.masteryBand,
+    philIriLevel: evaluation.philIriLevel, // Phil-IRI Oral Reading Level
+    level: evaluation.philIriLevel,
   };
 }
 
@@ -879,6 +884,13 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     language: "auto",
   });
 
+  /* Live real-time Phil-IRI miscue computation during recording */
+  const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
+  const liveMiscueResult = useMemo(() => {
+    if (!isRecording || !liveSpeech || !passageText) return null;
+    return classifyMiscues(liveSpeech, passageText);
+  }, [isRecording, liveSpeech, passageText]);
+
   /* Analysis state */
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingSim, setAnalyzingSim] = useState(false);
@@ -904,26 +916,8 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     repetitions: 0,
   });
 
-  /* Comprehension (Silent Reading) check */
-  const [compAnswers, setCompAnswers] = useState<string[]>([]);
-  const [compScore, setCompScore] = useState<number | null>(null);
-  const [compDone, setCompDone] = useState(false);
-
-  const activeQuestions =
-    passages.find((p) => p.title === passageTitle)?.questions ?? [];
-
   const setMiscue = (key: keyof Miscues, value: string) =>
     setMiscues((m) => ({ ...m, [key]: Math.max(0, Number(value) || 0) }));
-
-  const checkComprehension = () => {
-    if (activeQuestions.length === 0) return;
-    let correct = 0;
-    activeQuestions.forEach((q, i) => {
-      if (compAnswers[i] === q.answer) correct++;
-    });
-    setCompScore(Math.round((correct / activeQuestions.length) * 100));
-    setCompDone(true);
-  };
 
   /* Online / Offline Network Monitoring */
   useEffect(() => {
@@ -966,11 +960,15 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         if (cached.length > 0) setLearners(cached);
       }
       try {
-        const res = await fetch("/api/teacher/reading/passages");
+        const res = await fetch("/api/teacher/reading/passages?keyStage=KS3");
         const json = await parseJsonResponse(res);
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setPassages(json.data);
           cachePassages(json.data);
+          if (passageTitle === "Oral Reading Passage" || passageText === SAMPLE_PASSAGE) {
+            setPassageTitle(json.data[0].title);
+            setPassageText(json.data[0].text);
+          }
         } else {
           setPassages(getCachedPassages());
         }
@@ -1001,6 +999,9 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const startRecording = async () => {
     setError("");
     setResult(null);
+    setCalibratedItems([]);
+    setViewMode("passage");
+    setActiveWordIdx(null);
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
@@ -1060,6 +1061,9 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         }
       }
 
+      setCalibratedItems([]);
+      setViewMode("passage");
+      setActiveWordIdx(null);
       resetLiveCaption();
       startLiveCaption();
 
@@ -1174,7 +1178,6 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       fd.append("durationSec", String(Math.max(recTime, 1)));
       if (simulate) fd.append("simulate", "1");
       fd.append("miscues", JSON.stringify(miscues));
-      if (compScore !== null) fd.append("comprehensionScore", String(compScore));
 
       const res = await fetch("/api/teacher/reading/analyze", {
         method: "POST",
@@ -1264,7 +1267,9 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       return {
         accuracy: result.accuracy,
         wpm: result.wpm,
-        masteryLevel: result.masteryLevel,
+        masteryLevel: result.masteryBand ?? result.masteryLevel,
+        masteryBand: result.masteryBand ?? result.masteryLevel,
+        philIriLevel: result.philIriLevel ?? result.level,
         counts: result.miscueBreakdown || {
           mispronunciations: 0,
           substitutions: result.miscues?.substitutions || 0,
@@ -1379,10 +1384,12 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
 
 
   const levelColor = (lv?: string) =>
-    lv === "Independent"
+    lv === "Independent" || lv === "Proficient"
       ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-      : lv === "Instructional"
+      : lv === "Instructional" || lv === "Approaching"
       ? "text-amber-700 bg-amber-50 border-amber-200"
+      : lv === "Developing"
+      ? "text-orange-700 bg-orange-50 border-orange-200"
       : lv === "Non-Reader"
       ? "text-slate-800 bg-slate-100 border-slate-200"
       : "text-rose-700 bg-rose-50 border-rose-200";
@@ -1474,9 +1481,6 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 setPassageTitle(e.target.value);
                 const p = passages.find((x) => x.title === e.target.value);
                 if (p) setPassageText(p.text);
-                setCompAnswers([]);
-                setCompScore(null);
-                setCompDone(false);
               }}
               className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
@@ -1500,16 +1504,6 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 font-serif text-base leading-relaxed text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               />
             </div>
-          ) : viewMode === "calibration" && calibratedItems.length > 0 ? (
-            <div className="mt-4">
-              <WordByWordReader
-                items={calibratedItems}
-                audioUrl={audioUrl}
-                onOverrideWord={handleOverrideWord}
-                activeWordIdx={activeWordIdx}
-                setActiveWordIdx={setActiveWordIdx}
-              />
-            </div>
           ) : isRecording ? (
             <div className="mt-4">
               <LiveReadingCaptionViewer
@@ -1521,6 +1515,17 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 isListening={liveIsListening}
                 isSupported={liveIsSupported}
                 elapsedSec={recTime}
+                miscueItems={liveMiscueResult?.items || null}
+              />
+            </div>
+          ) : viewMode === "calibration" && calibratedItems.length > 0 ? (
+            <div className="mt-4">
+              <WordByWordReader
+                items={calibratedItems}
+                audioUrl={audioUrl}
+                onOverrideWord={handleOverrideWord}
+                activeWordIdx={activeWordIdx}
+                setActiveWordIdx={setActiveWordIdx}
               />
             </div>
           ) : (
@@ -1533,79 +1538,6 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
             </div>
           )}
 
-          {/* Comprehension Check (Silent Reading) Section */}
-          {activeQuestions.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Comprehension Questions (Silent Reading)
-                  </h4>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Ask the learner these follow-up questions to assess comprehension
-                  </p>
-                </div>
-                <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                  {activeQuestions.length} Items
-                </span>
-              </div>
-
-              <div className="space-y-4 mt-4">
-                {activeQuestions.map((q, qi) => (
-                  <div key={qi} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
-                    <p className="mb-2 text-xs font-semibold text-slate-800">
-                      {qi + 1}. {q.question}
-                    </p>
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                      {q.options.map((opt) => (
-                        <label
-                          key={opt}
-                          className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-colors ${
-                            compAnswers[qi] === opt
-                              ? "border-red-800 bg-red-50 text-red-900 font-semibold"
-                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`comp-${qi}`}
-                            value={opt}
-                            checked={compAnswers[qi] === opt}
-                            onChange={() => {
-                              const next = [...compAnswers];
-                              next[qi] = opt;
-                              setCompAnswers(next);
-                            }}
-                            className="accent-red-800"
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={checkComprehension}
-                  disabled={compAnswers.some((a) => !a)}
-                  className="h-10 rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Score Comprehension
-                </button>
-                {compDone && compScore !== null && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">Score:</span>
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                      {compScore}%
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1764,7 +1696,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               <div className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <audio controls src={audioUrl} className="w-full h-8" />
                 <p className="mt-1.5 text-center text-[11px] text-slate-500">
-                  Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI transcription
+                  Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI 2024 transcription
                 </p>
                 {liveFullTranscript && (
                   <div className="mt-2.5 rounded-lg border border-slate-200/80 bg-white p-2.5 text-left text-xs shadow-xs">
@@ -1826,16 +1758,16 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
           </div>
         </div>
 
-        {/* Phil-IRI Miscue Tracker (Manual Observation) */}
+        {/* Phil-IRI 2024 Miscue Tracker (Manual Observation) */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Phil-IRI Miscue Tracker
+              Phil-IRI 2024 Miscue Tracker
             </h4>
             <span className="text-[10px] font-medium text-slate-400">Optional Observations</span>
           </div>
           <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-            Log observed oral reading errors. Accuracy is automatically calculated using the standard Phil-IRI formula.
+            Log observed oral reading errors. Accuracy is automatically calculated using the official Phil-IRI 2024 formula.
           </p>
           <div className="grid grid-cols-2 gap-3">
             {(
@@ -1903,11 +1835,15 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Pauses
+                  Phil-IRI 2024 Level
                 </p>
-                <p className="mt-1 text-xl font-black text-slate-900">
-                  {result.pauses}
-                </p>
+                <span
+                  className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
+                    liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level
+                  )}`}
+                >
+                  {liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration"}
+                </span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1915,10 +1851,10 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 </p>
                 <span
                   className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
-                    liveMetrics?.masteryLevel ?? result.masteryLevel
+                    liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel
                   )}`}
                 >
-                  {liveMetrics?.masteryLevel ?? result.masteryLevel}
+                  {liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel}
                 </span>
               </div>
             </div>
@@ -1937,7 +1873,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
             {result.comprehension?.combinedLevel && (
               <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
                 <span className="font-medium text-slate-700">
-                  Phil-IRI Combined Level:
+                  Phil-IRI 2024 Combined Level:
                 </span>
                 <span className={`rounded-full border px-2.5 py-0.5 font-bold ${levelColor(result.comprehension.combinedLevel)}`}>
                   {result.comprehension.combinedLevel}
@@ -2250,7 +2186,7 @@ function FluencyReportModal({
           </div>
 
           {/* Key Metrics Row */}
-          <div className="mb-6 grid grid-cols-3 gap-3">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetricBox
               label="Words Correct/Min"
               value={String(wpmVal)}
@@ -2262,9 +2198,42 @@ function FluencyReportModal({
               color="text-blue-600"
             />
             <MetricBox
-              label="Duration"
-              value={learner.durationSec ? `${learner.durationSec}s` : "—"}
-              color="text-amber-600"
+              label="Phil-IRI 2024 Level"
+              value={
+                liveMetrics?.philIriLevel ||
+                (accuracyPct >= 97
+                  ? "Independent"
+                  : accuracyPct >= 90
+                  ? "Instructional"
+                  : "Frustration")
+              }
+              color={
+                accuracyPct >= 97
+                  ? "text-emerald-600"
+                  : accuracyPct >= 90
+                  ? "text-amber-600"
+                  : "text-rose-600"
+              }
+            />
+            <MetricBox
+              label="Mastery"
+              value={
+                liveMetrics?.masteryBand ||
+                (accuracyPct >= 80
+                  ? "Proficient"
+                  : accuracyPct >= 60
+                  ? "Approaching"
+                  : accuracyPct >= 50
+                  ? "Developing"
+                  : "Beginning")
+              }
+              color={
+                accuracyPct >= 80
+                  ? "text-emerald-600"
+                  : accuracyPct >= 60
+                  ? "text-amber-600"
+                  : "text-orange-600"
+              }
             />
           </div>
 
@@ -2303,7 +2272,7 @@ function FluencyReportModal({
             <ScoreCard label="Pauses" value={learner.pauses ?? "—"} isText />
           </div>
 
-          {/* Phil-IRI Miscue + Acoustic Breakdown — everything measured */}
+          {/* Phil-IRI 2024 Miscue + Acoustic Breakdown — everything measured */}
           {(learner.miscueBreakdown ||
             learner.stutterCount != null ||
             learner.hesitations != null ||

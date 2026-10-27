@@ -9,8 +9,8 @@ function computeOralAccuracy(wordsAttempted, miscueTotal) {
 }
 
 function classifyOralReadingLevel(accuracy) {
-  if (accuracy >= 96) return 'Independent';
-  if (accuracy >= 91) return 'Instructional';
+  if (accuracy >= 97) return 'Independent';
+  if (accuracy >= 90) return 'Instructional';
   if (accuracy >= 80) return 'Frustration';
   return 'Non-Reader';
 }
@@ -34,7 +34,7 @@ function calculateRiskLevelFromScore(percentage) {
   return 'Low Risk';
 }
 
-describe('Phil-IRI Oral Reading Fluency Scoring Engine', () => {
+describe('Phil-IRI 2024 Oral Reading Fluency Scoring Engine', () => {
   test('accurately calculates oral reading accuracy from attempted words and miscues', () => {
     // 100 words, 4 miscues -> 96%
     assert.equal(computeOralAccuracy(100, 4), 96);
@@ -48,12 +48,12 @@ describe('Phil-IRI Oral Reading Fluency Scoring Engine', () => {
     assert.equal(computeOralAccuracy(50, 60), 0);
   });
 
-  test('correctly maps accuracy percentages to Phil-IRI four-tier reading levels', () => {
+  test('correctly maps accuracy percentages to Phil-IRI 2024 four-tier reading levels', () => {
     assert.equal(classifyOralReadingLevel(100), 'Independent');
-    assert.equal(classifyOralReadingLevel(96), 'Independent');
-    assert.equal(classifyOralReadingLevel(95), 'Instructional');
-    assert.equal(classifyOralReadingLevel(91), 'Instructional');
-    assert.equal(classifyOralReadingLevel(90), 'Frustration');
+    assert.equal(classifyOralReadingLevel(97), 'Independent');
+    assert.equal(classifyOralReadingLevel(96), 'Instructional');
+    assert.equal(classifyOralReadingLevel(90), 'Instructional');
+    assert.equal(classifyOralReadingLevel(89), 'Frustration');
     assert.equal(classifyOralReadingLevel(80), 'Frustration');
     assert.equal(classifyOralReadingLevel(79), 'Non-Reader');
     assert.equal(classifyOralReadingLevel(45), 'Non-Reader');

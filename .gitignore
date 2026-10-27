@@ -59,3 +59,7 @@ context/
 /public/uploads/**
 !/public/uploads/**/
 !/public/uploads/**/.gitkeep
+
+# scratch temporary scripts
+scratch/
+

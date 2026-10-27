@@ -1,7 +1,7 @@
 import mongoose, { Types } from 'mongoose';
 import LearnerRecord from '../../models/LearnerRecord';
 import Assessment from '../../models/Assessment';
-import { readingLevel, comprehensionLevel, combinedReadingLevel } from './reading';
+import { readingLevel, comprehensionLevel, combinedReadingLevel, evaluateReadingPerformance } from './reading';
 
 export interface PhilIriSyncResult {
   updated: boolean;
@@ -31,17 +31,17 @@ export function calculateRiskLevelFromScore(score: number): 'High Risk' | 'Moder
 }
 
 /**
- * Recalculates and persists a learner's official Phil-IRI metrics on their LearnerRecord.
+ * Recalculates and persists a learner's official Phil-IRI 2024 metrics on their LearnerRecord.
  *
- * Rules (Phil-IRI DepEd Framework & Capstone Spec):
+ * Rules (Phil-IRI 2024 DepEd Framework & ARAL Program RA 12028):
  * 1. Only teacher-approved assessments contribute to the official reading metrics.
  * 2. Oral Reading Fluency provides: Accuracy %, WPM, WER %, and Oral Reading Level
- *    (Independent >=96%, Instructional 91-95%, Frustration 80-90%, Non-Reader <80%).
+ *    (Independent >=97%, Instructional 90-96%, Frustration <=89%, Non-Reader <80% or 0 words decoded).
  * 3. Silent Reading Comprehension (from Reading passage checks or Reading OMR exams)
  *    provides: Comprehension Score % and Comprehension Level
- *    (Independent >=80%, Instructional 59-79%, Frustration <59%).
+ *    (Independent >=80%, Instructional 59-79%, Frustration <=58%).
  * 4. Combined Reading Level: When both oral reading accuracy and comprehension scores
- *    are present, the stricter measure wins (both must clear for promotion).
+ *    are present, the 4-Quadrant joint matrix applies (the stricter measure wins).
  * 5. If only oral or only comprehension is available, that single measure establishes
  *    the current reading level.
  * 6. Risk Level correlation: If the reading level is 'Non-Reader' or 'Frustration',
@@ -96,7 +96,19 @@ export async function syncLearnerPhilIriMetrics(
     oralAccuracy = approvedFluency.accuracy ?? approvedFluency.score;
     oralWpm = approvedFluency.wpm;
     oralWer = approvedFluency.wer;
-    oralLevel = approvedFluency.masteryLevel || (oralAccuracy != null ? readingLevel(oralAccuracy) : undefined);
+    const isPhilIri =
+      approvedFluency.masteryLevel &&
+      ['Independent', 'Instructional', 'Frustration', 'Non-Reader'].includes(approvedFluency.masteryLevel);
+    oralLevel = isPhilIri
+      ? approvedFluency.masteryLevel
+      : oralAccuracy != null
+      ? evaluateReadingPerformance(
+          oralAccuracy,
+          null,
+          approvedFluency.wordsAttempted || 10,
+          oralAccuracy > 0 ? 1 : 0
+        ).philIriLevel
+      : undefined;
     oralDate = approvedFluency.date;
     oralId = approvedFluency._id as Types.ObjectId;
   }
@@ -148,7 +160,7 @@ export async function syncLearnerPhilIriMetrics(
     lastId = oralId || compId;
   }
 
-  // Apply to record
+  // Apply to record (strictly conforming to LearnerRecord schema enums)
   record.readingLevel = finalReadingLevel;
   record.oralReadingAccuracy = oralAccuracy;
   record.oralReadingWpm = oralWpm;
@@ -160,6 +172,22 @@ export async function syncLearnerPhilIriMetrics(
   record.philIriStatus = philIriStatus;
   record.lastReadingAssessmentDate = lastDate;
   record.lastReadingAssessmentId = lastId;
+
+  // Safeguard: Ensure masteryStatus never holds an invalid Phil-IRI string
+  const validMasteryBands = ['Beginning', 'Developing', 'Approaching', 'Proficient'];
+  if (record.masteryStatus && !validMasteryBands.includes(record.masteryStatus)) {
+    if (oralAccuracy != null) {
+      record.masteryStatus = evaluateReadingPerformance(oralAccuracy).masteryBand;
+    } else if (record.masteryStatus === 'Independent') {
+      record.masteryStatus = 'Proficient';
+    } else if (record.masteryStatus === 'Instructional') {
+      record.masteryStatus = 'Approaching';
+    } else if (record.masteryStatus === 'Developing') {
+      record.masteryStatus = 'Developing';
+    } else {
+      record.masteryStatus = 'Beginning';
+    }
+  }
 
   // Auto-calculate risk level based on assessment score / Phil-IRI level
   if (finalReadingLevel !== 'Not Assessed') {

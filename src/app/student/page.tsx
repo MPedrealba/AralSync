@@ -1,25 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, ShieldCheck, TrendingUp, Target } from "lucide-react";
+import { BookOpen, ShieldCheck, TrendingUp, Target, Laptop, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import StatCard from "@/components/StatCard";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
 export default function StudentDashboardPage() {
   const [data, setData] = useState<any>(null);
+  const [pendingExams, setPendingExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/student/dashboard");
+        const [res, examsRes] = await Promise.all([
+          fetch("/api/student/dashboard"),
+          fetch("/api/student/exams").catch(() => null),
+        ]);
         const json = await parseJsonResponse(res);
         if (json.success) {
           setData(json.data);
         } else {
           setErrorMsg(json.error || "Failed to load dashboard data.");
+        }
+
+        if (examsRes && examsRes.ok) {
+          const examsJson = await examsRes.json().catch(() => null);
+          if (examsJson?.success && Array.isArray(examsJson.data)) {
+            const pending = examsJson.data.filter((e: any) => e.status === "pending");
+            setPendingExams(pending);
+          }
         }
       } catch (error: any) {
         console.error("Failed to fetch dashboard data:", error);
@@ -126,6 +138,54 @@ export default function StudentDashboardPage() {
         </Link>
       </div>
 
+      {/* Active Online Assessments Callout */}
+      {pendingExams.length > 0 && (
+        <div className="mb-8 overflow-hidden rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/90 via-sky-50/60 to-white p-6 shadow-card">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+                <Laptop className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                    Active Assessment{pendingExams.length > 1 ? "s" : ""}
+                  </span>
+                  <span className="text-xs font-medium text-indigo-600">
+                    {pendingExams.length} ready to take
+                  </span>
+                </div>
+                <h3 className="mt-1 text-base font-bold text-gray-900">
+                  {pendingExams[0].title}
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Subject: <span className="font-semibold text-gray-700">{pendingExams[0].subject}</span> •{" "}
+                  {pendingExams[0].items} Questions
+                  {pendingExams[0].timeLimitMinutes > 0 && ` • ${pendingExams[0].timeLimitMinutes} mins timer`}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+              <Link
+                href={`/student/exams/${pendingExams[0].id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-card transition-colors hover:bg-indigo-700"
+              >
+                Take Exam
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              {pendingExams.length > 1 && (
+                <Link
+                  href="/student/exams"
+                  className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-indigo-300 hover:text-indigo-600"
+                >
+                  View All ({pendingExams.length})
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
         <StatCard
@@ -188,17 +248,33 @@ export default function StudentDashboardPage() {
               <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
                 Learning Recovery Status
               </h3>
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm font-semibold text-gray-700">
-                  Mastery Level:
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${masteryTone(
-                    masteryStatus
-                  )}`}
-                >
-                  {masteryStatus}
-                </span>
+              <div className="flex flex-wrap items-baseline gap-3">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs font-semibold text-gray-500">
+                    Mastery:
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${masteryTone(
+                      masteryStatus
+                    )}`}
+                  >
+                    {masteryStatus}
+                  </span>
+                </div>
+                {learnerRecord?.readingLevel && learnerRecord.readingLevel !== "Not Assessed" && (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs font-semibold text-gray-500">
+                      Phil-IRI Level:
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${masteryTone(
+                        learnerRecord.readingLevel
+                      )}`}
+                    >
+                      {learnerRecord.readingLevel}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-5">

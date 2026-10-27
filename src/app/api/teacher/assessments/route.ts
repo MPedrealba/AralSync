@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
       scoredItems,
       totalItems,
       detectedAnswers,
+      subskills,
     } = body || {};
 
     if (!studentId) {
@@ -192,9 +193,10 @@ export async function POST(req: NextRequest) {
       date: date ? new Date(date) : new Date(),
       assessmentCategory,
       topics: Array.isArray(topics) ? topics : [],
-      scoredItems: Array.isArray(scoredItems) ? scoredItems : undefined,
+      scoredItems: typeof scoredItems === "number" ? scoredItems : Array.isArray(scoredItems) ? scoredItems.length : undefined,
       totalItems: typeof totalItems === "number" ? totalItems : undefined,
       detectedAnswers: Array.isArray(detectedAnswers) ? detectedAnswers : undefined,
+      subskills: Array.isArray(subskills) ? subskills : [],
     });
 
     if (["READING_FLUENCY", "COMPREHENSION"].includes(type) && status === "approved") {

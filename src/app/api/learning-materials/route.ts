@@ -96,7 +96,11 @@ export async function GET(req: NextRequest) {
       .sort({ keyStage: 1, type: 1, title: 1 })
       .lean();
 
-    return ok(materials);
+    return NextResponse.json({
+      success: true,
+      data: materials,
+      materials,
+    });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     console.error('Get Learning Materials API Error:', error);

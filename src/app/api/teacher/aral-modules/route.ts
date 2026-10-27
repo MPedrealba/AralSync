@@ -26,7 +26,10 @@ export async function GET(req: NextRequest) {
       tutorGuideUrl: rec.tutorGuideUrl,
       source: rec.source,
       passages: passages
-        .filter((p: any) => p.title.toLowerCase().includes(rec.keyStage?.toLowerCase() || ''))
+        .filter((p: any) =>
+          (p.keyStage && rec.keyStage && p.keyStage.toLowerCase() === rec.keyStage.toLowerCase()) ||
+          p.title.toLowerCase().includes(rec.keyStage?.toLowerCase() || '')
+        )
         .map((p: any) => ({
           id: String(p._id),
           title: p.title,

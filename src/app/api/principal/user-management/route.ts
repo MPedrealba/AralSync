@@ -59,9 +59,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, username, password, role, email, specialization } = body;
 
-    if (!name || !username || !password || !role) {
+    if (!name || !username || !role) {
       return NextResponse.json(
-        { success: false, error: 'Name, username, password, and role are required.' },
+        { success: false, error: 'Name, username, and role are required.' },
         { status: 400 }
       );
     }
@@ -74,19 +74,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const initialPassword = (password && String(password).trim()) ? String(password).trim() : 'password123';
+    const hashed = await bcrypt.hash(initialPassword, 10);
     const user = await User.create({
-      username,
+      username: username.trim(),
       password: hashed,
-      name,
+      name: name.trim(),
       role,
-      email: email || undefined,
+      email: email ? email.trim() : undefined,
       // specialization only applies to teacher accounts
       specialization:
         role === 'teacher' && (specialization === 'reading' || specialization === 'all-subjects')
           ? specialization
           : 'all-subjects',
       active: true,
+      mustChangePassword: true,
     });
 
     return ok({

@@ -113,6 +113,62 @@ async def omr_detect_pdf(
     return {"success": True, "page_count": len(pages), "pages": pages}
 
 
+# ── Learning Material PDF Renderer ──────────────────────────────────────────
+
+class RenderPageRequest(BaseModel):
+    file_path: str
+    page_number: int = 1  # 1-indexed
+
+
+@app.post("/material/render-page")
+async def render_pdf_page(payload: RenderPageRequest):
+    """
+    Renders a single page of a local PDF file into a base64-encoded PNG image
+    for OpenAI Vision analysis.
+    """
+    import pymupdf
+    import base64
+    import os
+
+    # Resolve absolute path with repo root fallbacks
+    path = os.path.abspath(payload.file_path)
+    if not os.path.exists(path):
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        clean_rel = payload.file_path.replace("\\", "/").lstrip("/")
+        candidate1 = os.path.join(repo_root, clean_rel)
+        candidate2 = os.path.join(repo_root, "public", clean_rel)
+        if os.path.exists(candidate1):
+            path = candidate1
+        elif os.path.exists(candidate2):
+            path = candidate2
+        else:
+            raise HTTPException(404, f"PDF file not found at: {payload.file_path}")
+
+    try:
+        doc = pymupdf.open(path)
+        total_pages = len(doc)
+        page_idx = max(0, min(payload.page_number - 1, total_pages - 1))
+        page = doc[page_idx]
+
+        # Clamp max dimensions to 1024px and encode as JPEG for low token usage
+        rect = page.rect
+        max_dim = max(rect.width, rect.height)
+        scale = min(1024.0 / max_dim, 2.0) if max_dim > 0 else 1.0
+        mat = pymupdf.Matrix(scale, scale)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        jpeg_bytes = pix.tobytes("jpeg", jpg_quality=80)
+        b64_str = base64.b64encode(jpeg_bytes).decode("utf-8")
+
+        return {
+            "success": True,
+            "page": page_idx + 1,
+            "totalPages": total_pages,
+            "image": f"data:image/jpeg;base64,{b64_str}"
+        }
+    except Exception as e:
+        raise HTTPException(500, f"PyMuPDF render error: {str(e)}")
+
+
 # ── Reading Audio Analysis ──────────────────────────────────────────────────────
 
 @app.post("/reading/analyze")

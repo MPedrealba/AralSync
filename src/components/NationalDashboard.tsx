@@ -683,7 +683,7 @@ function PhilIriSection({ philIri, periodLabel }: { philIri: PhilIriPayload; per
   return (
     <section className="rounded-2xl border border-gray-100 bg-gray-50/60 p-6">
       <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Phil-IRI · Philippine Informal Reading Inventory (KS3)</h2>
+        <h2 className="text-xl font-bold text-gray-900">Phil-IRI 2024 · Philippine Informal Reading Inventory (KS3 - ARAL Program)</h2>
         <p className="text-sm text-gray-400">{philIri.totalLabel}</p>
       </div>
 

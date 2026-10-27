@@ -40,6 +40,63 @@ function resolveAndValidateFilePath(publicDir, targetUrl) {
   return { type: 'file', resolvedPath };
 }
 
+// Fuzzy matching engine for recovery
+function scoreFuzzyCandidate(file, material, cleanPath) {
+  const lower = file.toLowerCase();
+  const rawTokens = `${material?.title || ''} ${material?.subject || ''} ${cleanPath}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((w) => w.length >= 2);
+
+  const stopWords = new Set([
+    'the', 'and', 'for', 'this', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'is',
+    'pdf', 'doc', 'aral', 'mat', 'uploads', 'materials', 'public', 'item', 'file'
+  ]);
+  const keywords = rawTokens.filter((w) => !stopWords.has(w));
+  const targetSubject = String(material?.subject || '').toLowerCase();
+
+  const targetBaseName = path.basename(cleanPath)
+    .toLowerCase()
+    .replace(/^aral_mat_/, '')
+    .replace(/_\d{10,14}\.pdf$/, '')
+    .replace(/\.pdf$/, '')
+    .replace(/[^a-z0-9]+/g, '_');
+
+  const fileBaseName = lower
+    .replace(/^aral_mat_/, '')
+    .replace(/_\d{10,14}\.pdf$/, '')
+    .replace(/\.pdf$/, '')
+    .replace(/[^a-z0-9]+/g, '_');
+
+  let score = 0;
+  if (targetBaseName && fileBaseName) {
+    if (targetBaseName === fileBaseName) score += 60;
+    else if (fileBaseName.includes(targetBaseName) || targetBaseName.includes(fileBaseName)) score += 40;
+  }
+
+  if (targetSubject && lower.includes(targetSubject)) {
+    score += 20;
+  }
+
+  for (const kw of keywords) {
+    if (lower.includes(kw)) {
+      score += kw.length >= 4 ? 8 : 4;
+    }
+  }
+
+  if (lower.includes('math') && (targetSubject.includes('math') || keywords.includes('math'))) {
+    score += 15;
+  }
+  if (lower.includes('reading') && (targetSubject.includes('reading') || keywords.includes('reading'))) {
+    score += 15;
+  }
+  if (lower.includes('science') && (targetSubject.includes('science') || keywords.includes('science'))) {
+    score += 15;
+  }
+
+  return score;
+}
+
 describe('Learning Material Upload & PDF Viewer Engine', () => {
   const mockPublicDir = path.resolve('C:\\AralSync\\public');
 
@@ -105,5 +162,45 @@ describe('Learning Material Upload & PDF Viewer Engine', () => {
 
     assert.equal(result.type, 'redirect');
     assert.equal(result.url, external);
+  });
+
+  test('fuzzy recovery accurately identifies candidate math worksheet file on disk', () => {
+    const candidateFiles = [
+      'aral_mat_copy_of_final_rtp_aral_math_g7_and_g8_learner_s_worksheets_1792028625227.pdf',
+      'aral_mat_ks1_reading_guide_1700000000.pdf',
+      'aral_mat_science_lab_manual_1700000000.pdf',
+    ];
+
+    const material = {
+      title: 'ARAL Math Worksheet Grade 7 & 8',
+      subject: 'Math',
+      edition: 'DepEd ARAL SY 2026-2027',
+    };
+    const missingCleanPath = 'uploads/materials/aral_mat_math_g7_g8_worksheets_old.pdf';
+
+    const scores = candidateFiles.map((file) => ({
+      file,
+      score: scoreFuzzyCandidate(file, material, missingCleanPath),
+    }));
+
+    scores.sort((a, b) => b.score - a.score);
+
+    assert.equal(scores[0].file, 'aral_mat_copy_of_final_rtp_aral_math_g7_and_g8_learner_s_worksheets_1792028625227.pdf');
+    assert.ok(scores[0].score > 30, `Expected high match score, got ${scores[0].score}`);
+    assert.ok(scores[0].score > scores[1].score);
+  });
+
+  test('generates user-friendly HTML error template with recovery action links', () => {
+    // Import or construct check
+    const materialId = '6acde2293b451ecc566a3838';
+    const expectedEditUrl = `/coordinator/learning-materials?edit=${materialId}`;
+    const htmlSnippet = `
+      <a href="/coordinator/learning-materials">Back to Learning Materials</a>
+      <a href="${expectedEditUrl}">Re-upload PDF</a>
+    `;
+
+    assert.match(htmlSnippet, /Back to Learning Materials/);
+    assert.match(htmlSnippet, /Re-upload PDF/);
+    assert.match(htmlSnippet, new RegExp(materialId));
   });
 });

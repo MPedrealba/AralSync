@@ -101,7 +101,7 @@ export default function ReadingLevelsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reading Level Analytics</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Distribution of learners across the four Phil-IRI reading levels: Independent, Instructional, Frustration, and Non-Reader.
+            Distribution of learners across the four Phil-IRI 2024 reading levels (DepEd ARAL Framework): Independent, Instructional, Frustration, and Non-Reader.
           </p>
         </div>
 

@@ -26,10 +26,14 @@ import {
   Camera,
   RefreshCw,
   Save,
+  Laptop,
+  Globe,
+  Clock,
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import { getSubjectBubbleSheet, getStampedBubbleSheetUrl } from "@/lib/bubbleSheet";
+import { QuestionnaireSection, deriveSectionsFromQuestions, clusterQuestionsByTopic } from "@/lib/questionnaireSections";
 
 /* ──── Tab names ──── */
 const tabs = ["Results/History", "Generate Questionnaire", "Exam Library"] as const;
@@ -86,6 +90,11 @@ interface AnswerKeyRow {
   }>;
   passageTitle?: string;
   passageText?: string;
+  isOnline?: boolean;
+  timeLimitMinutes?: number;
+  dueDate?: string | null;
+  targetGrade?: number | null;
+  targetSection?: string;
   created: string;
 }
 
@@ -581,6 +590,73 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
   const [scanError, setScanError] = useState("");
   const [detected, setDetected] = useState<{ item: number; letter: string | null }[] | null>(null);
 
+  // Online CBT Settings Modal State
+  const [onlineModalKey, setOnlineModalKey] = useState<AnswerKeyRow | null>(null);
+  const [isOnlineToggle, setIsOnlineToggle] = useState(false);
+  const [timeLimitInput, setTimeLimitInput] = useState(0);
+  const [targetSectionInput, setTargetSectionInput] = useState("");
+  const [targetGradeInput, setTargetGradeInput] = useState<number | null>(null);
+  const [dueDateInput, setDueDateInput] = useState("");
+  const [savingOnline, setSavingOnline] = useState(false);
+  const [onlineSuccessToast, setOnlineSuccessToast] = useState<string | null>(null);
+
+  const openOnlineModal = (ak: AnswerKeyRow) => {
+    setOnlineModalKey(ak);
+    setIsOnlineToggle(Boolean(ak.isOnline));
+    setTimeLimitInput(Number(ak.timeLimitMinutes) || 0);
+    setTargetSectionInput(ak.targetSection || "");
+    setTargetGradeInput(ak.targetGrade ?? null);
+    setDueDateInput(ak.dueDate ? ak.dueDate.slice(0, 10) : "");
+  };
+
+  const handleSaveOnlineSettings = async () => {
+    if (!onlineModalKey) return;
+    setSavingOnline(true);
+    try {
+      const res = await fetch(`/api/teacher/answer-keys/${onlineModalKey.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isOnline: isOnlineToggle,
+          timeLimitMinutes: timeLimitInput,
+          targetSection: targetSectionInput,
+          targetGrade: targetGradeInput,
+          dueDate: dueDateInput ? new Date(dueDateInput) : null,
+        }),
+      });
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setKeys((prev) =>
+          prev.map((k) =>
+            k.id === onlineModalKey.id
+              ? {
+                  ...k,
+                  isOnline: isOnlineToggle,
+                  timeLimitMinutes: timeLimitInput,
+                  targetSection: targetSectionInput,
+                  targetGrade: targetGradeInput,
+                  dueDate: dueDateInput || null,
+                }
+              : k
+          )
+        );
+        setOnlineSuccessToast(
+          isOnlineToggle
+            ? `"${onlineModalKey.title}" is now published online for students!`
+            : `"${onlineModalKey.title}" set to Paper Only (OMR).`
+        );
+        setTimeout(() => setOnlineSuccessToast(null), 4000);
+        setOnlineModalKey(null);
+      } else {
+        alert(json.error || "Failed to update online exam settings.");
+      }
+    } catch {
+      alert("Network error updating online exam settings.");
+    } finally {
+      setSavingOnline(false);
+    }
+  };
+
   useEffect(() => {
     if (assignedSubject && assignedSubject !== "All") {
       setNewSubject(assignedSubject);
@@ -882,6 +958,21 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
           </div>
         )}
 
+        {onlineSuccessToast && (
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>{onlineSuccessToast}</span>
+            </div>
+            <button
+              onClick={() => setOnlineSuccessToast(null)}
+              className="text-emerald-700 hover:text-emerald-900"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex h-48 items-center justify-center rounded-xl border border-gray-100 bg-white">
             <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -923,7 +1014,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                       <FileText className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {isExam ? (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
                             🏆 Exam
@@ -933,6 +1024,20 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                             📝 Quiz
                           </span>
                         )}
+                        {ak.isOnline ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                            <Globe className="h-3 w-3" /> Published Online
+                          </span>
+                        ) : (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200">
+                            📄 Paper Only (OMR)
+                          </span>
+                        )}
+                        {ak.isOnline && ak.timeLimitMinutes ? (
+                          <span className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5">
+                            <Clock className="h-2.5 w-2.5" /> {ak.timeLimitMinutes}m limit
+                          </span>
+                        ) : null}
                         <p className="text-sm font-semibold text-gray-900">{ak.title}</p>
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">
@@ -971,6 +1076,19 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                     </div>
                   </div>
                   <div className="flex flex-wrap sm:shrink-0 items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => openOnlineModal(ak)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] ${
+                        ak.isOnline
+                          ? "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                      title="Configure Online CBT & Distance Learning Delivery"
+                    >
+                      <Laptop className="h-3.5 w-3.5 text-blue-600" />
+                      <span>{ak.isOnline ? "Online Settings" : "Publish Online"}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setViewingExamKey(ak)}
@@ -1328,6 +1446,173 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
           onClose={() => setViewingExamKey(null)}
         />
       )}
+      {onlineModalKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
+                  <Laptop className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Online CBT Delivery Settings</h3>
+                  <p className="text-xs text-slate-500 line-clamp-1">{onlineModalKey.title}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOnlineModalKey(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Online Delivery Toggle */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900">Online Examination Status</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Allow students to take this assessment in their student portal at /student/exams.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsOnlineToggle((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isOnlineToggle ? "bg-blue-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                        isOnlineToggle ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center gap-2">
+                  {isOnlineToggle ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700">
+                      <Globe className="h-3.5 w-3.5" />
+                      Active — Students can access and take this test online.
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                      📄 Paper Only — Assessment is restricted to in-person OMR sheets.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Timing & Scheduling */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Time Limit (Minutes)
+                  </label>
+                  <select
+                    value={timeLimitInput}
+                    onChange={(e) => setTimeLimitInput(Number(e.target.value) || 0)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  >
+                    <option value={0}>Untimed (No Time Limit)</option>
+                    <option value={15}>15 Minutes (Short Quiz)</option>
+                    <option value={30}>30 Minutes</option>
+                    <option value={45}>45 Minutes</option>
+                    <option value={60}>60 Minutes (1 Hour)</option>
+                    <option value={90}>90 Minutes</option>
+                    <option value={120}>120 Minutes (2 Hours)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Due Date & Deadline
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDateInput}
+                    onChange={(e) => setDueDateInput(e.target.value)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {/* Target Audience / Student Filtering */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Target Grade
+                  </label>
+                  <select
+                    value={targetGradeInput ?? ""}
+                    onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  >
+                    <option value="">All Grade Levels</option>
+                    <option value={7}>Grade 7</option>
+                    <option value={8}>Grade 8</option>
+                    <option value={9}>Grade 9</option>
+                    <option value={10}>Grade 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Target Section (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={targetSectionInput}
+                    onChange={(e) => setTargetSectionInput(e.target.value)}
+                    disabled={!isOnlineToggle}
+                    placeholder="e.g. Rosal (leave blank for all)"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-[11px] text-blue-900 leading-relaxed">
+                💡 <strong>Instant Auto-Grading:</strong> Submitting an online exam immediately computes mastery levels, updates student recovery profiles, and streams results into your Teacher and Coordinator dashboards.
+              </div>
+            </div>
+
+            <div className="mt-6 pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setOnlineModalKey(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveOnlineSettings}
+                disabled={savingOnline}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 active:scale-95 disabled:opacity-60 transition-all"
+              >
+                {savingOnline ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Saving…</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5" />
+                    <span>Save Settings</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1636,6 +1921,7 @@ interface GeneratedDoc {
   passageText?: string;
   writtenCount: number;
   questions: GeneratedQuestion[];
+  sections?: QuestionnaireSection[];
   answers: string[];
   answerKey: {
     id: string;
@@ -1645,6 +1931,7 @@ interface GeneratedDoc {
     topic?: string;
     topics?: string[];
     items: number;
+    sections?: QuestionnaireSection[];
   };
 }
 
@@ -1659,22 +1946,37 @@ const PrintAry = ["A", "B", "C", "D"];
 
 function sanitizeDoc(d: any): GeneratedDoc {
   if (!d) return d;
+  const rawQuestions = Array.isArray(d.questions) ? d.questions : [];
+  const subject = d.subject || "Math";
+  const mainTopic =
+    d.topic ||
+    (Array.isArray(d.topics) && d.topics.length === 1 ? d.topics[0] : undefined);
+
+  // Group questions strictly by topic to prevent micro-directions per item
+  const { sections, orderedQuestions } = clusterQuestionsByTopic(rawQuestions, subject, {
+    mainTopic,
+    assessmentType: d.assessmentType,
+  });
+
   return {
     ...d,
-    answers: (Array.isArray(d.answers) ? d.answers : []).map((a: any) =>
-      typeof a === "object" && a !== null ? a.correctKey || a.letter || String(a) : String(a ?? "")
-    ),
+    questions: orderedQuestions,
+    sections,
+    answers: orderedQuestions.map((q: any, i: number) => {
+      const a = q.correctAnswer || q.correctKey || q.letter || d.answers?.[i] || d.answerLetters?.[i];
+      return typeof a === "string" ? a.toUpperCase().trim().slice(0, 1) : "A";
+    }),
   };
 }
+
+type GenType = "aral" | "extract" | "reading" | "upload";
 
 function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: string }) {
   const [assessmentType, setAssessmentType] = useState<"quiz" | "exam">("quiz");
   const [assignedSubject, setAssignedSubject] = useState(
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
-  const [genType, setGenType] = useState<"aral" | "bank" | "reading" | "upload">(
-    assignedSubjectProp === "Math" || assignedSubjectProp === "Science" ? "bank" : "aral"
-  );
+  const [genType, setGenType] = useState<GenType>("aral");
   const [subject, setSubject] = useState(
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
@@ -1710,8 +2012,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       subject: string;
       fileUrl: string;
       edition?: string;
+      sessionDirectory?: Array<{
+        sessionName: string;
+        pageStart: number;
+        pageEnd: number;
+        topic?: string;
+      }>;
     }>
   >([]);
+  const [extractMaterialId, setExtractMaterialId] = useState("");
+  const [extractPageNumber, setExtractPageNumber] = useState(5);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null);
+  const [editingInstructionText, setEditingInstructionText] = useState("");
 
   const activeBubbleSheet = getSubjectBubbleSheet(
     doc?.subject || (genType === "reading" || genType === "aral" ? "Reading" : subject)
@@ -1723,8 +2036,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         const querySubj = subject && subject !== "All" ? `&subject=${encodeURIComponent(subject)}` : "";
         const res = await fetch(`/api/learning-materials?active=true${querySubj}`);
         const data = await parseJsonResponse(res);
-        if (data.success && Array.isArray(data.materials)) {
-          setLearningMaterials(data.materials);
+        const list = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.materials)
+          ? data.materials
+          : [];
+        if (data?.success && Array.isArray(list)) {
+          setLearningMaterials(list);
+          if (list.length > 0) {
+            setExtractMaterialId((prev) => prev || list[0]._id);
+            if (list[0].sessionDirectory && list[0].sessionDirectory.length > 0) {
+              setExtractPageNumber((prev) => prev || list[0].sessionDirectory[0].pageStart);
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to load reference materials", err);
@@ -1736,9 +2060,6 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     if (assignedSubjectProp && assignedSubjectProp !== "All") {
       setAssignedSubject(assignedSubjectProp);
       setSubject(assignedSubjectProp);
-      if (assignedSubjectProp === "Math" || assignedSubjectProp === "Science") {
-        setGenType("bank");
-      }
     }
   }, [assignedSubjectProp]);
 
@@ -1747,7 +2068,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     (async () => {
       setLoadingTopics(true);
       try {
-        const res = await fetch("/api/teacher/questionnaire/topics");
+        const querySubj = subject && subject !== "All" ? `?subject=${encodeURIComponent(subject)}` : "";
+        const res = await fetch(`/api/teacher/questionnaire/topics${querySubj}`);
         const json = await parseJsonResponse(res);
         if (json.success) {
           const list: string[] = json.topics || [];
@@ -1756,11 +2078,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           setUsedTopics(used);
           if (json.assignedSubject) {
             setAssignedSubject(json.assignedSubject);
-            if (json.assignedSubject !== "All") {
+            if (json.assignedSubject !== "All" && subject !== json.assignedSubject) {
               setSubject(json.assignedSubject);
-              if (json.assignedSubject === "Math" || json.assignedSubject === "Science") {
-                setGenType("bank");
-              }
             }
           }
           // Default to the first unused topic if available
@@ -1777,14 +2096,14 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         setLoadingTopics(false);
       }
     })();
-  }, []);
+  }, [subject]);
 
   const toggleTopic = (t: string) => {
     setSelectedTopics((prev) => {
       if (prev.includes(t)) {
         return prev.filter((item) => item !== t);
       }
-      if (prev.length >= 2) {
+      if (genType === "aral" && assessmentType === "quiz" && prev.length >= 2) {
         return prev;
       }
       return [...prev, t];
@@ -1901,6 +2220,79 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     }
   };
 
+  const handleKeyChange = async (itemNumber: number, newKey: string) => {
+    if (!doc) return;
+    const qIndex = itemNumber - 1;
+    const targetQ = doc.questions[qIndex];
+    if (!targetQ || targetQ.mode === "written") return;
+
+    const currentAnsRaw = doc.answers?.[qIndex] ?? targetQ.correctAnswer ?? "A";
+    const prevKey =
+      typeof currentAnsRaw === "object" && currentAnsRaw !== null
+        ? (currentAnsRaw as any).correctKey || (currentAnsRaw as any).letter || "A"
+        : String(currentAnsRaw || "A").toUpperCase();
+
+    if (prevKey === newKey) return;
+
+    const prevIdx = PrintAry.indexOf(prevKey);
+    const newIdx = PrintAry.indexOf(newKey);
+    if (prevIdx === -1 || newIdx === -1) return;
+
+    // Clone choices and swap text between previous key position and new key position
+    const newChoices = [...(targetQ.choices || [])];
+    if (newChoices.length > Math.max(prevIdx, newIdx)) {
+      const temp = newChoices[prevIdx];
+      newChoices[prevIdx] = newChoices[newIdx];
+      newChoices[newIdx] = temp;
+    }
+
+    // Clone questions with updated choices and correctAnswer
+    const updatedQuestions = doc.questions.map((q) =>
+      q.number === itemNumber
+        ? {
+            ...q,
+            choices: newChoices,
+            correctAnswer: newKey,
+          }
+        : q
+    );
+
+    // Clone answers array with new key letter
+    const updatedAnswers = [...doc.answers];
+    updatedAnswers[qIndex] = newKey;
+
+    const updatedDoc: GeneratedDoc = {
+      ...doc,
+      questions: updatedQuestions,
+      answers: updatedAnswers,
+    };
+
+    setDoc(updatedDoc);
+    setIsSaved(false);
+
+    setSwapToast({
+      ok: true,
+      text: `Question #${itemNumber} answer key changed to [${newKey}]. Choices updated.`,
+    });
+    setTimeout(() => setSwapToast(null), 4000);
+
+    // If an AnswerKey document is already created in MongoDB, sync it via PATCH
+    if (doc.answerKey?.id) {
+      try {
+        await fetch(`/api/teacher/answer-keys/${doc.answerKey.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers: updatedAnswers,
+            questions: updatedQuestions,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to sync answer key update to MongoDB", err);
+      }
+    }
+  };
+
   const handleSaveExam = async () => {
     if (!doc || isSavingExam || isSaved) return;
 
@@ -1961,6 +2353,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const handleGenerate = async () => {
     setGenerating(true);
     setGenError("");
+    setFallbackNotice(null);
     setIsSaved(false);
     setSaveExamError(null);
     setSaveNotification(null);
@@ -1987,24 +2380,43 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           }
         }
 
-        const res = await fetch("/api/teacher/questionnaire/generate-reading", {
+        const isMathOrScience = subject === "Math" || subject === "Science";
+        const endpoint = isMathOrScience
+          ? "/api/teacher/questionnaire/generate"
+          : "/api/teacher/questionnaire/generate-reading";
+
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: customTitle.trim() || undefined,
-            assessmentType,
-            topics: assessmentType === "quiz" ? selectedTopics : topics,
-            topic: selectedTopics[0] || "",
-            count,
-            writtenCount,
-            allowRetake,
-          }),
+          body: JSON.stringify(
+            isMathOrScience
+              ? {
+                  title: customTitle.trim() || undefined,
+                  subject,
+                  grade,
+                  count,
+                  writtenCount,
+                  assessmentType,
+                  topics: assessmentType === "quiz" ? selectedTopics : topics,
+                  topic: selectedTopics[0] || "",
+                }
+              : {
+                  title: customTitle.trim() || undefined,
+                  assessmentType,
+                  topics: assessmentType === "quiz" ? selectedTopics : topics,
+                  topic: selectedTopics[0] || "",
+                  count,
+                  writtenCount,
+                  allowRetake,
+                }
+          ),
         });
         const json = await parseJsonResponse(res);
         if (json.success) {
           setDoc(sanitizeDoc(json.data));
           setEditedTitle(json.data.title);
           setIsEditingTitle(false);
+          setFallbackNotice(json.fallbackNotice || null);
           if (assessmentType === "quiz") {
             setUsedTopics((prev) => Array.from(new Set([...prev, ...selectedTopics])));
           }
@@ -2014,44 +2426,60 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         return;
       }
 
-      if (genType === "bank") {
-        if (subject === "Math" || subject === "Science") {
-          setGenError(
-            `Official ${subject} ARAL learning material PDFs are pending upload by the coordinator/admin. Currently active: Reading topics.`
-          );
+      if (genType === "extract") {
+        if (!extractMaterialId) {
+          setGenError("Please select a learning material to extract questions from.");
           setGenerating(false);
           return;
         }
-      }
 
-      const isReading = genType === "reading";
-      if (isReading && !passageId) {
-        setGenError("Select a reading passage first.");
-        setGenerating(false);
+        const res = await fetch("/api/teacher/questionnaire/extract-material", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            materialId: extractMaterialId,
+            pageNumber: extractPageNumber,
+            customTitle: customTitle.trim() || undefined,
+          }),
+        });
+        const json = await parseJsonResponse(res);
+        if (json.success) {
+          setDoc(sanitizeDoc(json.data));
+          setEditedTitle(json.data.title);
+          setIsEditingTitle(false);
+          setFallbackNotice(json.fallbackNotice || null);
+        } else {
+          setGenError(json.error || "Failed to extract exercises from the material.");
+        }
         return;
       }
 
-      const res = await fetch(
-        isReading
-          ? "/api/teacher/questionnaire/generate-reading"
-          : "/api/teacher/questionnaire/generate",
-        {
+      if (genType === "reading") {
+        if (!passageId) {
+          setGenError("Select a reading passage first.");
+          setGenerating(false);
+          return;
+        }
+
+        const res = await fetch("/api/teacher/questionnaire/generate-reading", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            isReading
-              ? { title: customTitle.trim() || undefined, passageId, count }
-              : { title: customTitle.trim() || undefined, subject, grade, count, writtenCount, topic: topic.trim() }
-          ),
+          body: JSON.stringify({
+            title: customTitle.trim() || undefined,
+            passageId,
+            count,
+          }),
+        });
+        const json = await parseJsonResponse(res);
+        if (json.success) {
+          setDoc(sanitizeDoc(json.data));
+          setEditedTitle(json.data.title);
+          setIsEditingTitle(false);
+          setFallbackNotice(json.fallbackNotice || null);
+        } else {
+          setGenError(json.error || "Failed to generate reading questionnaire.");
         }
-      );
-      const json = await parseJsonResponse(res);
-      if (json.success) {
-        setDoc(sanitizeDoc(json.data));
-        setEditedTitle(json.data.title);
-        setIsEditingTitle(false);
-      } else {
-        setGenError(json.error || "Failed to generate questionnaire.");
+        return;
       }
     } catch {
       setGenError("Failed to generate questionnaire.");
@@ -2075,31 +2503,18 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           </div>
 
           {/* Source toggle */}
-          <div className={`mb-3.5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-2" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
-            {(assignedSubject === "All" || assignedSubject === "Reading") && (
-              <button
-                type="button"
-                onClick={() => setGenType("aral")}
-                className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  genType === "aral"
-                    ? "bg-white text-slate-900 shadow-xs font-bold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>ARAL</span>
-                <span className="rounded bg-red-100 px-1 py-0.2 text-[9px] font-bold text-red-800">DepEd</span>
-              </button>
-            )}
+          <div className={`mb-3.5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-3" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
             <button
               type="button"
-              onClick={() => setGenType("bank")}
-              className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
-                genType === "bank"
+              onClick={() => setGenType("aral")}
+              className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                genType === "aral"
                   ? "bg-white text-slate-900 shadow-xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Bank
+              <span>ARAL</span>
+              <span className="rounded bg-red-100 px-1 py-0.2 text-[9px] font-bold text-red-800">DepEd</span>
             </button>
             {(assignedSubject === "All" || assignedSubject === "Reading") && (
               <button
@@ -2111,9 +2526,21 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Reading
+                Reading Story
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setGenType("extract")}
+              className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                genType === "extract"
+                  ? "bg-white text-red-900 shadow-xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Wand2 className="h-3.5 w-3.5 text-red-800" />
+              <span>Extract</span>
+            </button>
             <button
               type="button"
               onClick={() => setGenType("upload")}
@@ -2135,7 +2562,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-red-800 shrink-0" />
                     <div>
-                      <p className="font-bold text-slate-900">Subject: Reading</p>
+                      <p className="font-bold text-slate-900">
+                        Subject: {assignedSubject === "Math" ? "Mathematics" : assignedSubject === "Science" ? "Science" : (subject === "All" ? "Reading" : subject)}
+                      </p>
                       <p className="text-[11px] text-slate-500">Official DepEd ARAL Materials</p>
                     </div>
                   </div>
@@ -2334,35 +2763,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                         </a>
                       ))
                     ) : (
-                      <>
-                        <a
-                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks3-plus%2Flearner-workbook.pdf"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                        >
-                          <BookOpen className="h-3 w-3 text-red-800" />
-                          <span>KS3 Plus Workbook</span>
-                        </a>
-                        <a
-                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks3-plus%2Ftutors-guide.pdf"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                        >
-                          <BookOpen className="h-3 w-3 text-red-800" />
-                          <span>KS3 Tutor Guide</span>
-                        </a>
-                        <a
-                          href="/api/learning-materials/view?path=%2Flearning-materials%2Fks2-plus%2Flearner-workbook.pdf"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200 hover:border-slate-300 hover:text-slate-900"
-                        >
-                          <BookOpen className="h-3 w-3 text-red-800" />
-                          <span>KS2 Plus Workbook</span>
-                        </a>
-                      </>
+                      <span className="text-[11px] text-slate-400 italic">
+                        No materials uploaded yet in ARAL Coordinator Portal
+                      </span>
                     )}
                   </div>
                 </div>
@@ -2409,64 +2812,6 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </select>
                 </div>
               </>
-            ) : genType === "bank" ? (
-              <>
-                {/* Math / Science Pending Notice */}
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                    <span>Materials Pending Upload</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed">
-                    Official Math and Science ARAL learning material PDFs are pending upload by the coordinator/admin. Switch to the <strong>ARAL</strong> tab above to generate Reading assessments.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Subject</label>
-                  <select
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    disabled={assignedSubject !== "All"}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                  >
-                    {assignedSubject === "All" ? (
-                      <>
-                        <option value="Math">Mathematics (Pending PDFs)</option>
-                        <option value="Science">Science (Pending PDFs)</option>
-                      </>
-                    ) : assignedSubject === "Science" ? (
-                      <option value="Science">Science (Pending PDFs)</option>
-                    ) : (
-                      <option value="Math">Mathematics (Pending PDFs)</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Grade Level</label>
-                  <select
-                    value={grade}
-                    onChange={(e) => setGrade(parseInt(e.target.value) || 7)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                  >
-                    {[7, 8, 9, 10].map((g) => (
-                      <option key={g} value={g}>Grade {g}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Number of Items</label>
-                  <select
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                  >
-                    {[10, 20, 25, 50].map((n) => (
-                      <option key={n} value={n}>{n} items</option>
-                    ))}
-                  </select>
-                </div>
-              </>
             ) : genType === "reading" ? (
               <>
                 <div>
@@ -2498,10 +2843,145 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </select>
                 </div>
               </>
+            ) : genType === "extract" ? (
+              <>
+                {/* AI Vision Extraction Banner */}
+                <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-xs text-red-950 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-red-900">
+                      <Wand2 className="h-4 w-4 text-red-700 shrink-0" />
+                      <span>Verbatim AI Worksheet Scanner</span>
+                    </div>
+                    <span className="rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-bold text-red-800">
+                      PyMuPDF + Vision
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-800/90 leading-relaxed">
+                    Select any uploaded DepEd ARAL workbook or worksheet PDF page. The AI scans the high-resolution page image and extracts the exact printed exercises verbatim into your assessment.
+                  </p>
+                </div>
+
+                {/* Material Selector */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Source Learning Material
+                  </label>
+                  <select
+                    value={extractMaterialId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setExtractMaterialId(id);
+                      const chosen = learningMaterials.find((m) => (m._id || (m as any).id) === id);
+                      if (chosen?.sessionDirectory && chosen.sessionDirectory.length > 0) {
+                        setExtractPageNumber(chosen.sessionDirectory[0].pageStart);
+                      }
+                    }}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
+                  >
+                    <option value="">Select an uploaded material…</option>
+                    {learningMaterials.map((m) => (
+                      <option key={m._id || (m as any).id} value={m._id || (m as any).id}>
+                        {m.title} ({m.subject})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Session Directory Quick Pick (if present) */}
+                {(() => {
+                  const selectedMat = learningMaterials.find((m) => (m._id || (m as any).id) === extractMaterialId);
+                  const sessions = selectedMat?.sessionDirectory || [];
+                  if (sessions.length === 0) return null;
+                  return (
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Session Directory / Chapter (Quick Jump)
+                      </label>
+                      <select
+                        onChange={(e) => {
+                          const idx = parseInt(e.target.value);
+                          if (!isNaN(idx) && sessions[idx]) {
+                            setExtractPageNumber(sessions[idx].pageStart);
+                          }
+                        }}
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
+                      >
+                        <option value="">Jump to session start page…</option>
+                        {sessions.map((s, idx) => (
+                          <option key={idx} value={idx}>
+                            {s.sessionName} (Pages {s.pageStart}–{s.pageEnd}) {s.topic ? `• ${s.topic}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
+
+                {/* Target Page Stepper & Preview */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Worksheet Page Number
+                    </label>
+                    {extractMaterialId && (
+                      <a
+                        href={`/api/learning-materials/view?id=${extractMaterialId}#page=${extractPageNumber}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-red-800 hover:text-red-900 underline flex items-center gap-1 font-semibold"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>Preview Page in New Tab</span>
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExtractPageNumber((p) => Math.max(1, p - 1))}
+                      className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={extractPageNumber}
+                      onChange={(e) => setExtractPageNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-xs font-bold text-slate-800 outline-none focus:border-red-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setExtractPageNumber((p) => p + 1)}
+                      className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Scans this page at 144 DPI and parses each numbered problem into structured questions.
+                  </p>
+                </div>
+
+                {/* Optional Custom Assessment Title */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Assessment Title (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder="e.g. Activity 1: Operations on Integers Quiz"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 placeholder:text-slate-400"
+                  />
+                </div>
+              </>
             ) : (
               <UploadExamForm
                 assignedSubject={assignedSubject}
-                onCancel={() => setGenType(assignedSubject === "Math" || assignedSubject === "Science" ? "bank" : "aral")}
+                onCancel={() => setGenType("aral")}
                 onUploaded={(d: GeneratedDoc) => {
                   setDoc(sanitizeDoc(d));
                   setGenError("");
@@ -2515,6 +2995,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               onClick={handleGenerate}
               disabled={
                 generating ||
+                (genType === "extract" && !extractMaterialId) ||
                 (genType === "aral" &&
                   assessmentType === "quiz" &&
                   (selectedTopics.length === 0 ||
@@ -2522,9 +3003,15 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               }
               className="mt-4 h-10 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-800 hover:bg-red-900 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Wand2 className="h-4 w-4" />
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
               {generating
-                ? "Generating Questionnaire…"
+                ? (genType === "extract" ? "Scanning & Extracting Exercises…" : "Generating Questionnaire…")
+                : genType === "extract"
+                ? `Scan & Extract Exercises from Page ${extractPageNumber}`
                 : genType === "aral" &&
                   assessmentType === "quiz" &&
                   selectedTopics.some((t) => usedTopics.includes(t)) &&
@@ -2773,6 +3260,23 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 </div>
               )}
 
+              {/* AI Fallback Notice Alert */}
+              {fallbackNotice && (
+                <div className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-6 py-3 text-xs font-semibold text-amber-900 transition-all">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>{fallbackNotice}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFallbackNotice(null)}
+                    className="text-amber-500 hover:text-amber-700 cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Swap Notification Toast */}
               {swapToast && (
                 <div
@@ -2818,98 +3322,266 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 )}
               </div>
 
-              {/* Reading selection callout if present */}
-              {doc.passageText && (
-                <div className="border-b border-gray-100 bg-amber-50/40 p-6">
-                  <div className="rounded-xl border border-amber-200 bg-white p-4 shadow-2xs">
-                    <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
-                      📖 Reading Selection: {doc.passageTitle}
+              {/* Desk Preview Container */}
+              <div className="bg-slate-100/90 p-4 sm:p-8 rounded-b-2xl overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-thin scrollbar-thumb-slate-300">
+                {/* Authentic DepEd Test Paper Sheet */}
+                <div className="bg-white shadow-xl border border-slate-300 rounded-sm p-6 sm:p-12 max-w-4xl mx-auto text-slate-900 font-sans transition-all">
+                  {/* Official DepEd School Header with Top Middle Logo and School Name */}
+                  <div className="text-center flex flex-col items-center justify-center border-b-2 border-slate-900 pb-4">
+                    <img
+                      src="/aral-logo.png"
+                      alt="School Logo"
+                      className="h-16 w-16 object-contain mb-2 drop-shadow-xs"
+                    />
+                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                      Republic of the Philippines
                     </p>
-                    <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-gray-700 max-h-48 overflow-y-auto">
-                      {doc.passageText}
+                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                      Department of Education
+                    </p>
+                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                      National Capital Region — Division of City Schools
+                    </p>
+                    <h2 className="text-base sm:text-lg font-extrabold tracking-wider uppercase text-slate-900 mt-1">
+                      GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+                    </h2>
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 mt-1">
+                      {doc.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
+                      {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
                     </p>
                   </div>
-                </div>
-              )}
 
-              {/* Questions list */}
-              <div className="divide-y divide-gray-100">
-                {doc.questions.map((q) => {
-                  const parts: string[] = [];
-                  if (q.competencyCode) parts.push(q.competencyCode);
-                  if (q.difficulty) parts.push(q.difficulty);
-                  return (
-                    <div key={q.number} className="group relative flex items-start gap-4 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
-                        {q.number}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-4">
-                          <p className="text-sm font-medium text-gray-800 leading-relaxed">{q.prompt}</p>
-                          <button
-                            type="button"
-                            disabled={swappingItem === q.number}
-                            onClick={() => handleSwapQuestion(q.number)}
-                            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-2xs hover:border-red-300 hover:bg-red-50 hover:text-red-900 transition-all active:scale-95 disabled:opacity-50"
-                            title="Swap with an alternate question for this topic"
-                          >
-                            <RefreshCw
-                              className={`h-3 w-3 ${
-                                swappingItem === q.number ? "animate-spin text-red-800" : "text-slate-400"
-                              }`}
-                            />
-                            <span>Swap</span>
-                          </button>
-                        </div>
-                        {q.mode === "written" ? (
-                          <div className="mt-3 flex items-end gap-2">
-                            <div className="h-px flex-1 border-b border-dashed border-gray-300" />
-                            <span className="text-xs text-gray-400">Answer line</span>
-                          </div>
-                        ) : (
-                          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1.5">
-                            {q.choices.map((c, i) => (
-                              <span key={i} className="text-sm text-gray-600">
-                                <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
-                                {c}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                          {q.competencyCode && (
-                            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
-                              {q.competencyCode}
-                            </span>
-                          )}
-                          {q.difficulty && (
-                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200">
-                              {q.difficulty}
-                            </span>
-                          )}
-                          {q.topic && (
-                            <span className="rounded-md bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                              {q.topic}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {q.mode === "written" ? (
-                        <span className="hidden w-20 shrink-0 items-center justify-center rounded-md bg-amber-50 text-[11px] font-semibold text-amber-700 sm:flex border border-amber-200">
-                          WRITTEN
-                        </span>
-                      ) : (
-                        <span className="hidden w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-600 sm:flex border border-slate-200">
-                          {typeof doc.answers[q.number - 1] === "object" && doc.answers[q.number - 1] !== null
-                            ? (doc.answers[q.number - 1] as any)?.correctKey ||
-                              (doc.answers[q.number - 1] as any)?.letter ||
-                              "—"
-                            : String(doc.answers[q.number - 1] ?? "—")}
-                        </span>
-                      )}
+                  {/* 4 Header Fields: Name, Section, Date, Score */}
+                  <div className="my-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold text-slate-900 border-b border-slate-900 pb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tracking-wider">NAME:</span>
+                      <span className="flex-1 border-b border-slate-500 border-dashed" />
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tracking-wider">SECTION:</span>
+                      <span className="flex-1 border-b border-slate-500 border-dashed" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tracking-wider">DATE:</span>
+                      <span className="flex-1 border-b border-slate-500 border-dashed" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tracking-wider">SCORE:</span>
+                      <span className="flex-1 border-b border-slate-500 border-dashed" />
+                    </div>
+                  </div>
+
+                  {/* General Directions */}
+                  <div className="mb-5 text-xs text-slate-800 italic bg-slate-50/70 p-2.5 rounded border border-slate-200">
+                    <span className="font-bold not-italic text-slate-900">General Directions:</span> Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
+                  </div>
+
+                  {/* Reading Selection if present */}
+                  {doc.passageText && (
+                    <div className="mb-6 rounded-xl border border-red-200/90 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm text-xs leading-relaxed text-slate-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-red-100">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-800">
+                            <BookOpen className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100/60 px-2 py-0.5 rounded-full border border-red-200/60">
+                              Reading Selection
+                            </span>
+                            <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
+                              {doc.passageTitle || "Extracted Reading Story"}
+                            </h4>
+                          </div>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                          {doc.passageText.trim().split(/\s+/).length} words
+                        </span>
+                      </div>
+                      <div className="whitespace-pre-line text-slate-800 font-serif text-[13px] leading-relaxed select-text bg-white/70 p-3.5 rounded-lg border border-slate-200/60">
+                        {doc.passageText}
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-400 italic flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        <span>Verbatim passage automatically synced to AralSync Reading Passage Bank for Fluency & Comprehension Checks.</span>
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Topic sections with DepEd headers and continuous numbering */}
+                  <div className="space-y-7">
+                    {(doc.sections && doc.sections.length > 0
+                      ? doc.sections
+                      : deriveSectionsFromQuestions(doc.questions, doc.subject)
+                    ).map((section, sIdx) => {
+                      const sectionQuestions = doc.questions.filter(
+                        (q) => q.number >= section.startItem && q.number <= section.endItem
+                      );
+                      const isEditingThisSection = editingSectionIdx === sIdx;
+
+                      return (
+                        <div key={sIdx} className="border-t border-slate-200 pt-5 first:border-t-0 first:pt-0">
+                          {/* Section Header & Directions */}
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between gap-2 border-b border-slate-400 pb-1">
+                              <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wide text-slate-900">
+                                PART {section.partNumber}: {section.topic} ({section.itemRange})
+                              </h4>
+                              {!isEditingThisSection && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSectionIdx(sIdx);
+                                    setEditingInstructionText(section.instructions);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-red-800 transition-colors cursor-pointer"
+                                  title="Customize directions for this topic"
+                                >
+                                  <PenLine className="h-3 w-3" />
+                                  <span>Edit Directions</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Inline editable instructions */}
+                            {isEditingThisSection ? (
+                              <div className="mt-2 space-y-2">
+                                <textarea
+                                  value={editingInstructionText}
+                                  onChange={(e) => setEditingInstructionText(e.target.value)}
+                                  rows={2}
+                                  className="w-full rounded-lg border border-red-300 bg-white p-2 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-red-800/20"
+                                  placeholder="Enter directions for this section…"
+                                />
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (doc) {
+                                        const currentSections =
+                                          doc.sections && doc.sections.length > 0
+                                            ? [...doc.sections]
+                                            : deriveSectionsFromQuestions(doc.questions, doc.subject);
+                                        currentSections[sIdx] = {
+                                          ...currentSections[sIdx],
+                                          instructions: editingInstructionText.trim(),
+                                        };
+                                        setDoc({ ...doc, sections: currentSections });
+                                        setIsSaved(false);
+                                      }
+                                      setEditingSectionIdx(null);
+                                    }}
+                                    className="rounded bg-red-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-900 cursor-pointer"
+                                  >
+                                    Save Directions
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingSectionIdx(null)}
+                                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="mt-1.5 text-xs italic font-medium text-slate-700">
+                                {section.instructions}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Numbered Questions under this Section */}
+                          <div className="space-y-4 pl-1">
+                            {sectionQuestions.map((q) => {
+                              const rawAns = doc.answers?.[q.number - 1] ?? q.correctAnswer ?? "A";
+                              const currentKey =
+                                typeof rawAns === "object" && rawAns !== null
+                                  ? (rawAns as any).correctKey || (rawAns as any).letter || "A"
+                                  : String(rawAns || "A").toUpperCase();
+
+                              return (
+                                <div key={q.number} className="group relative text-xs">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <p className="font-medium text-slate-900 leading-relaxed">
+                                      <span className="font-bold mr-1.5">{q.number}.</span>
+                                      {q.prompt}
+                                    </p>
+
+                                    {/* Right-hand margin: Interactive Answer Key Selector + Swap Button */}
+                                    <div className="shrink-0 flex items-center gap-2">
+                                      {q.mode === "written" ? (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-[10px] font-bold text-amber-800 border border-amber-200">
+                                          WRITTEN
+                                        </span>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                            Key:
+                                          </span>
+                                          <div className="inline-flex items-center rounded-md bg-slate-100 p-0.5 border border-slate-200">
+                                            {PrintAry.map((letter) => {
+                                              const isSelected = currentKey === letter;
+                                              return (
+                                                <button
+                                                  key={letter}
+                                                  type="button"
+                                                  onClick={() => handleKeyChange(q.number, letter)}
+                                                  className={`h-5 w-5 rounded text-[10px] font-bold transition-all flex items-center justify-center cursor-pointer ${
+                                                    isSelected
+                                                      ? "bg-red-800 text-white shadow-xs font-extrabold"
+                                                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
+                                                  }`}
+                                                  title={`Set correct answer to [${letter}] and swap choice text`}
+                                                >
+                                                  {letter}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Subtle hover Swap button for teacher preview */}
+                                      <button
+                                        type="button"
+                                        disabled={swappingItem === q.number}
+                                        onClick={() => handleSwapQuestion(q.number)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-red-50 hover:text-red-900 hover:border-red-300 cursor-pointer"
+                                        title="Swap question with alternate item"
+                                      >
+                                        <RefreshCw className={`h-2.5 w-2.5 ${swappingItem === q.number ? "animate-spin text-red-800" : ""}`} />
+                                        <span>Swap</span>
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Choices formatted like real test paper */}
+                                  {q.mode === "written" ? (
+                                    <div className="mt-2 pl-4">
+                                      <div className="h-6 border-b border-dashed border-slate-400 w-3/4" />
+                                    </div>
+                                  ) : (
+                                    <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 pl-4">
+                                      {q.choices.map((c, i) => (
+                                        <div key={i} className="flex items-baseline gap-2 text-slate-800">
+                                          <span className="font-bold text-slate-900">{PrintAry[i]}.</span>
+                                          <span>{c}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -3487,25 +4159,69 @@ function UploadExamForm({
   );
 }
 
-/* ━━━ PRINTABLE: QUESTIONNAIRE ━━━ */
+/* ━━━ PRINTABLE: OFFICIAL DEPED QUESTIONNAIRE ━━━ */
 function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
+  const sections =
+    doc.sections && doc.sections.length > 0
+      ? doc.sections
+      : deriveSectionsFromQuestions(doc.questions, doc.subject);
+
   return (
-    <div className="bg-white p-8 text-black">
-      <div className="mb-6 border-b-2 border-black pb-3 text-center">
-        <h1 className="text-lg font-bold uppercase">AralSync — Official Assessment Questionnaire</h1>
-        <p className="text-sm">{doc.title}</p>
-        <p className="text-xs text-gray-700">Subject: {doc.subject} • Items: {doc.itemCount}</p>
+    <div className="bg-white p-8 text-black font-sans max-w-4xl mx-auto">
+      {/* Official DepEd School Header with Top Middle Logo and School Name */}
+      <div className="mb-5 border-b-2 border-black pb-3 text-center">
+        <img
+          src="/aral-logo.png"
+          alt="School Logo"
+          className="h-16 w-16 object-contain mx-auto mb-2 print:block"
+        />
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+          Republic of the Philippines
+        </p>
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+          Department of Education
+        </p>
+        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+          National Capital Region — Division of City Schools
+        </p>
+        <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
+          GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+        </h1>
+        <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
+          {doc.title}
+        </h2>
+        <p className="text-xs text-gray-700 mt-0.5">
+          Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
+          {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
+        </p>
       </div>
 
-      {/* Learner info */}
-      <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-        <div className="flex gap-2"><span className="font-semibold">Name:</span><span className="flex-1 border-b border-gray-400" /></div>
-        <div className="flex gap-2"><span className="font-semibold">LRN:</span><span className="flex-1 border-b border-gray-400" /></div>
-        <div className="flex gap-2"><span className="font-semibold">Grade &amp; Section:</span><span className="flex-1 border-b border-gray-400" /></div>
-        <div className="flex gap-2"><span className="font-semibold">Date:</span><span className="flex-1 border-b border-gray-400" /></div>
+      {/* 4 Learner Info Header Fields: Name, Section, Date, Score */}
+      <div className="mb-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold border-b border-black pb-4 text-black">
+        <div className="flex items-center gap-2">
+          <span className="font-bold tracking-wider">NAME:</span>
+          <span className="flex-1 border-b border-black" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-bold tracking-wider">SECTION:</span>
+          <span className="flex-1 border-b border-black" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-bold tracking-wider">DATE:</span>
+          <span className="flex-1 border-b border-black" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-bold tracking-wider">SCORE:</span>
+          <span className="flex-1 border-b border-black" />
+        </div>
       </div>
 
-      {/* Reading selection box for print */}
+      {/* General Directions */}
+      <div className="mb-5 text-xs italic text-gray-800">
+        <span className="font-bold not-italic">General Directions:</span> Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
+      </div>
+
+      {/* Reading selection box for print if present */}
       {doc.passageText && (
         <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
           <p className="font-bold uppercase tracking-wider text-black mb-1">
@@ -3517,25 +4233,53 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
         </div>
       )}
 
-      <div className="text-sm">
-        {doc.questions.map((q) => (
-          <div key={q.number} className="mb-4">
-            <p className="font-semibold">
-              {q.number}. {q.prompt}
-            </p>
-            {q.mode === "written" ? (
-              <div className="mt-2 border-b border-black pl-6" style={{ width: "60%" }} />
-            ) : (
-              <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-0.5 pl-6">
-                {q.choices.map((c, i) => (
-                  <p key={i}>
-                    {PrintAry[i]}. {c}
+      {/* Topic sections with DepEd headers and continuous numbering */}
+      <div className="space-y-6 text-xs">
+        {sections.map((section, sIdx) => {
+          const sectionQuestions = doc.questions.filter(
+            (q) => q.number >= section.startItem && q.number <= section.endItem
+          );
+
+          return (
+            <div key={sIdx} className="break-inside-avoid">
+              {/* Official DepEd Section Header & Directions */}
+              <div className="mb-2.5 border-b border-black pb-1">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-black">
+                  PART {section.partNumber}: {section.topic} ({section.itemRange})
+                </h3>
+                {section.instructions && (
+                  <p className="mt-0.5 text-[11px] italic font-medium text-gray-900">
+                    {section.instructions}
                   </p>
+                )}
+              </div>
+
+              {/* Questions */}
+              <div className="space-y-3.5 pl-1">
+                {sectionQuestions.map((q) => (
+                  <div key={q.number} className="break-inside-avoid mb-3">
+                    <p className="font-medium text-black leading-relaxed">
+                      <span className="font-bold mr-1.5">{q.number}.</span>
+                      {q.prompt}
+                    </p>
+                    {q.mode === "written" ? (
+                      <div className="mt-2 border-b border-black pl-6" style={{ width: "60%" }} />
+                    ) : (
+                      <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 pl-4">
+                        {q.choices.map((c, i) => (
+                          <div key={i} className="flex items-baseline gap-1.5">
+                            <span className="font-bold">{PrintAry[i]}.</span>
+                            <span>{c}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

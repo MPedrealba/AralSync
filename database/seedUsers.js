@@ -38,42 +38,48 @@ const seedDB = async () => {
 
     console.log('Hashing passwords...');
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('123456', salt);
+    const defaultPassword = await bcrypt.hash('password123', salt);
 
     console.log('Creating users...');
 
     const principal = await User.create({
       username: 'principal1',
-      password: hashedPassword,
+      password: defaultPassword,
       name: 'Principal Santos',
       role: 'principal',
+      email: 'principal.santos@deped.gov.ph',
+      mustChangePassword: true,
     });
-
-    const coordinatorPassword = await bcrypt.hash('password123', salt);
 
     const coordinator = await User.create({
       username: 'coordinator1',
-      password: coordinatorPassword,
+      password: defaultPassword,
       name: 'Coordinator Sarah',
       role: 'coordinator',
+      email: 'coordinator.sarah@deped.gov.ph',
+      mustChangePassword: true,
     });
 
     const teacher = await User.create({
       username: 'teacher1',
-      password: hashedPassword,
+      password: defaultPassword,
       name: 'Teacher Miguel',
       role: 'teacher',
       specialization: 'reading',
       assignedSubject: 'Reading',
+      email: 'miguel.teacher@deped.gov.ph',
+      mustChangePassword: true,
     });
 
     const teacher2 = await User.create({
       username: 'teacher2',
-      password: hashedPassword,
+      password: defaultPassword,
       name: 'Teacher Elena',
       role: 'teacher',
       specialization: 'all-subjects',
       assignedSubject: 'All',
+      email: 'elena.teacher@deped.gov.ph',
+      mustChangePassword: true,
     });
 
     // Ability drives how well each student performs (0..1).
@@ -103,9 +109,10 @@ const seedDB = async () => {
       const d = studentsData[i];
       const user = await User.create({
         username: d.username,
-        password: hashedPassword,
+        password: defaultPassword,
         name: d.name,
         role: 'student',
+        mustChangePassword: true,
       });
       students.push({ user, ...d });
 

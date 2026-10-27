@@ -16,6 +16,7 @@ const run = async () => {
       name: 'Coordinator Sarah',
       role: 'coordinator',
       active: true,
+      mustChangePassword: true,
     });
     console.log('Created coordinator1 with Coordinator Sarah');
   } else {
@@ -23,13 +24,14 @@ const run = async () => {
     coordinator.password = coordHashed;
     coordinator.role = 'coordinator';
     coordinator.active = true;
+    coordinator.mustChangePassword = true;
     await coordinator.save();
     console.log('Updated coordinator1 with Coordinator Sarah & password123');
   }
 
   // 2. Ensure teacher1 (Teacher Miguel) exists
   let teacher = await User.findOne({ username: 'teacher1' });
-  const teacherHashed = await bcrypt.hash('123456', 10);
+  const teacherHashed = await bcrypt.hash('password123', 10);
   if (!teacher) {
     teacher = await User.create({
       username: 'teacher1',
@@ -38,8 +40,13 @@ const run = async () => {
       role: 'teacher',
       specialization: 'reading',
       active: true,
+      mustChangePassword: true,
     });
     console.log('Created teacher1');
+  } else {
+    teacher.password = teacherHashed;
+    teacher.mustChangePassword = true;
+    await teacher.save();
   }
 
   // 3. Ensure teacher2 (Teacher Elena) exists for testing coordinator re-assignment
@@ -52,8 +59,13 @@ const run = async () => {
       role: 'teacher',
       specialization: 'all-subjects',
       active: true,
+      mustChangePassword: true,
     });
     console.log('Created teacher2');
+  } else {
+    teacher2.password = teacherHashed;
+    teacher2.mustChangePassword = true;
+    await teacher2.save();
   }
 
   // 4. Assign all unassigned LearnerRecords to teacher1 by default

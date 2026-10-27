@@ -70,6 +70,10 @@ const AssessmentSchema = new mongoose.Schema({
       score: { type: Number },
     },
   ],
+  // ── Delivery Mode & Online CBT Answers ──
+  deliveryMode: { type: String, enum: ['paper', 'online'], default: 'paper' },
+  studentAnswers: [{ type: String }],
+  timeSpentSec: { type: Number, default: 0 },
   date: { type: Date, default: Date.now }
 }, { timestamps: true });
 

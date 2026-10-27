@@ -96,9 +96,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, username, password, role, email, specialization, assignedSubject } = body;
 
-    if (!name || !username || !password || !role) {
+    if (!name || !username || !role) {
       return NextResponse.json(
-        { success: false, error: 'Name, username, password, and role are required.' },
+        { success: false, error: 'Name, username, and role are required.' },
         { status: 400 }
       );
     }
@@ -114,7 +114,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const initialPassword = (password && password.trim()) ? password.trim() : 'password123';
+    const hashed = await bcrypt.hash(initialPassword, 10);
     const user = await User.create({
       username: username.trim(),
       password: hashed,
@@ -214,6 +215,7 @@ export async function PATCH(req: NextRequest) {
       user.mustChangePassword = true;
     } else if (password && password.trim()) {
       user.password = await bcrypt.hash(password.trim(), 10);
+      user.mustChangePassword = true;
     }
 
     await user.save();

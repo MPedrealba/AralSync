@@ -17,6 +17,24 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+function shuffleChoices(choices: string[], correctLetter: string): { shuffledChoices: string[]; newCorrectAnswer: string } {
+  const letters = ['A', 'B', 'C', 'D'];
+  const cleanLetter = (correctLetter || 'A').toUpperCase().trim().slice(0, 1);
+  const correctIdx = letters.indexOf(cleanLetter);
+  const correctText = choices[correctIdx >= 0 && correctIdx < choices.length ? correctIdx : 0];
+
+  // Fisher-Yates shuffle
+  const shuffled = [...choices];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const newIdx = shuffled.indexOf(correctText);
+  const newLetter = newIdx >= 0 && newIdx < letters.length ? letters[newIdx] : 'A';
+  return { shuffledChoices: shuffled, newCorrectAnswer: newLetter };
+}
+
 /**
  * POST /api/teacher/questionnaire/swap-question
  * Swaps a single item in a generated questionnaire with an authentic alternative
@@ -78,17 +96,28 @@ export async function POST(req: NextRequest) {
     }
 
     const chosen = shuffle(candidates)[0];
-    const letter = chosen.correctAnswer || "A";
+    const rawChoices =
+      Array.isArray(chosen.choices) && chosen.choices.length > 0
+        ? chosen.choices
+        : ["Option A", "Option B", "Option C", "Option D"];
+    const qMode = (chosen.mode || mode || "mc") as "mc" | "written";
+    const rawLetter = chosen.correctAnswer || "A";
+
+    let finalChoices = rawChoices;
+    let letter = rawLetter;
+
+    if (qMode === "mc" && rawChoices.length > 0) {
+      const { shuffledChoices, newCorrectAnswer } = shuffleChoices(rawChoices, rawLetter);
+      finalChoices = shuffledChoices;
+      letter = newCorrectAnswer;
+    }
 
     const formattedQuestion = {
       number: itemNumber,
       id: `q${itemNumber}`,
       prompt: chosen.prompt,
-      choices:
-        Array.isArray(chosen.choices) && chosen.choices.length > 0
-          ? chosen.choices
-          : ["Option A", "Option B", "Option C", "Option D"],
-      mode: (chosen.mode || mode || "mc") as "mc" | "written",
+      choices: finalChoices,
+      mode: qMode,
       difficulty:
         chosen.difficulty === "easy"
           ? "Easy"

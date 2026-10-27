@@ -3,12 +3,13 @@ import connectDB from '../../../../../../database/db';
 import Question from '../../../../../../models/Question';
 import AnswerKey from '../../../../../../models/AnswerKey';
 import User from '../../../../../../models/User';
+import LearningMaterial from '../../../../../../models/LearningMaterial';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 
 /**
  * GET /api/teacher/questionnaire/topics
  * Returns official curriculum topics separated by skill from the learning materials,
- * subject status (Reading active; Math & Science locked pending materials),
+ * dynamic subject status (Reading active; Math & Science active if materials uploaded),
  * and the list of topics already assessed by the authenticated teacher.
  */
 export async function GET(req: NextRequest) {
@@ -24,13 +25,27 @@ export async function GET(req: NextRequest) {
       (user as any)?.assignedSubject ||
       ((user as any)?.specialization === 'reading' ? 'Reading' : 'All');
 
-    // 2. Fetch distinct Reading topics from official Question Bank
-    const readingTopics = await Question.distinct('topic', { subject: 'Reading' });
-    const sortedTopics = readingTopics
+    // 2. Dynamic status check for active learning materials
+    const mathMaterialCount = await LearningMaterial.countDocuments({ subject: 'Math', isActive: true });
+    const scienceMaterialCount = await LearningMaterial.countDocuments({ subject: 'Science', isActive: true });
+
+    // 3. Fetch distinct topics from official Question Bank for target subject
+    const requestedSubject = req.nextUrl.searchParams.get('subject');
+    const targetSubject =
+      requestedSubject && requestedSubject !== 'All'
+        ? requestedSubject
+        : (assignedSubject !== 'All' ? assignedSubject : 'Reading');
+
+    const topicFilter: Record<string, any> = { subject: targetSubject };
+    if (targetSubject === 'Reading') {
+      topicFilter.source = { $regex: /ARAL/i };
+    }
+    const subjectTopics = await Question.distinct('topic', topicFilter);
+    const sortedTopics = subjectTopics
       .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
       .sort((a, b) => a.localeCompare(b));
 
-    // 3. Find topics this specific teacher has already generated an assessment for
+    // 4. Find topics this specific teacher has already generated an assessment for
     const teacherAnswerKeys = await AnswerKey.find({
       teacherId: authUser.id,
       topic: { $exists: true, $ne: '' },
@@ -47,32 +62,39 @@ export async function GET(req: NextRequest) {
       )
     );
 
+    const subjects = [
+      {
+        id: 'Reading',
+        name: 'Reading',
+        status: 'active',
+        source: 'DepEd ARAL Workbooks (KS1, KS2, KS3)',
+        bubbleSheetUrl: '/bubble-sheets/reading-bubble.pdf',
+      },
+      {
+        id: 'Math',
+        name: 'Mathematics',
+        status: mathMaterialCount > 0 ? 'active' : 'locked',
+        ...(mathMaterialCount > 0
+          ? { source: 'DepEd ARAL Math Workbooks' }
+          : { notice: 'Official Math ARAL learning material PDFs pending upload by coordinator/admin.' }),
+        bubbleSheetUrl: '/bubble-sheets/mathematics-bubble.pdf',
+      },
+      {
+        id: 'Science',
+        name: 'Science',
+        status: scienceMaterialCount > 0 ? 'active' : 'locked',
+        ...(scienceMaterialCount > 0
+          ? { source: 'DepEd ARAL Science Workbooks' }
+          : { notice: 'Official Science ARAL learning material PDFs pending upload by coordinator/admin.' }),
+        bubbleSheetUrl: '/bubble-sheets/science-bubble.pdf',
+      },
+    ];
+
     return NextResponse.json({
       success: true,
       assignedSubject,
-      subjects: [
-        {
-          id: 'Reading',
-          name: 'Reading',
-          status: 'active',
-          source: 'DepEd ARAL Workbooks (KS1, KS2, KS3)',
-          bubbleSheetUrl: '/bubble-sheets/reading-bubble.pdf',
-        },
-        {
-          id: 'Math',
-          name: 'Mathematics',
-          status: 'locked',
-          notice: 'Official Math ARAL learning material PDFs pending upload by coordinator/admin.',
-          bubbleSheetUrl: '/bubble-sheets/mathematics-bubble.pdf',
-        },
-        {
-          id: 'Science',
-          name: 'Science',
-          status: 'locked',
-          notice: 'Official Science ARAL learning material PDFs pending upload by coordinator/admin.',
-          bubbleSheetUrl: '/bubble-sheets/science-bubble.pdf',
-        },
-      ],
+      targetSubject,
+      subjects,
       topics: sortedTopics,
       usedTopics,
       totalAvailableTopics: sortedTopics.length,

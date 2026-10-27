@@ -1235,6 +1235,1608 @@ const aralReadingQuestions = [
     correctAnswer: 'A',
     source: 'DepEd ARAL KS3 Plus Workbook',
   },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Ia-3",
+    "competency": "Context Clues & Structural Analysis",
+    "topic": "Context Clues & Roots",
+    "difficulty": "mid",
+    "prompt": "In the sentence, \"The deluge inundated the low-lying agricultural plains, submerging rice crops under feet of water,\" what does \"inundated\" mean?",
+    "choices": [
+      "Flooded or overwhelmed with water",
+      "Dried out completely",
+      "Fertilized with rich soil",
+      "Protected from wind"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W1"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Ia-4",
+    "competency": "Context Clues & Structural Analysis",
+    "topic": "Context Clues & Roots",
+    "difficulty": "mid",
+    "prompt": "What does the Latin root \"dict\" mean in English words such as \"predict\", \"dictate\", and \"verdict\"?",
+    "choices": [
+      "To write",
+      "To speak or say",
+      "To hear or listen",
+      "To lead or guide"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W1"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Ia-5",
+    "competency": "Context Clues & Structural Analysis",
+    "topic": "Context Clues & Roots",
+    "difficulty": "hard",
+    "prompt": "The teacher described the student's explanation as \"lucid\" because every single step was crystal clear and easy to follow. What is the meaning of \"lucid\"?",
+    "choices": [
+      "Confusing and complex",
+      "Extremely loud",
+      "Clear and easy to understand",
+      "Brief and incomplete"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W1"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-2",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "easy",
+    "prompt": "What is the implied meaning of the idiom \"spill the beans\" in: \"Do not spill the beans about the surprise party\"?",
+    "choices": [
+      "Drop food on the dining table",
+      "Reveal a confidential secret",
+      "Cook dinner for friends",
+      "Buy groceries for an event"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-3",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "easy",
+    "prompt": "Which of the following is a LITERAL statement rather than a figurative expression?",
+    "choices": [
+      "She has a heart of solid gold.",
+      "The morning sun rose over the eastern horizon at 6:00 AM.",
+      "Time crawled by like a slow snail.",
+      "His angry words cut deeper than a sharp knife."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-4",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "mid",
+    "prompt": "When an author writes, \"He walked into the job interview with his head held high and a firm handshake,\" what is implied about his emotional state?",
+    "choices": [
+      "He was arrogant and disrespectful.",
+      "He felt prepared, confident, and self-assured.",
+      "He was terrified and nervous.",
+      "He had physical neck pain."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-5",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "mid",
+    "prompt": "In the sentence, \"Her bedroom was a pigsty,\" what type of figurative language is used to imply that the room is messy?",
+    "choices": [
+      "Metaphor",
+      "Simile",
+      "Personification",
+      "Hyperbole"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-6",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "mid",
+    "prompt": "What does the idiom mean in: \"After studying all night, Juan decided to call it a day and sleep\"?",
+    "choices": [
+      "Shout out the current date",
+      "Stop working or studying for the rest of the day",
+      "Start an entirely new assignment",
+      "Cancel tomorrow's exam"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-7",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "hard",
+    "prompt": "In the excerpt, \"The dark storm clouds gathered ominously over the quiet village,\" what mood is implied by the author's description?",
+    "choices": [
+      "A cheerful and celebratory mood",
+      "A foreboding sense of impending danger or hardship",
+      "A peaceful and relaxing atmosphere",
+      "A humorous and sarcastic tone"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-8",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "hard",
+    "prompt": "Which statement best demonstrates situational irony, where the outcome contradicts what is logically expected?",
+    "choices": [
+      "The fire station burned down to the ground while firefighters were away.",
+      "It rained heavily during the monsoon season.",
+      "The diligent student studied hard and passed his test.",
+      "A dog barked loudly at an unfamiliar mail carrier."
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIb-9",
+    "competency": "Literal vs. Implied Meaning",
+    "topic": "Literal vs. Implied Meaning",
+    "difficulty": "hard",
+    "prompt": "When a character says, \"Oh wonderful, another flat tire in the middle of nowhere,\" what literary device is used to convey implied frustration?",
+    "choices": [
+      "Sarcasm / Verbal Irony",
+      "Understatement",
+      "Onomatopoeia",
+      "Metonymy"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W2"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-1",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "easy",
+    "prompt": "Which literary term refers to the central time, geographic location, and environment in which a story takes place?",
+    "choices": [
+      "Theme",
+      "Setting",
+      "Plot climax",
+      "Protagonist"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-2",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "easy",
+    "prompt": "In a narrative, what do we call the main character who faces and strives to overcome the central conflict?",
+    "choices": [
+      "Antagonist",
+      "Protagonist",
+      "Foil",
+      "Narrator"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-3",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "mid",
+    "prompt": "A character struggling to decide whether to return a lost wallet or keep the cash is experiencing which type of conflict?",
+    "choices": [
+      "Character vs. Society",
+      "Character vs. Self (Internal Conflict)",
+      "Character vs. Nature",
+      "Character vs. Supernatural"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-4",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "mid",
+    "prompt": "Fishermen battling a massive ocean typhoon to reach the safety of the shore illustrates which type of conflict?",
+    "choices": [
+      "Character vs. Nature",
+      "Character vs. Character",
+      "Character vs. Self",
+      "Character vs. Technology"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-5",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "mid",
+    "prompt": "What method of characterization is demonstrated when an author reveals traits through actions, dialogue, and thoughts rather than direct statements?",
+    "choices": [
+      "Direct characterization",
+      "Indirect characterization",
+      "Passive description",
+      "Chronological exposition"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-6",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "hard",
+    "prompt": "What is a \"dynamic character\" in narrative fiction?",
+    "choices": [
+      "A character who remains completely unchanged throughout the story",
+      "A character who undergoes significant internal growth or change",
+      "A minor background character with no speaking lines",
+      "The villain who opposes the main character"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-7",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "hard",
+    "prompt": "How does a bleak, desolate winter setting typically impact the mood of a narrative?",
+    "choices": [
+      "It creates feelings of cheerfulness and excitement",
+      "It evokes feelings of isolation, hardship, and melancholy",
+      "It encourages characters to celebrate joyous events",
+      "It resolves all external interpersonal conflicts"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7LT-IIIb-8",
+    "competency": "Literary Elements & Character Analysis",
+    "topic": "Setting, Character & Conflict",
+    "difficulty": "hard",
+    "prompt": "Which element of plot structure represents the turning point of highest emotional tension where the conflict is decided?",
+    "choices": [
+      "Exposition",
+      "Rising action",
+      "Climax",
+      "Denouement"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W3"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-1",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "easy",
+    "prompt": "What is an inference in reading comprehension?",
+    "choices": [
+      "Copying text directly from the book",
+      "A logical conclusion based on textual evidence and prior knowledge",
+      "The dictionary definition of an unfamiliar word",
+      "A summary of the author's biography"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-2",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "easy",
+    "prompt": "Maria entered the house holding a dripping umbrella and wearing soaked rubber boots. What can you logically infer?",
+    "choices": [
+      "It is snowing outside.",
+      "It was raining heavily outside.",
+      "She was swimming in the river.",
+      "She spilled a glass of juice."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-3",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "mid",
+    "prompt": "The dog cowered under the sofa and began trembling violently every time thunder cracked outside. What can you infer about the dog?",
+    "choices": [
+      "The dog loves playing in stormy weather.",
+      "The dog is terrified of loud thunder and storms.",
+      "The dog is searching for a chew toy under the sofa.",
+      "The dog is angry at its owner."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-4",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "mid",
+    "prompt": "Lito set three loud alarm clocks, laid out his uniform the night before, and reviewed his flashcards until midnight. What can you infer?",
+    "choices": [
+      "He has an important exam or event he takes very seriously.",
+      "He plans to skip school tomorrow.",
+      "He is going on an unscheduled vacation.",
+      "He does not care about his academic performance."
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-5",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "mid",
+    "prompt": "The grocery store shelves were completely empty of canned goods and bottled water as customers lined up with overloaded carts. What can you infer?",
+    "choices": [
+      "The store is going out of business permanently.",
+      "Residents are preparing for an approaching disaster or typhoon.",
+      "A grand celebration is taking place in the town square.",
+      "Prices have doubled overnight."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-6",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "mid",
+    "prompt": "When the teacher handed back the graded math test, Ramon smiled broadly, pumped his fist in the air, and hurried to show his friend. What can you infer?",
+    "choices": [
+      "He failed the exam completely.",
+      "He scored very high and felt proud of his achievement.",
+      "He forgot to write his name on the paper.",
+      "He was disappointed with his results."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-7",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "hard",
+    "prompt": "\"The ancient wooden floorboards groaned beneath each cautious step, and cobwebs clung to the cracked picture frames.\" What can you conclude about the house?",
+    "choices": [
+      "It was newly built last week.",
+      "It is an old, abandoned, or neglected dwelling.",
+      "It is full of lively young children.",
+      "It has modern automated lighting."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-8",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "hard",
+    "prompt": "A marine biologist observed that whenever the local mangrove forest was damaged, coastal fish populations dropped dramatically. What conclusion can be drawn?",
+    "choices": [
+      "Mangrove forests provide vital nursery habitats for coastal fish.",
+      "Fish prefer to live in open water without vegetation.",
+      "Mangroves harm marine biodiversity.",
+      "Cutting down mangroves increases fishing productivity."
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-9",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "hard",
+    "prompt": "Elena glanced repeatedly at the clock on the wall, tapped her pen rhythmically against the desk, and sighed while staring out the window. What can you infer?",
+    "choices": [
+      "She is deeply fascinated by the lecture.",
+      "She is bored, impatient, or eager for time to pass.",
+      "She is taking detailed lecture notes.",
+      "She has fallen fast asleep."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IVa-10",
+    "competency": "Inferential Comprehension",
+    "topic": "Inferences & Drawing Conclusions",
+    "difficulty": "hard",
+    "prompt": "Based on the statement, \"Although the team practiced under blistering heat every afternoon, their defensive coordination never faltered,\" what conclusion can be drawn about the players?",
+    "choices": [
+      "They lack athletic discipline.",
+      "They possess great resilience, stamina, and dedication.",
+      "They prefer playing indoor sports.",
+      "They surrendered after the first quarter."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W4"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-1",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "easy",
+    "prompt": "What are the three most common general purposes an author has for writing a text?",
+    "choices": [
+      "To persuade, inform, or entertain",
+      "To describe, define, or spell",
+      "To criticize, question, or complain",
+      "To edit, revise, or format"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-2",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "easy",
+    "prompt": "A recipe that explains step-by-step instructions for cooking chicken adobo is written primarily to:",
+    "choices": [
+      "Persuade people to become vegetarian",
+      "Inform and instruct the reader on preparing a meal",
+      "Entertain readers with fantasy elements",
+      "Express the author's political opinions"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-3",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "mid",
+    "prompt": "An editorial column urging community members to segregate biodegradable and recyclable waste is written primarily to:",
+    "choices": [
+      "Entertain with a funny story",
+      "Persuade the audience to adopt eco-friendly waste habits",
+      "Provide scientific historical dates of trash dumps",
+      "Teach readers how to write essays"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-4",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "mid",
+    "prompt": "Which pronoun indicates that a narrative is written in the FIRST-PERSON point of view?",
+    "choices": [
+      "He",
+      "They",
+      "I",
+      "You"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-5",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "mid",
+    "prompt": "In which point of view does an all-knowing narrator reveal the private thoughts, emotions, and motivations of all characters?",
+    "choices": [
+      "First-person limited",
+      "Second-person imperative",
+      "Third-person omniscient",
+      "Third-person objective"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-6",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "mid",
+    "prompt": "A comedic comic strip depicting the mischievous adventures of a family pet is written primarily to:",
+    "choices": [
+      "Inform about veterinary medicine",
+      "Entertain and amuse the reader",
+      "Persuade readers to purchase a purebred animal",
+      "Explain the history of animal domestication"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-7",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "hard",
+    "prompt": "How does an author's personal bias most clearly manifest in an informative news article?",
+    "choices": [
+      "By presenting balanced statistics from multiple independent sources",
+      "By using loaded emotional adjectives and presenting only one side of the issue",
+      "By clearly citing all interviewed experts",
+      "By maintaining a neutral, factual tone throughout"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-8",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "hard",
+    "prompt": "Read the excerpt: \"You open your locker, take out your notebook, and realize you forgot your homework.\" What point of view is used?",
+    "choices": [
+      "First-person point of view",
+      "Second-person point of view",
+      "Third-person limited",
+      "Third-person omniscient"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-9",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "hard",
+    "prompt": "An author writes a biography highlighting a national hero's selfless sacrifices and devotion to his country. What is the author's tone toward the subject?",
+    "choices": [
+      "Mocking and cynical",
+      "Admiring and reverent",
+      "Indifferent and dismissive",
+      "Hostile and suspicious"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-Va-10",
+    "competency": "Author's Craft & Rhetorical Perspective",
+    "topic": "Author's Purpose & Point of View",
+    "difficulty": "hard",
+    "prompt": "Why would an author choose third-person limited over third-person omniscient?",
+    "choices": [
+      "To confuse the reader about who the main character is",
+      "To create an intimate connection with a single character's perspective and internal struggles",
+      "To describe events happening simultaneously in ten different locations",
+      "To eliminate all emotional conflict from the story"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W5"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-1",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "easy",
+    "prompt": "In the sentence, \"Because heavy rains flooded the major avenues, school classes were suspended,\" what is the CAUSE?",
+    "choices": [
+      "School classes were suspended",
+      "Heavy rains flooded the major avenues",
+      "Students stayed home to play",
+      "The water receded quickly"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-2",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "easy",
+    "prompt": "Which transition word or phrase commonly signals a CAUSE-AND-EFFECT relationship?",
+    "choices": [
+      "Consequently",
+      "Similarly",
+      "Meanwhile",
+      "Nevertheless"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-3",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "mid",
+    "prompt": "Identify the EFFECT in the following sentence: \"Deforestation on mountain slopes resulted in devastating landslides during the typhoon.\"",
+    "choices": [
+      "Deforestation on mountain slopes",
+      "Devastating landslides during the typhoon",
+      "Mountain slopes remaining stable",
+      "Planting indigenous trees"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-4",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "mid",
+    "prompt": "What was the direct cause in this scenario? \"The driver swerved suddenly to avoid an unexpected dog on the road, causing the vehicle to hit the guardrail.\"",
+    "choices": [
+      "Hitting the guardrail",
+      "Swerving to avoid a dog on the road",
+      "Replacing the car tire",
+      "Arriving at work on time"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-5",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "mid",
+    "prompt": "Which sentence correctly pairs a cause with its logical effect?",
+    "choices": [
+      "Because Lita watered her potted plants daily, they withered and died.",
+      "Since Carlos neglected to charge his tablet overnight, its battery died during class.",
+      "Although it was sunny, the river froze into ice.",
+      "The cake burned because the oven was turned off."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-6",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "mid",
+    "prompt": "What is a \"chain reaction\" or causal chain in a narrative?",
+    "choices": [
+      "A story where events occur completely at random without connection",
+      "A sequence where an initial cause produces an effect, which in turn becomes the cause of another effect",
+      "A text that only lists facts in alphabetical order",
+      "A story told in reverse chronological order"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-7",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "hard",
+    "prompt": "Read the passage: \"Global temperatures continue to rise. As a result, polar ice sheets melt faster, which leads to rising sea levels.\" What is the intermediate effect that also acts as a cause?",
+    "choices": [
+      "Rising global temperatures",
+      "Accelerated melting of polar ice sheets",
+      "Rising sea levels",
+      "Volcanic eruptions"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-8",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "hard",
+    "prompt": "Which conjunction signals a cause rather than an effect?",
+    "choices": [
+      "Therefore",
+      "As a consequence",
+      "Because of",
+      "Thus"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-9",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "hard",
+    "prompt": "How does establishing clear cause-and-effect relationships help readers comprehend scientific expository texts?",
+    "choices": [
+      "It helps readers understand how natural mechanisms function and why specific outcomes occur",
+      "It eliminates the need to remember vocabulary words",
+      "It turns non-fiction texts into entertaining fiction stories",
+      "It hides the author's main thesis"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIa-10",
+    "competency": "Cause and Effect Relationships",
+    "topic": "Cause and Effect",
+    "difficulty": "hard",
+    "prompt": "In the scenario where a drought leads to crop failure, which leads to increased food prices, what is the root (primary) cause?",
+    "choices": [
+      "High food prices",
+      "Crop failure",
+      "Severe prolonged drought",
+      "Transportation strikes"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W6"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-1",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "easy",
+    "prompt": "Which of the following statements is an objective FACT?",
+    "choices": [
+      "Mount Apo is the highest mountain peak in the Philippines.",
+      "Climbing mountains is the most thrilling hobby in the world.",
+      "Hiking in the rain is completely boring.",
+      "Everyone should visit Davao City at least once."
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-2",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "easy",
+    "prompt": "Which of the following statements represents an OPINION?",
+    "choices": [
+      "Water freezes at 0 degrees Celsius at sea level.",
+      "Vanilla is the most delicious ice cream flavor ever created.",
+      "The human heart pumps oxygenated blood throughout the body.",
+      "The Republic of the Philippines is an archipelago."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-3",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "mid",
+    "prompt": "Which word in the sentence signals that it is an opinion: \"That movie was the most magnificent film produced this decade\"?",
+    "choices": [
+      "Movie",
+      "Produced",
+      "Magnificent",
+      "Decade"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-4",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "mid",
+    "prompt": "Why is the statement, \"Jose Rizal was born on June 19, 1861, in Calamba, Laguna,\" classified as a FACT?",
+    "choices": [
+      "Because people feel proud when reading it",
+      "Because it can be verified and proven using historical records and documents",
+      "Because it expresses personal admiration",
+      "Because it was written in a poetry book"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-5",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "mid",
+    "prompt": "Which sentence blends both a fact and an opinion?",
+    "choices": [
+      "Baguio City is located in Benguet Province, and it is the absolute best vacation spot on Earth.",
+      "The sun is a medium-sized star at the center of our solar system.",
+      "Bicycles have two wheels and pedals.",
+      "Oxygen and nitrogen are gases found in the Earth's atmosphere."
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-6",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "mid",
+    "prompt": "Which clue phrase typically introduces a subjective opinion rather than a verified fact?",
+    "choices": [
+      "According to government census data,",
+      "Scientific laboratory experiments demonstrate that",
+      "In my personal view,",
+      "Official police records indicate that"
+    ],
+    "correctAnswer": "C",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-7",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "hard",
+    "prompt": "Why is distinguishing between fact and opinion critical for evaluating online media sources?",
+    "choices": [
+      "It enables readers to detect propaganda, avoid misinformation, and make reasoned judgments",
+      "It guarantees that all articles on the internet are accurate",
+      "It allows readers to memorize articles faster",
+      "It replaces the need for independent research"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-8",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "hard",
+    "prompt": "Consider this statement: \"Studies show that regular aerobic exercise improves cardiovascular endurance.\" How should this statement be classified?",
+    "choices": [
+      "An unprovable opinion",
+      "A verifiable factual claim based on empirical research",
+      "A persuasive sales slogan",
+      "A poetic metaphor"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-9",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "hard",
+    "prompt": "Which of the following represents an OPINION masquerading as a fact?",
+    "choices": [
+      "Dengue fever is transmitted by Aedes mosquitoes.",
+      "Obviously, private schools provide a superior education compared to public schools.",
+      "The Philippine flag features blue, red, white, and yellow colors.",
+      "Earth completes one revolution around the sun in approximately 365.25 days."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-VIIa-10",
+    "competency": "Distinguishing Fact from Opinion",
+    "topic": "Fact vs. Opinion",
+    "difficulty": "hard",
+    "prompt": "What makes an editorial article different from a standard front-page news report?",
+    "choices": [
+      "An editorial primarily presents the publisher's perspective and opinion, whereas a news report focuses on verifiable factual events",
+      "Editorials contain only fabricated stories",
+      "News reports are written in verse while editorials use prose",
+      "Editorials cannot cite any factual information"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-3",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "easy",
+    "prompt": "An advertisement showing a famous basketball star wearing a specific brand of sneakers is using which propaganda technique?",
+    "choices": [
+      "Bandwagon",
+      "Testimonial",
+      "Plain folks",
+      "Name-calling"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-4",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "easy",
+    "prompt": "Which propaganda device uses negative labels or insults to damage an opponent's reputation instead of addressing real issues?",
+    "choices": [
+      "Name-calling",
+      "Glittering generalities",
+      "Transfer",
+      "Card stacking"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-5",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "mid",
+    "prompt": "A politician photographed eating street food at a public market with ordinary workers is utilizing which propaganda technique?",
+    "choices": [
+      "Plain folks",
+      "Glittering generalities",
+      "Snob appeal",
+      "Bandwagon"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-6",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "mid",
+    "prompt": "Using vague, emotionally appealing words like \"freedom\", \"patriotism\", and \"glory\" without explaining specific plans is an example of:",
+    "choices": [
+      "Card stacking",
+      "Glittering generalities",
+      "Name-calling",
+      "Testimonial"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-7",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "mid",
+    "prompt": "An advertisement that highlights only the positive health benefits of a snack while completely hiding its high sugar content is guilty of:",
+    "choices": [
+      "Card stacking / Slanting",
+      "Bandwagon",
+      "Plain folks",
+      "Transfer"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-8",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "mid",
+    "prompt": "Associating a commercial product with national symbols like the Philippine flag or patriotic anthems is known as:",
+    "choices": [
+      "Transfer technique",
+      "Name-calling",
+      "Repetition",
+      "Plain folks"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-9",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "hard",
+    "prompt": "What is the primary psychological intention behind the \"Bandwagon\" propaganda technique?",
+    "choices": [
+      "To appeal to the human desire to fit in and avoid being excluded from the majority",
+      "To frighten consumers with complex technical statistics",
+      "To encourage deep critical reasoning before buying",
+      "To introduce logical mathematical arguments"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-10",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "hard",
+    "prompt": "A commercial claims: \"9 out of 10 dentists recommend this toothpaste for strong enamel!\" What technique or persuasive appeal is being used?",
+    "choices": [
+      "Appeal to authority / Expert testimonial",
+      "Name-calling",
+      "Emotional fear appeal",
+      "Plain folks appeal"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-11",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "hard",
+    "prompt": "Which campaign slogan best illustrates \"Glittering Generalities\"?",
+    "choices": [
+      "Our soda contains 15 grams of organic cane sugar.",
+      "Vote for Santos: Bringing Truth, Hope, and Honor to Every Family!",
+      "Don't be the last person on your block to get this internet package.",
+      "Our opponent is an irresponsible, dishonest amateur."
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 8,
+    "keyStage": "KS3",
+    "competencyCode": "EN8RC-VIIIa-12",
+    "competency": "Propaganda & Media Literacy",
+    "topic": "Propaganda Techniques",
+    "difficulty": "hard",
+    "prompt": "Why is recognizing propaganda techniques essential for critical media literacy?",
+    "choices": [
+      "It helps citizens make informed choices without being manipulated by deceptive rhetoric",
+      "It prevents people from enjoying entertainment media",
+      "It forces audiences to agree with political candidates",
+      "It teaches people how to create false advertisements"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W7"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-1",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "easy",
+    "prompt": "Which text structure organizes events in the chronological order in which they happened in time?",
+    "choices": [
+      "Cause and effect",
+      "Sequence / Chronological order",
+      "Problem and solution",
+      "Compare and contrast"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-2",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "easy",
+    "prompt": "A paragraph explaining how electric cars and gasoline cars are both similar and different uses which text structure?",
+    "choices": [
+      "Compare and contrast",
+      "Problem and solution",
+      "Chronological sequence",
+      "Spatial description"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-3",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "mid",
+    "prompt": "A passage detailing the threat of plastic pollution in rivers and proposing community cleanup drives uses which structure?",
+    "choices": [
+      "Problem and solution",
+      "Cause and effect",
+      "Chronological order",
+      "Classification"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-4",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "mid",
+    "prompt": "Which signal words typically indicate a COMPARE AND CONTRAST organizational pattern?",
+    "choices": [
+      "Similarly, however, on the other hand, in contrast",
+      "First, next, then, finally",
+      "Because, therefore, as a result, since",
+      "Consequently, lead to, due to"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-5",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "mid",
+    "prompt": "An encyclopedia entry that describes the physical anatomy, habitat, and diet of the Philippine Eagle uses which text structure?",
+    "choices": [
+      "Description / Expository classification",
+      "Problem and solution",
+      "Chronological narrative",
+      "Persuasive argument"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-6",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "mid",
+    "prompt": "Which text structure is commonly found in instructional manuals, cooking recipes, and science experiment procedures?",
+    "choices": [
+      "Sequence / Procedural order",
+      "Compare and contrast",
+      "Cause and effect",
+      "Persuasive editorial"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-7",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "hard",
+    "prompt": "Why do authors use graphic organizers like Venn diagrams when teaching text structures?",
+    "choices": [
+      "To visually represent comparisons and contrasts between two concepts",
+      "To calculate mathematical formulas",
+      "To draw chronological storyboards",
+      "To replace written essays entirely"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-8",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "hard",
+    "prompt": "Read the text: \"First, gather your materials. Next, measure the ingredients accurately. Then, mix them together in a bowl. Finally, bake for 30 minutes.\" What structure is used?",
+    "choices": [
+      "Procedural / Sequential structure",
+      "Cause and effect",
+      "Problem and solution",
+      "Spatial description"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-9",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "hard",
+    "prompt": "In a \"Problem and Solution\" text, what must the author establish before proposing remedies?",
+    "choices": [
+      "The nature, causes, and negative impacts of the dilemma",
+      "A list of rhyming words",
+      "A fictional setting with magical characters",
+      "A biography of the inventor"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7RC-IXa-10",
+    "competency": "Text Structure Analysis",
+    "topic": "Text Types & Structures",
+    "difficulty": "hard",
+    "prompt": "How does understanding text structure improve reading comprehension for secondary students?",
+    "choices": [
+      "It provides a mental framework for organizing, predicting, and retaining key information",
+      "It eliminates the need to comprehend vocabulary words",
+      "It makes reading speed instantaneous",
+      "It changes non-fiction texts into drama scripts"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook W8"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-1",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "easy",
+    "prompt": "What do we call words that have the same spelling and pronunciation but different meanings, such as \"bat\" (the mammal) and \"bat\" (baseball equipment)?",
+    "choices": [
+      "Homonyms",
+      "Synonyms",
+      "Antonyms",
+      "Acronyms"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-2",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "easy",
+    "prompt": "Which of the following word pairs represents SYNONYMS?",
+    "choices": [
+      "Courageous — Brave",
+      "Ancient — Modern",
+      "Victory — Defeat",
+      "Timid — Bold"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-3",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "mid",
+    "prompt": "What is the meaning of the suffix \"-less\" in words like \"fearless\", \"hopeless\", and \"careless\"?",
+    "choices": [
+      "Full of",
+      "Without / lacking",
+      "Able to be",
+      "In a certain manner"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-4",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "mid",
+    "prompt": "In the scientific word \"biodegradable\", what does the Greek root \"bio\" mean?",
+    "choices": [
+      "Earth",
+      "Life",
+      "Water",
+      "Light"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-5",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "mid",
+    "prompt": "What does the prefix \"post-\" mean in terms such as \"postpone\", \"post-war\", and \"post-graduate\"?",
+    "choices": [
+      "Before",
+      "After / later than",
+      "Against",
+      "Under"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-6",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "mid",
+    "prompt": "Which word is an antonym for \"arrogant\"?",
+    "choices": [
+      "Humble",
+      "Proud",
+      "Haughty",
+      "Boastful"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-7",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "hard",
+    "prompt": "What is the meaning of the Latin root \"bene\" in words like \"beneficial\", \"benevolent\", and \"benefactor\"?",
+    "choices": [
+      "Bad or harmful",
+      "Good or well",
+      "Fast or swift",
+      "Large or wide"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-8",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "hard",
+    "prompt": "A figure of speech or expression whose overall meaning cannot be understood from the literal meanings of its individual words is known as:",
+    "choices": [
+      "An idiom",
+      "A cognate",
+      "A portmanteau",
+      "An affix"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-9",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "hard",
+    "prompt": "What does the Greek root \"chron\" mean in English words like \"chronological\", \"chronic\", and \"synchronize\"?",
+    "choices": [
+      "Time",
+      "Color",
+      "Sound",
+      "Distance"
+    ],
+    "correctAnswer": "A",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
+  {
+    "subject": "Reading",
+    "gradeLevel": 7,
+    "keyStage": "KS3",
+    "competencyCode": "EN7V-Xa-10",
+    "competency": "Vocabulary Enrichment & Word Morphology",
+    "topic": "Vocabulary & Word Study",
+    "difficulty": "hard",
+    "prompt": "Choose the word that best completes the analogy: \"Fragile is to Delicate as Resilient is to __________.\"",
+    "choices": [
+      "Brittle",
+      "Durable / Tough",
+      "Weak",
+      "Soft"
+    ],
+    "correctAnswer": "B",
+    "source": "DepEd ARAL KS3 Plus Workbook"
+  },
 ];
 
 async function seedQuestionBank() {

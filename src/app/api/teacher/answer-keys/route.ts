@@ -59,6 +59,11 @@ export async function GET(req: NextRequest) {
         questions: k.questions ?? [],
         passageTitle: k.passageTitle || "",
         passageText: k.passageText || "",
+        isOnline: Boolean(k.isOnline),
+        timeLimitMinutes: Number(k.timeLimitMinutes) || 0,
+        dueDate: k.dueDate || null,
+        targetGrade: k.targetGrade ?? null,
+        targetSection: k.targetSection || "",
         created: k.created,
       };
     });

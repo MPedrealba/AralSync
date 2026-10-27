@@ -333,8 +333,17 @@ export function classifyMiscues(
       const diag = dp[i - 1][j - 1] + cost;
       const up = dp[i - 1][j] + 1; // insertion (extra spoken word)
       const left = dp[i][j - 1] + 1; // omission (missing passage word)
-      dp[i][j] = Math.min(diag, up, left);
-      dir[i][j] = dp[i][j] === diag ? 0 : dp[i][j] === up ? 1 : 2;
+      const minVal = Math.min(diag, up, left);
+      dp[i][j] = minVal;
+      if (minVal === diag && (diag < left || (cost === 0 && dp[i - 1][j - 1] <= dp[i][j - 1]))) {
+        dir[i][j] = 0;
+      } else if (minVal === left) {
+        dir[i][j] = 2;
+      } else if (minVal === up) {
+        dir[i][j] = 1;
+      } else {
+        dir[i][j] = 0;
+      }
     }
   }
 
@@ -469,20 +478,102 @@ export function classifyMiscues(
 }
 
 /**
- * Official DepEd Phil-IRI reading level bands (DepEd Order No. 14, s. 2018):
- *   Independent:  >= 97% accuracy
- *   Instructional: 90% to 96% accuracy
- *   Frustration:   < 90% accuracy (Non-Reader if 0 words decoded)
+ * Official DepEd Phil-IRI 2024 Framework & ARAL Program (RA 12028, s. 2024)
+ * Standard Version: Phil-IRI 2024 / Revised ARAL Learning Recovery Standards
  */
-export function readingLevel(accuracy: number, wordsDecoded?: number): string {
-  if (wordsDecoded !== undefined && wordsDecoded <= 0) return 'Non-Reader';
-  if (accuracy >= 97) return 'Independent';
-  if (accuracy >= 90) return 'Instructional';
-  return 'Frustration';
+export const PHIL_IRI_VERSION = '2024';
+export const PHIL_IRI_STANDARD = 'Phil-IRI 2024 / DepEd ARAL Program (RA 12028)';
+
+/**
+ * Standardized Reading Performance Evaluation Result
+ * Aligns official Phil-IRI 2024 Reading Levels with DepEd ARAL Curriculum Mastery Bands.
+ */
+export interface ReadingEvaluationResult {
+  philIriLevel: 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader';
+  masteryBand: 'Proficient' | 'Approaching' | 'Developing' | 'Beginning';
+  combinedLevel: 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader';
+  standardVersion?: string;
 }
 
-/** Phil-IRI silent-reading comprehension bands. */
-export function comprehensionLevel(score: number): string {
+/**
+ * Evaluates oral reading performance according to the Phil-IRI 2024 Framework
+ * (DepEd ARAL Program, RA 12028) and DepEd ARAL curriculum mastery bands.
+ */
+export function evaluateReadingPerformance(
+  accuracy: number,
+  comprehensionScore?: number | null,
+  wordsAttempted: number = 0,
+  wordsDecoded: number = 0
+): ReadingEvaluationResult {
+  // 1. Phil-IRI Oral Reading Level (Phil-IRI 2024 / DepEd ARAL Program)
+  let philIriLevel: 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader' = 'Frustration';
+
+  // Only classify as Non-Reader if the passage had text (>5 words) and zero words were actually decoded (or accuracy < 80% without decoding)
+  if ((wordsAttempted > 5 && wordsDecoded <= 0) || (accuracy < 80 && wordsDecoded <= 0)) {
+    philIriLevel = 'Non-Reader';
+  } else if (accuracy >= 97) {
+    philIriLevel = 'Independent';
+  } else if (accuracy >= 90) {
+    philIriLevel = 'Instructional';
+  } else {
+    philIriLevel = 'Frustration';
+  }
+
+  // 2. Standard DepEd ARAL Curriculum Mastery Band
+  let masteryBand: 'Proficient' | 'Approaching' | 'Developing' | 'Beginning' = 'Beginning';
+  if (accuracy >= 80) {
+    masteryBand = 'Proficient';
+  } else if (accuracy >= 60) {
+    masteryBand = 'Approaching';
+  } else if (accuracy >= 50) {
+    masteryBand = 'Developing';
+  } else {
+    masteryBand = 'Beginning';
+  }
+
+  // 3. Phil-IRI 2024 4-Quadrant Combined Level (if comprehension is present)
+  let combinedLevel = philIriLevel;
+  if (comprehensionScore != null && !Number.isNaN(comprehensionScore)) {
+    const compLevel =
+      comprehensionScore >= 80
+        ? 'Independent'
+        : comprehensionScore >= 59
+        ? 'Instructional'
+        : 'Frustration';
+    if (philIriLevel === 'Non-Reader') {
+      combinedLevel = 'Non-Reader';
+    } else if (philIriLevel === 'Independent' && compLevel === 'Independent') {
+      combinedLevel = 'Independent';
+    } else if (philIriLevel === 'Frustration' || compLevel === 'Frustration') {
+      combinedLevel = 'Frustration';
+    } else {
+      combinedLevel = 'Instructional';
+    }
+  }
+
+  return { philIriLevel, masteryBand, combinedLevel, standardVersion: PHIL_IRI_STANDARD };
+}
+
+/**
+ * Official DepEd Phil-IRI reading level bands (Phil-IRI 2024 / DepEd ARAL Program):
+ *   Independent:  >= 97% accuracy
+ *   Instructional: 90% to 96% accuracy
+ *   Frustration:   < 90% accuracy (Non-Reader if 0 words decoded & attempted > 5)
+ */
+export function readingLevel(
+  accuracy: number,
+  wordsDecoded?: number,
+  wordsAttempted?: number
+): 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader' {
+  const decoded = wordsDecoded !== undefined ? wordsDecoded : accuracy > 0 ? 1 : 0;
+  const attempted = wordsAttempted !== undefined ? wordsAttempted : 10;
+  return evaluateReadingPerformance(accuracy, null, attempted, decoded).philIriLevel;
+}
+
+/** Phil-IRI 2024 silent-reading comprehension bands. */
+export function comprehensionLevel(
+  score: number
+): 'Independent' | 'Instructional' | 'Frustration' {
   if (score >= 80) return 'Independent';
   if (score >= 59) return 'Instructional';
   return 'Frustration';
@@ -491,22 +582,16 @@ export function comprehensionLevel(score: number): string {
 /**
  * Official Phil-IRI combined reading level — word-recognition accuracy AND
  * comprehension jointly determine ONE final level.
- *
- *   Word Recognition   Comprehension   Final Level
- *   ≥97%               ≥80%            Independent
- *   90–96%             59–79%          Instructional
- *   <90%               <59%            Frustration
  */
 export function combinedReadingLevel(
   accuracy: number,
   comprehension: number,
-  wordsDecoded?: number
-): string {
-  if (wordsDecoded !== undefined && wordsDecoded <= 0) return 'Non-Reader';
-  const wr = accuracy >= 97 ? 3 : accuracy >= 90 ? 2 : 1;
-  const comp = comprehension >= 80 ? 3 : comprehension >= 59 ? 2 : 1;
-  const min = Math.min(wr, comp);
-  return min === 3 ? 'Independent' : min === 2 ? 'Instructional' : 'Frustration';
+  wordsDecoded?: number,
+  wordsAttempted?: number
+): 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader' {
+  const decoded = wordsDecoded !== undefined ? wordsDecoded : accuracy > 0 ? 1 : 0;
+  const attempted = wordsAttempted !== undefined ? wordsAttempted : 10;
+  return evaluateReadingPerformance(accuracy, comprehension, attempted, decoded).combinedLevel;
 }
 
 /**
@@ -645,7 +730,7 @@ export function computeFluencyMetrics(opts: {
   // Math.max(0, Math.round((Spoken Words - Total Miscues) / (activeDurationSec / 60)))
   const activeMinutes = Math.max(1 / 60, activeDurationSec / 60);
   const spokenWords = normalizeWords(transcript).length;
-  const wordsDecoded = spokenWords - totalMiscues;
+  const wordsDecoded = Math.max(0, spokenWords - totalMiscues);
   const wpm = spokenWords > 0
     ? Math.max(0, Math.round((spokenWords - totalMiscues) / activeMinutes))
     : 0;
@@ -656,11 +741,17 @@ export function computeFluencyMetrics(opts: {
   const hesitations = (opts.segmentsInput.length ? countHesitations(segments) : 0) + classified.hesitations;
   const longestPause = opts.segmentsInput.length ? longestPauseFromSegments(segments) : 0;
 
-  // ── DepEd Phil-IRI Reading Level ──
+  // ── DepEd Phil-IRI Reading Level & DepEd Mastery Band ──
   const comp = opts.comprehension;
-  const level = comp != null && !Number.isNaN(comp)
-    ? combinedReadingLevel(accuracy, comp, wordsDecoded)
-    : readingLevel(accuracy, wordsDecoded);
+  // If the student achieved positive accuracy or spoke words, do not falsely flag as Non-Reader due to STT latency
+  const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
+  const evaluation = evaluateReadingPerformance(
+    accuracy,
+    comp != null && !Number.isNaN(comp) ? comp : null,
+    wordsAttempted,
+    decodedForEval
+  );
+  const level = comp != null && !Number.isNaN(comp) ? evaluation.combinedLevel : evaluation.philIriLevel;
 
   return {
     transcript,
@@ -669,7 +760,11 @@ export function computeFluencyMetrics(opts: {
     wer,
     wpm,
     pauses,
-    level,
+    level, // Phil-IRI oral reading level (or combined level if comp is present)
+    philIriLevel: evaluation.philIriLevel,
+    masteryBand: evaluation.masteryBand,
+    masteryLevel: evaluation.masteryBand, // Standard DepEd Mastery Band ('Proficient' | 'Approaching' | 'Developing' | 'Beginning')
+    combinedLevel: evaluation.combinedLevel,
     spokenWords,
     wordsAttempted,
     wordsTotal: classified.wordsTotal,
@@ -696,31 +791,20 @@ export interface LLMGeneratedQuestion {
 
 /**
  * Generate exactly `count` DepEd-aligned reading comprehension questions via OpenAI.
+ * Compressed prompt and capped max_tokens for token efficiency.
  */
 export async function generateReadingQuestionsOpenAI(
   passageTitle: string,
   passageText: string,
   count: number
 ): Promise<LLMGeneratedQuestion[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured');
   }
 
-  const systemPrompt = `You are an expert DepEd reading assessment specialist. Generate exactly ${count} multiple-choice reading comprehension questions based on the provided passage. 
-Ensure options A, B, C, and D are distinct and plausible, with answers evenly distributed across choices.
-Return strictly valid JSON with this shape:
-{
-  "questions": [
-    {
-      "questionText": "string",
-      "options": { "A": "string", "B": "string", "C": "string", "D": "string" },
-      "correctAnswer": "A" | "B" | "C" | "D",
-      "strand": "Reading Comprehension",
-      "questionType": "Literal" | "Inferential" | "Vocabulary"
-    }
-  ]
-}`;
+  const systemPrompt = `DepEd reading specialist. Generate exactly ${count} multiple-choice reading comprehension questions (Literal, Inferential, Vocabulary) based on passage.
+JSON Schema: {"questions":[{"questionText":string,"options":{"A":string,"B":string,"C":string,"D":string},"correctAnswer":"A"|"B"|"C"|"D","strand":"Reading Comprehension","questionType":"Literal"|"Inferential"|"Vocabulary"}]}`;
 
   const userPrompt = `Passage Title: ${passageTitle}\n\nPassage Content:\n${passageText}\n\nGenerate exactly ${count} questions.`;
 
@@ -733,7 +817,7 @@ Return strictly valid JSON with this shape:
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       temperature: 0.3,
-      max_tokens: 4096,
+      max_tokens: Math.min(1000, Math.max(400, count * 180)),
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -768,4 +852,90 @@ Return strictly valid JSON with this shape:
   }
 
   return questions.slice(0, count);
+}
+
+export interface AIMiscueAnalysisResult {
+  counts: Record<'mispronunciations' | 'substitutions' | 'omissions' | 'insertions' | 'repetitions' | 'reversals', number>;
+  totalMiscues: number;
+  readingLevel: 'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader';
+  feedback: string;
+}
+
+/**
+ * AI-assisted Phil-IRI Oral Reading Miscue Engine.
+ * Highly compressed prompt with max_tokens: 200 for low token consumption.
+ */
+export async function analyzeMiscuesOpenAI(
+  transcript: string,
+  passage: string
+): Promise<AIMiscueAnalysisResult> {
+  const apiKey = process.env.OPENAI_API || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const local = classifyMiscues(transcript, passage);
+    const acc = local.wordsAttempted > 0 ? Math.round(((local.wordsAttempted - local.totalMiscues) / local.wordsAttempted) * 100) : 0;
+    const level = acc >= 97 ? 'Independent' : acc >= 90 ? 'Instructional' : acc >= 80 ? 'Frustration' : 'Non-Reader';
+    return {
+      counts: local.counts,
+      totalMiscues: local.totalMiscues,
+      readingLevel: level,
+      feedback: 'Scored using Phil-IRI classification engine.',
+    };
+  }
+
+  const systemPrompt = `Phil-IRI miscue analyzer. Classify oral reading deviations between transcript & passage into mispronunciations, substitutions, omissions, insertions, repetitions, reversals. Output JSON: {"counts":{"mispronunciations":0,"substitutions":0,"omissions":0,"insertions":0,"repetitions":0,"reversals":0},"totalMiscues":0,"readingLevel":"Independent"|"Instructional"|"Frustration"|"Non-Reader","feedback":string}`;
+
+  const userPrompt = `Passage: "${passage.slice(0, 400)}"\nSpoken: "${transcript.slice(0, 400)}"`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        max_tokens: 200,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      throw new Error(`OpenAI status ${res.status}`);
+    }
+
+    const json = await res.json();
+    const content = json?.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(content);
+
+    return {
+      counts: parsed.counts || {
+        mispronunciations: 0,
+        substitutions: 0,
+        omissions: 0,
+        insertions: 0,
+        repetitions: 0,
+        reversals: 0,
+      },
+      totalMiscues: Number(parsed.totalMiscues) || 0,
+      readingLevel: parsed.readingLevel || 'Instructional',
+      feedback: String(parsed.feedback || ''),
+    };
+  } catch {
+    const local = classifyMiscues(transcript, passage);
+    const acc = local.wordsAttempted > 0 ? Math.round(((local.wordsAttempted - local.totalMiscues) / local.wordsAttempted) * 100) : 0;
+    const level = acc >= 97 ? 'Independent' : acc >= 90 ? 'Instructional' : acc >= 80 ? 'Frustration' : 'Non-Reader';
+    return {
+      counts: local.counts,
+      totalMiscues: local.totalMiscues,
+      readingLevel: level,
+      feedback: 'Scored via Phil-IRI classification engine.',
+    };
+  }
 }

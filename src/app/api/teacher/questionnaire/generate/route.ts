@@ -3,11 +3,30 @@ import connectDB from "../../../../../../database/db";
 import Question from "../../../../../../models/Question";
 import AnswerKey from "../../../../../../models/AnswerKey";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { buildTopicSections, getTopicInstructions, ROMAN_NUMERALS } from "@/lib/questionnaireSections";
 
 const SUBJECTS = ["Math", "Science"];
 
 const difficultyLabel = (d: string) =>
   d === "easy" ? "Easy" : d === "hard" ? "Hard" : "Average";
+
+function shuffleChoices(choices: string[], correctLetter: string): { shuffledChoices: string[]; newCorrectAnswer: string } {
+  const letters = ['A', 'B', 'C', 'D'];
+  const cleanLetter = (correctLetter || 'A').toUpperCase().trim().slice(0, 1);
+  const correctIdx = letters.indexOf(cleanLetter);
+  const correctText = choices[correctIdx >= 0 && correctIdx < choices.length ? correctIdx : 0];
+
+  // Fisher-Yates shuffle
+  const shuffled = [...choices];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const newIdx = shuffled.indexOf(correctText);
+  const newLetter = newIdx >= 0 && newIdx < letters.length ? letters[newIdx] : 'A';
+  return { shuffledChoices: shuffled, newCorrectAnswer: newLetter };
+}
 
 /**
  * POST /api/teacher/questionnaire/generate
@@ -29,7 +48,9 @@ export async function POST(req: NextRequest) {
     const gradeLevel = Number(body?.grade);
     const count = Math.min(50, Math.max(1, Number(body?.count) || 50));
     const writtenCount = Math.max(0, Math.min(count, Number(body?.writtenCount) || 0));
-    const topic = (body?.topic || "").trim();
+    const requestedTopics: string[] = Array.isArray(body?.topics)
+      ? body.topics.filter((t: any) => typeof t === "string" && t.trim().length > 0)
+      : (body?.topic && typeof body.topic === "string" && body.topic.trim() ? [body.topic.trim()] : []);
 
     if (!SUBJECTS.includes(subject) || !gradeLevel) {
       return NextResponse.json(
@@ -39,17 +60,20 @@ export async function POST(req: NextRequest) {
     }
 
     const filter: Record<string, unknown> = { subject, gradeLevel };
-    if (topic) {
+    if (requestedTopics.length > 0) {
       filter.$or = [
-        { topic: new RegExp(topic, "i") },
-        { competency: new RegExp(topic, "i") },
+        { topic: { $in: requestedTopics } },
+        { competency: { $in: requestedTopics } },
       ];
     }
 
     const pool = await Question.find(filter).lean();
     if (pool.length === 0) {
+      const topicDesc = requestedTopics.length > 0
+        ? ` matching selected topic(s) (${requestedTopics.slice(0, 3).join(", ")}${requestedTopics.length > 3 ? "..." : ""})`
+        : "";
       return NextResponse.json(
-        { success: false, error: `No questions in the bank for ${subject} Grade ${gradeLevel}${topic ? ` matching "${topic}"` : ""}. Try another grade or topic.` },
+        { success: false, error: `No questions in the bank for ${subject} Grade ${gradeLevel}${topicDesc}. Try another grade or select more topics.` },
         { status: 404 }
       );
     }
@@ -61,81 +85,179 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Difficulty-balanced sampling ──
-    // Split pool into buckets by difficulty, then round-robin pick so the
-    // resulting questionnaire has a balanced mix of easy / mid / hard items.
-    const buckets: Record<string, any[]> = { easy: [], mid: [], hard: [] };
+    // ── Topic-Grouped Sampling & Continuous Numbering ──
+    const getQuestionTopic = (q: any): string => {
+      if (typeof q.topic === "string" && q.topic.trim().length > 0) {
+        return q.topic.trim();
+      }
+      if (typeof q.competency === "string" && q.competency.trim().length > 0) {
+        return q.competency.trim();
+      }
+      return "General Curriculum";
+    };
+
+    // Partition pool into buckets by topic
+    const poolByTopic = new Map<string, any[]>();
     for (const q of pool) {
-      const d = (q as any).difficulty || "mid";
-      buckets[d]?.push(q) ?? buckets.mid.push(q);
+      const t = getQuestionTopic(q);
+      if (!poolByTopic.has(t)) {
+        poolByTopic.set(t, []);
+      }
+      poolByTopic.get(t)!.push(q);
     }
 
-    const pick: any[] = [];
-    const bucketKeys = ["easy", "mid", "hard"] as const;
-    let round = 0;
-    while (pick.length < count) {
-      const b = bucketKeys[round % 3];
-      // find next unused item in this bucket
-      const remaining = buckets[b].filter((q) => !pick.includes(q));
-      if (remaining.length > 0) {
-        // shuffle within bucket slice for variety
-        const shuffled = remaining.sort(() => Math.random() - 0.5);
-        pick.push(shuffled[0]);
+    // Determine ordered topic sequence:
+    // If specific topics were requested, preserve that order; otherwise alphabetical
+    let orderedTopics: string[];
+    if (requestedTopics.length > 0) {
+      const requestedSet = new Set<string>();
+      orderedTopics = [];
+      for (const t of requestedTopics) {
+        if (poolByTopic.has(t) && !requestedSet.has(t)) {
+          orderedTopics.push(t);
+          requestedSet.add(t);
+        }
       }
-      round++;
-      // safety: if we've gone 3 full rounds without filling, just grab what's left
-      if (round > buckets.easy.length + buckets.mid.length + buckets.hard.length + 3) break;
+      for (const t of poolByTopic.keys()) {
+        if (!requestedSet.has(t)) {
+          orderedTopics.push(t);
+          requestedSet.add(t);
+        }
+      }
+    } else {
+      orderedTopics = Array.from(poolByTopic.keys()).sort((a, b) => a.localeCompare(b));
     }
+
+    // Allocate question counts across topics evenly using round-robin
+    const availableCounts = new Map<string, number>();
+    const topicAllocations = new Map<string, number>();
+    for (const t of orderedTopics) {
+      availableCounts.set(t, poolByTopic.get(t)?.length || 0);
+      topicAllocations.set(t, 0);
+    }
+
+    let allocated = 0;
+    let progress = true;
+    while (allocated < count && progress) {
+      progress = false;
+      for (const t of orderedTopics) {
+        if (allocated >= count) break;
+        const current = topicAllocations.get(t) || 0;
+        const maxAvail = availableCounts.get(t) || 0;
+        if (current < maxAvail) {
+          topicAllocations.set(t, current + 1);
+          allocated++;
+          progress = true;
+        }
+      }
+    }
+
+    // Pick questions topic by topic with difficulty balance
+    const groupedQuestions: { topic: string; questions: any[] }[] = [];
+
+    for (const t of orderedTopics) {
+      const needed = topicAllocations.get(t) || 0;
+      if (needed <= 0) continue;
+
+      const topicPool = poolByTopic.get(t) || [];
+      const buckets: Record<string, any[]> = { easy: [], mid: [], hard: [] };
+      for (const q of topicPool) {
+        const d = (q as any).difficulty || "mid";
+        buckets[d]?.push(q) ?? buckets.mid.push(q);
+      }
+
+      const pickedForTopic: any[] = [];
+      const bucketKeys = ["easy", "mid", "hard"] as const;
+      let round = 0;
+
+      while (pickedForTopic.length < needed) {
+        const b = bucketKeys[round % 3];
+        const remaining = buckets[b].filter((q) => !pickedForTopic.includes(q));
+        if (remaining.length > 0) {
+          const shuffled = remaining.sort(() => Math.random() - 0.5);
+          pickedForTopic.push(shuffled[0]);
+        }
+        round++;
+        if (round > topicPool.length * 3 + 3) {
+          for (const q of topicPool) {
+            if (pickedForTopic.length >= needed) break;
+            if (!pickedForTopic.includes(q)) pickedForTopic.push(q);
+          }
+          break;
+        }
+      }
+
+      // Sort within topic: easy → mid → hard for natural pedagogical progression
+      pickedForTopic.sort((a, b) => {
+        const da = a.difficulty || "mid";
+        const db = b.difficulty || "mid";
+        const order = { easy: 0, mid: 1, hard: 2 } as Record<string, number>;
+        return (order[da] ?? 1) - (order[db] ?? 1);
+      });
+
+      groupedQuestions.push({
+        topic: t,
+        questions: pickedForTopic,
+      });
+    }
+
+    // Build official DepEd topic sections and continuous question numbering (1 to N)
+    const { sections, orderedQuestions } = buildTopicSections(groupedQuestions, subject);
 
     // Assign modes: last `writtenCount` items become "written" so MC items come first
-    // (easier for students to bubble the MC block, then answer written at the end).
-    const modes: string[] = pick.map((_, i) =>
-      i >= pick.length - writtenCount ? "written" : "mc"
+    const displayModes: string[] = orderedQuestions.map((_, i) =>
+      i >= orderedQuestions.length - writtenCount ? "written" : "mc"
     );
 
-    // Sort by difficulty for display (easy → mid → hard), preserving mode grouping
-    const displayOrder = [...pick.keys()].sort((a, b) => {
-      const da = pick[a].difficulty || "mid";
-      const db = pick[b].difficulty || "mid";
-      const order = { easy: 0, mid: 1, hard: 2 } as Record<string, number>;
-      return (order[da] ?? 1) - (order[db] ?? 1);
-    });
+    const questions = orderedQuestions.map((q, i) => {
+      const mode = displayModes[i] as 'mc' | 'written';
+      const rawChoices = Array.isArray(q.choices) ? q.choices : [];
+      const rawAns = q.correctAnswer || 'A';
 
-    // Mode in the SAME display order as answers/writtenItems, so the AnswerKey's
-    // modes[i] corresponds to the same item as answers[i]. (modes is in pick order;
-    // displayOrder can permute it, so we must re-map before storing.)
-    const displayModes = displayOrder.map((idx) => modes[idx]);
+      let finalChoices = rawChoices;
+      let finalAns = rawAns;
 
-    const questions = displayOrder.map((idx, i) => {
-      const q: any = pick[idx];
+      if (mode === 'mc' && rawChoices.length > 0) {
+        const { shuffledChoices, newCorrectAnswer } = shuffleChoices(rawChoices, rawAns);
+        finalChoices = shuffledChoices;
+        finalAns = newCorrectAnswer;
+      }
+
       return {
         number: i + 1,
         id: String(q._id),
         prompt: q.prompt,
-        choices: q.choices || [],
-        mode: displayModes[i],
+        choices: finalChoices,
+        correctAnswer: finalAns,
+        mode,
         difficulty: difficultyLabel(q.difficulty || "mid"),
         competencyCode: q.competencyCode || "",
         competency: q.competency || "",
         topic: q.topic || "",
+        sectionPart: q.sectionPart,
+        sectionTitle: q.sectionTitle,
       };
     });
 
-    // Answers in display order
-    const answerLetters = displayOrder.map((idx) => pick[idx].correctAnswer);
+    const answerLetters = questions.map((q) => q.correctAnswer);
 
-    // Written item metadata (for teacher grading after scan), indexed by DISPLAY order
-    const writtenItems = displayOrder
-      .map((idx, i) => ({ idx, originalIndex: i }))
-      .filter(({ idx }) => modes[idx] === "written")
-      .map(({ idx, originalIndex }) => ({
-        index: originalIndex, // 0-based position in the final questionnaire
-        prompt: (pick[idx] as any).prompt,
-        max: 1, // each written item worth 1 point by default
+    // Written item metadata for teacher grading after scan
+    const writtenItems = orderedQuestions
+      .map((q, i) => ({ q, index: i }))
+      .filter((_, i) => displayModes[i] === "written")
+      .map(({ q, index }) => ({
+        index,
+        prompt: q.prompt,
+        max: 1,
       }));
 
     const itemCount = questions.length;
-    const autoTitle = `${subject} Grade ${gradeLevel} Auto-Questionnaire (${itemCount} items)`;
+    const assessmentType = body?.assessmentType === "exam" ? "exam" : "quiz";
+    const topicSummary = requestedTopics.length > 0 ? requestedTopics.join(" & ") : "All Topics";
+    const autoTitle =
+      assessmentType === "exam"
+        ? `Periodical Exam: ${subject === "Math" ? "Mathematics" : subject} Grade ${gradeLevel} (${itemCount} items)`
+        : `Weekly Quiz: ${subject === "Math" ? "Mathematics" : subject} Grade ${gradeLevel} (${itemCount} items)`;
     const title =
       typeof body?.title === "string" && body.title.trim().length > 0
         ? body.title.trim()
@@ -144,29 +266,52 @@ export async function POST(req: NextRequest) {
     const answerKey = await AnswerKey.create({
       title,
       subject,
+      assessmentType,
+      topic: topicSummary,
+      topics: requestedTopics,
       items: itemCount,
+      totalItems: itemCount,
       answers: answerLetters,
       modes: displayModes,
       writtenItems,
+      questions,
+      sections,
       created: new Date(),
     });
+
+    const bubbleSheetUrl =
+      subject === "Math"
+        ? "/bubble-sheets/mathematics-bubble.pdf"
+        : subject === "Science"
+        ? "/bubble-sheets/science-bubble.pdf"
+        : "/bubble-sheets/reading-bubble.pdf";
 
     return NextResponse.json({
       success: true,
       data: {
         title,
+        assessmentType,
         subject,
+        topic: topicSummary,
+        topics: requestedTopics,
         gradeLevel,
         itemCount,
         questions,
+        sections,
         answers: answerLetters,
         modes: displayModes,
         writtenCount,
+        bubbleSheetUrl,
         answerKey: {
           id: String(answerKey._id),
           title: answerKey.title,
+          assessmentType: answerKey.assessmentType,
           subject: answerKey.subject,
+          topic: answerKey.topic,
+          topics: answerKey.topics,
           items: answerKey.items,
+          totalItems: answerKey.totalItems,
+          sections,
         },
       },
     });

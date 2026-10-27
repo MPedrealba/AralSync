@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
           name: data.name,
           role: 'student',
           active: true,
+          mustChangePassword: true,
         });
         await LearnerRecord.create({
           studentId: userDoc._id,

@@ -17,6 +17,24 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+function shuffleChoices(choices: string[], correctLetter: string): { shuffledChoices: string[]; newCorrectAnswer: string } {
+  const letters = ['A', 'B', 'C', 'D'];
+  const cleanLetter = (correctLetter || 'A').toUpperCase().trim().slice(0, 1);
+  const correctIdx = letters.indexOf(cleanLetter);
+  const correctText = choices[correctIdx >= 0 && correctIdx < choices.length ? correctIdx : 0];
+
+  // Fisher-Yates shuffle
+  const shuffled = [...choices];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const newIdx = shuffled.indexOf(correctText);
+  const newLetter = newIdx >= 0 && newIdx < letters.length ? letters[newIdx] : 'A';
+  return { shuffledChoices: shuffled, newCorrectAnswer: newLetter };
+}
+
 /**
  * POST /api/teacher/questionnaire/generate-reading
  * Generates an authentic OMR assessment questionnaire directly from the DepEd ARAL
@@ -109,24 +127,32 @@ export async function POST(req: NextRequest) {
 
         if (requestedTopics.length === 1) {
           const t = requestedTopics[0];
-          const topicQuestions = await Question.find({ subject: 'Reading', topic: t }).lean();
+          const topicQuestions = await Question.find({
+            subject: 'Reading',
+            topic: t,
+            source: { $regex: /ARAL/i },
+          }).lean();
+
           if (topicQuestions.length === 0) {
             return NextResponse.json({ success: false, error: `No questions found in learning materials for topic "${t}".` }, { status: 404 });
           }
+
           if (topicQuestions.length >= targetCount) {
             selectedQuestions = shuffle(topicQuestions).slice(0, targetCount);
           } else {
-            const needed = targetCount - topicQuestions.length;
-            const otherQuestions = await Question.find({ subject: 'Reading', topic: { $ne: t } }).lean();
-            selectedQuestions = [...topicQuestions, ...shuffle(otherQuestions).slice(0, needed)];
+            // Strictly cap and cycle within the selected topic pool — never leak foreign topics
+            const shuffledUnique = shuffle(topicQuestions);
+            const extraNeeded = targetCount - shuffledUnique.length;
+            const extra = shuffle(topicQuestions).slice(0, extraNeeded);
+            selectedQuestions = [...shuffledUnique, ...extra];
           }
         } else {
           // Exactly 2 topics: split items evenly between them
           const half = Math.floor(targetCount / 2);
           const remainder = targetCount - half;
 
-          const q1 = await Question.find({ subject: 'Reading', topic: requestedTopics[0] }).lean();
-          const q2 = await Question.find({ subject: 'Reading', topic: requestedTopics[1] }).lean();
+          const q1 = await Question.find({ subject: 'Reading', topic: requestedTopics[0], source: { $regex: /ARAL/i } }).lean();
+          const q2 = await Question.find({ subject: 'Reading', topic: requestedTopics[1], source: { $regex: /ARAL/i } }).lean();
 
           if (q1.length === 0 && q2.length === 0) {
             return NextResponse.json({ success: false, error: 'No questions found for the selected topics.' }, { status: 404 });
@@ -135,15 +161,22 @@ export async function POST(req: NextRequest) {
           let set1 = shuffle(q1).slice(0, half);
           let set2 = shuffle(q2).slice(0, remainder);
 
-          if (set1.length < half) {
+          if (set1.length < half && q2.length > 0) {
             const extra = shuffle(q2.filter((q) => !set2.some((s) => String(s._id) === String(q._id)))).slice(0, half - set1.length);
             set2 = [...set2, ...extra];
-          } else if (set2.length < remainder) {
+          } else if (set2.length < remainder && q1.length > 0) {
             const extra = shuffle(q1.filter((q) => !set1.some((s) => String(s._id) === String(q._id)))).slice(0, remainder - set2.length);
             set1 = [...set1, ...extra];
           }
 
-          selectedQuestions = shuffle([...set1, ...set2]);
+          let combined = [...set1, ...set2];
+          if (combined.length < targetCount) {
+            const pool = [...q1, ...q2];
+            const needed = targetCount - combined.length;
+            combined = [...combined, ...shuffle(pool).slice(0, needed)];
+          }
+
+          selectedQuestions = shuffle(combined);
         }
       } else if (passageId) {
         // Fallback: Passage-based quiz
@@ -174,13 +207,13 @@ export async function POST(req: NextRequest) {
           selectedQuestions = passageQuestions.slice(0, targetCount);
         } else {
           const needed = targetCount - passageQuestions.length;
-          const supplemental = await Question.find({ subject: 'Reading' }).limit(needed).lean();
+          const supplemental = await Question.find({ subject: 'Reading', source: { $regex: /ARAL/i } }).limit(needed).lean();
           selectedQuestions = [...passageQuestions, ...supplemental];
         }
       }
     } else {
       // ──── COMPREHENSIVE EXAM MODE: Covers the WHOLE set of topics ────
-      const allDistinct = await Question.distinct('topic', { subject: 'Reading' });
+      const allDistinct = await Question.distinct('topic', { subject: 'Reading', source: { $regex: /ARAL/i } });
       const allTopics = allDistinct
         .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
         .sort((a, b) => a.localeCompare(b));
@@ -202,7 +235,7 @@ export async function POST(req: NextRequest) {
 
       const questionsByTopic: Record<string, any[]> = {};
       for (const t of allTopics) {
-        questionsByTopic[t] = await Question.find({ subject: 'Reading', topic: t }).lean();
+        questionsByTopic[t] = await Question.find({ subject: 'Reading', topic: t, source: { $regex: /ARAL/i } }).lean();
       }
 
       let examPool: any[] = [];
@@ -212,7 +245,7 @@ export async function POST(req: NextRequest) {
         examPool.push(...avail.slice(0, quota));
       });
 
-      // If any topic had fewer questions than its quota, fill remainder from surplus pool
+      // If any topic had fewer questions than its quota, fill remainder from surplus pool within verified ARAL topics
       if (examPool.length < targetCount) {
         const usedIds = new Set(examPool.map((q) => String(q._id)));
         const surplus: any[] = [];
@@ -234,19 +267,35 @@ export async function POST(req: NextRequest) {
     }
 
     const itemCount = selectedQuestions.length;
-    const questions = selectedQuestions.map((q, i) => ({
-      number: i + 1,
-      id: `q${i + 1}`,
-      prompt: q.prompt,
-      choices: q.choices || [],
-      mode: (i >= itemCount - writtenCount ? 'written' : 'mc') as 'mc' | 'written',
-      difficulty: q.difficulty === 'easy' ? 'Easy' : q.difficulty === 'hard' ? 'Hard' : 'Average',
-      competencyCode: q.competencyCode || 'EN7RC-ARAL',
-      competency: q.competency || q.topic || finalTopic,
-      topic: q.topic || finalTopic,
-    }));
+    const questions = selectedQuestions.map((q, i) => {
+      const mode = (i >= itemCount - writtenCount ? 'written' : 'mc') as 'mc' | 'written';
+      const rawChoices = Array.isArray(q.choices) ? q.choices : [];
+      const rawAns = q.correctAnswer || 'A';
 
-    const answerLetters = selectedQuestions.map((q) => q.correctAnswer || 'A');
+      let finalChoices = rawChoices;
+      let finalAns = rawAns;
+
+      if (mode === 'mc' && rawChoices.length > 0) {
+        const { shuffledChoices, newCorrectAnswer } = shuffleChoices(rawChoices, rawAns);
+        finalChoices = shuffledChoices;
+        finalAns = newCorrectAnswer;
+      }
+
+      return {
+        number: i + 1,
+        id: `q${i + 1}`,
+        prompt: q.prompt,
+        choices: finalChoices,
+        correctAnswer: finalAns,
+        mode,
+        difficulty: q.difficulty === 'easy' ? 'Easy' : q.difficulty === 'hard' ? 'Hard' : 'Average',
+        competencyCode: q.competencyCode || 'EN7RC-ARAL',
+        competency: q.competency || q.topic || finalTopic,
+        topic: q.topic || finalTopic,
+      };
+    });
+
+    const answerLetters = questions.map((q) => q.correctAnswer);
     const structuredAnswers = answerLetters.map((letter, i) => ({
       itemNumber: i + 1,
       correctKey: letter,

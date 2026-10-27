@@ -9,9 +9,11 @@ const run = async () => {
   const existing = await User.findOne({ username: 'coordinator1' });
   if (existing) {
     existing.name = 'Coordinator Sarah';
+    existing.email = 'coordinator.sarah@deped.gov.ph';
     existing.password = hashed;
     existing.role = 'coordinator';
     existing.active = true;
+    existing.mustChangePassword = true;
     await existing.save();
     console.log('coordinator1 updated ->', existing.name, '| role:', existing.role);
     process.exit(0);
@@ -21,7 +23,9 @@ const run = async () => {
     password: hashed,
     name: 'Coordinator Sarah',
     role: 'coordinator',
+    email: 'coordinator.sarah@deped.gov.ph',
     active: true,
+    mustChangePassword: true,
   });
   console.log('Created coordinator1 ->', created.username, '| role:', created.role);
   process.exit(0);

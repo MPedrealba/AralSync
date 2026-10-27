@@ -84,10 +84,12 @@ export default function CoordinatorLearningMaterialsPage() {
   const [editEdition, setEditEdition] = useState("");
   const [editType, setEditType] = useState<"Learner Workbook" | "Tutors Guide" | "Reading Selection" | "Supplementary Module">("Learner Workbook");
   const [editFileUrl, setEditFileUrl] = useState("");
+  const [editFile, setEditFile] = useState<File | null>(null);
   const [editIsActive, setEditIsActive] = useState(true);
   const [editSessions, setEditSessions] = useState<SessionDirectoryItem[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load Materials
   const loadMaterials = async () => {
@@ -97,7 +99,18 @@ export default function CoordinatorLearningMaterialsPage() {
       const res = await fetch("/api/learning-materials?active=all");
       const json = await parseJsonResponse(res);
       if (json.success) {
-        setMaterials(json.data || []);
+        const loadedList = json.data || [];
+        setMaterials(loadedList);
+        if (typeof window !== "undefined") {
+          const urlParams = new URLSearchParams(window.location.search);
+          const editId = urlParams.get("edit");
+          if (editId) {
+            const matched = loadedList.find((m: LearningMaterialItem) => m._id === editId);
+            if (matched) {
+              openEditModal(matched);
+            }
+          }
+        }
       } else {
         setError(json.error || "Failed to load learning materials.");
       }
@@ -251,6 +264,8 @@ export default function CoordinatorLearningMaterialsPage() {
     setEditEdition(material.edition);
     setEditType(material.type);
     setEditFileUrl(material.fileUrl);
+    setEditFile(null);
+    if (editFileInputRef.current) editFileInputRef.current.value = "";
     setEditIsActive(material.isActive);
     setEditSessions(material.sessionDirectory || []);
     setEditError("");
@@ -291,25 +306,31 @@ export default function CoordinatorLearningMaterialsPage() {
     setIsSavingEdit(true);
     setEditError("");
     try {
+      const formData = new FormData();
+      formData.append("title", editTitle.trim());
+      formData.append("subject", editSubject);
+      formData.append("keyStage", editKeyStage);
+      formData.append("gradeLevels", JSON.stringify(editGrades));
+      formData.append("edition", editEdition.trim());
+      formData.append("type", editType);
+      formData.append("fileUrl", editFileUrl.trim());
+      formData.append("isActive", String(editIsActive));
+      formData.append("sessionDirectory", JSON.stringify(editSessions));
+
+      if (editFile) {
+        formData.append("file", editFile);
+      }
+
       const res = await fetch(`/api/coordinator/learning-materials/${editingMaterial._id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editTitle.trim(),
-          subject: editSubject,
-          keyStage: editKeyStage,
-          gradeLevels: editGrades,
-          edition: editEdition.trim(),
-          type: editType,
-          fileUrl: editFileUrl.trim(),
-          isActive: editIsActive,
-          sessionDirectory: editSessions,
-        }),
+        body: formData,
       });
 
       const json = await parseJsonResponse(res);
       if (json.success) {
         setEditingMaterial(null);
+        setEditFile(null);
+        if (editFileInputRef.current) editFileInputRef.current.value = "";
         loadMaterials();
       } else {
         setEditError(json.error || "Failed to save changes.");
@@ -900,7 +921,7 @@ export default function CoordinatorLearningMaterialsPage() {
                     type="text"
                     value={uploadCustomUrl}
                     onChange={(e) => setUploadCustomUrl(e.target.value)}
-                    placeholder="e.g. /learning-materials/ks3-plus/learner-workbook.pdf"
+                    placeholder="e.g. /uploads/materials/active_curriculum_workbook.pdf"
                     className="w-full h-8.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
                   />
                 </div>
@@ -1150,33 +1171,109 @@ export default function CoordinatorLearningMaterialsPage() {
                 </div>
               </div>
 
-              {/* File URL */}
-              <div className="space-y-1">
+              {/* PDF Document & File Replacement */}
+              <div className="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">PDF File Path / URL</label>
-                  {editFileUrl && (
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-red-800" />
+                    <span>Curriculum PDF Document</span>
+                  </label>
+                  {editingMaterial?._id && (
                     <a
-                      href={
-                        editingMaterial?._id
-                          ? `/api/learning-materials/view?id=${editingMaterial._id}`
-                          : `/api/learning-materials/view?path=${encodeURIComponent(editFileUrl)}`
-                      }
+                      href={`/api/learning-materials/view?id=${editingMaterial._id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-[11px] font-bold text-red-800 hover:underline"
                     >
                       <ExternalLink className="h-3 w-3" />
-                      <span>Test View PDF</span>
+                      <span>Test View in PDF Viewer</span>
                     </a>
                   )}
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={editFileUrl}
-                  onChange={(e) => setEditFileUrl(e.target.value)}
-                  className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                />
+
+                {/* Current Path/URL */}
+                <div className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">
+                    Current Configured Path / URL
+                  </span>
+                  <input
+                    type="text"
+                    value={editFileUrl}
+                    onChange={(e) => setEditFileUrl(e.target.value)}
+                    placeholder="/uploads/materials/your-file.pdf"
+                    className="w-full h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
+                  />
+                </div>
+
+                {/* Replacement Upload Picker */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700">
+                      Upload Replacement PDF File (Optional)
+                    </span>
+                    {editFile && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <Check className="h-3 w-3" />
+                        Ready to replace
+                      </span>
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    ref={editFileInputRef}
+                    accept="application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (!file.name.toLowerCase().endsWith(".pdf")) {
+                          alert("Please upload a PDF document.");
+                          return;
+                        }
+                        setEditFile(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+
+                  {editFile ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50/70 p-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate" title={editFile.name}>
+                            {editFile.name}
+                          </p>
+                          <p className="text-[11px] text-emerald-700 font-medium">
+                            {(editFile.size / (1024 * 1024)).toFixed(2)} MB &bull; Will replace PDF upon saving
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditFile(null);
+                          if (editFileInputRef.current) editFileInputRef.current.value = "";
+                        }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-emerald-100 hover:text-slate-700 transition-colors"
+                        title="Cancel replacement file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white py-2.5 px-4 text-xs font-bold text-slate-700 hover:border-red-800 hover:bg-red-50/30 transition-all cursor-pointer"
+                    >
+                      <Upload className="h-4 w-4 text-slate-500" />
+                      <span>Choose Replacement PDF from Computer...</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Session Directory Editor */}

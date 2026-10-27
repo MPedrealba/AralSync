@@ -151,95 +151,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Build subject-tailored vision prompt
+    // Build dense, token-optimized subject-tailored vision prompt
     const isScience = subject.toLowerCase().includes("science");
     const isMath = subject.toLowerCase().includes("math") || subject.toLowerCase().includes("numeracy");
+    const subjectType = isScience ? "Science identification" : isMath ? "Math solution" : "Reading response";
 
-    let systemPrompt = "";
-    if (isScience) {
-      systemPrompt = `You are a supportive, expert Science teacher evaluating handwritten student identification answers on an exam paper.
-Context:
-- Item Number: Question ${itemIndex + 1}
-- Problem / Identification Prompt: "${problemPrompt}"
-- Expected Scientific Term / Key: "${expectedAnswer || "Standard scientific term"}"
-- Maximum Possible Points: ${maxPoints}
+    const systemPrompt = `Expert ${subjectType} evaluator. Q#${itemIndex + 1}, Prompt: "${problemPrompt}", Key: "${expectedAnswer || "N/A"}", MaxPts: ${maxPoints}.
+Rules:
+1. Transcribe student handwriting (or "[Blank]").
+2. Classify: "exact" (correct), "phonetic_spelling_slip" (minor orthographic/arithmetic slip with sound concept), "scientific_synonym" (valid alternative), "incorrect" (misconception), "blank".
+3. Score: exact/synonym=${maxPoints}, slip=${isMath ? Math.max(1, maxPoints - 1) : maxPoints}, incorrect/blank=0. Keep feedback concise.
+JSON Schema: {"transcribedText":string,"isConceptUnderstood":boolean,"matchType":"exact"|"phonetic_spelling_slip"|"scientific_synonym"|"incorrect"|"blank","conceptBadge":string,"evaluationSummary":string,"suggestedScore":number,"studentFeedback":string,"teacherRemediationNote":string}`;
 
-Evaluation Guidelines:
-1. Accurately transcribe the student's handwritten word or phrase from the response box. If empty or blank, set transcribedText to "[Blank]".
-2. Determine if the student grasps the scientific concept:
-   - "exact": Student wrote the correct scientific term (e.g., "Mitochondria").
-   - "phonetic_spelling_slip": Student wrote the correct scientific term phonetically or with minor orthographic error (e.g., "mitokondria", "fotosintesis", "kloroplast", "ribosom"). The student clearly understands the underlying scientific concept despite linguistic or spelling slips.
-   - "scientific_synonym": An acceptable alternative scientific terminology or valid descriptive phrase (e.g., "cell powerhouse", "producer" for autotroph).
-   - "incorrect": Factually wrong term, incorrect organelle/phenomenon, or irrelevant word.
-   - "blank": No response written.
-3. Scoring Recommendation:
-   - "exact": Award full ${maxPoints} pts.
-   - "scientific_synonym": Award full ${maxPoints} pts.
-   - "phonetic_spelling_slip": Award full ${maxPoints} pts (or partial ${Math.max(0.5, maxPoints - 0.5)} pts if strict spelling is requested; default to full credit for conceptual grasp in science).
-   - "incorrect" or "blank": 0 pts.
-4. Output strictly valid JSON matching this schema:
-{
-  "transcribedText": "string",
-  "isConceptUnderstood": boolean,
-  "matchType": "exact" | "phonetic_spelling_slip" | "scientific_synonym" | "incorrect" | "blank",
-  "conceptBadge": "string",
-  "evaluationSummary": "string",
-  "suggestedScore": number,
-  "studentFeedback": "string",
-  "teacherRemediationNote": "string"
-}`;
-    } else if (isMath) {
-      systemPrompt = `You are an encouraging, expert Mathematics educator evaluating step-by-step mathematical working and written solutions.
-Context:
-- Item Number: Question ${itemIndex + 1}
-- Math Problem: "${problemPrompt}"
-- Expected Solution / Rubric: "${expectedAnswer || "Valid mathematical solution"}"
-- Maximum Possible Points: ${maxPoints}
-
-Evaluation Guidelines:
-1. Accurately transcribe the student's mathematical steps, equations, and final answer. If empty, output "[Blank]".
-2. Evaluate step-by-step methodology:
-   - Differentiate between an arithmetic calculation slip with sound conceptual methodology (award partial credit) vs a fundamental mathematical misconception.
-   - "exact": Mathematically sound method and correct final solution. Award full ${maxPoints} pts.
-   - "phonetic_spelling_slip": Minor arithmetic or sign slip, but sound conceptual methodology. Award partial credit (e.g. ${Math.max(1, maxPoints - 1)} of ${maxPoints} pts).
-   - "scientific_synonym": Alternative valid mathematical method. Award full ${maxPoints} pts.
-   - "incorrect": Fundamental conceptual misconception or invalid mathematical operation. 0 pts.
-   - "blank": No solution shown. 0 pts.
-3. Output strictly valid JSON matching this schema:
-{
-  "transcribedText": "string",
-  "isConceptUnderstood": boolean,
-  "matchType": "exact" | "phonetic_spelling_slip" | "scientific_synonym" | "incorrect" | "blank",
-  "conceptBadge": "string",
-  "evaluationSummary": "string",
-  "suggestedScore": number,
-  "studentFeedback": "string",
-  "teacherRemediationNote": "string"
-}`;
-    } else {
-      systemPrompt = `You are an expert reading educator evaluating handwritten open-ended or short answers.
-Context:
-- Item Number: Question ${itemIndex + 1}
-- Question Prompt: "${problemPrompt}"
-- Expected Answer: "${expectedAnswer}"
-- Max Points: ${maxPoints}
-Output strictly valid JSON:
-{
-  "transcribedText": "string",
-  "isConceptUnderstood": boolean,
-  "matchType": "exact" | "phonetic_spelling_slip" | "scientific_synonym" | "incorrect" | "blank",
-  "conceptBadge": "string",
-  "evaluationSummary": "string",
-  "suggestedScore": number,
-  "studentFeedback": "string",
-  "teacherRemediationNote": "string"
-}`;
-    }
-
-    const userPrompt = `Please evaluate the handwritten response for Item ${itemIndex + 1} in the provided image.
-Item Prompt: "${problemPrompt}"
-Expected Key: "${expectedAnswer || "N/A"}"
-Max Points: ${maxPoints}`;
+    const userPrompt = `Evaluate Item ${itemIndex + 1}. Prompt: "${problemPrompt}", Key: "${expectedAnswer || "N/A"}", MaxPts: ${maxPoints}.`;
 
     const openAiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -248,9 +172,9 @@ Max Points: ${maxPoints}`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         temperature: 0.1,
-        max_tokens: 1024,
+        max_tokens: 200,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
@@ -262,7 +186,7 @@ Max Points: ${maxPoints}`;
                 type: "image_url",
                 image_url: {
                   url: dataUrl,
-                  detail: "high",
+                  detail: "auto",
                 },
               },
             ],

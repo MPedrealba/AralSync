@@ -21,8 +21,15 @@ const AnswerKeySchema = new mongoose.Schema(
     // { index, prompt, max } — index is the 0-based item position on the sheet.
     writtenItems: { type: [{ index: Number, prompt: String, max: Number }], default: [] },
     questions: { type: mongoose.Schema.Types.Mixed, default: [] },
+    sections: { type: mongoose.Schema.Types.Mixed, default: [] },
     passageTitle: { type: String, default: '' },
     passageText: { type: String, default: '' },
+    // ── Online CBT Delivery Settings ──
+    isOnline: { type: Boolean, default: false },
+    timeLimitMinutes: { type: Number, default: 0 }, // 0 = untimed
+    dueDate: { type: Date, default: null },
+    targetGrade: { type: Number, default: null },
+    targetSection: { type: String, default: '' },
     created: { type: Date, default: Date.now },
   },
   { timestamps: true }

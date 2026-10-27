@@ -60,9 +60,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (payload.purpose !== 'student_password_reset' || payload.role !== 'student') {
+    const validPurposes = ['student_password_reset', 'staff_password_reset'];
+    const validRoles = ['student', 'teacher', 'coordinator', 'principal'];
+    if (!validPurposes.includes(payload.purpose) || !validRoles.includes(payload.role)) {
       return NextResponse.json(
-        { error: 'Invalid reset token purpose.' },
+        { error: 'Invalid or unauthorized password reset token purpose.' },
         { status: 403 }
       );
     }
@@ -89,12 +91,13 @@ export async function POST(req: NextRequest) {
     await logAudit({
       actorId: user._id,
       actorName: user.name,
-      role: 'student',
-      action: 'student_password_reset',
+      role: user.role,
+      action: payload.purpose === 'staff_password_reset' ? 'staff_password_reset' : 'student_password_reset',
       targetType: 'User',
       meta: {
         lrn: payload.lrn,
         username: user.username,
+        role: user.role,
       },
     });
 

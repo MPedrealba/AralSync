@@ -4,6 +4,8 @@
  * answer keys, and previous assessment results for full offline resiliency.
  */
 
+import { evaluateReadingPerformance } from "./reading";
+
 export interface CachedPassage {
   id: string;
   title: string;
@@ -23,89 +25,109 @@ export interface CachedLearner {
   section: string;
 }
 
-/** Built-in Phil-IRI passages available even on initial cold-launch without connectivity */
+/** Built-in Phil-IRI Key Stage 3 (Grades 7-10) passages available even on initial cold-launch without connectivity */
 export const DEFAULT_OFFLINE_PASSAGES: CachedPassage[] = [
   {
-    id: "builtin-passage-1",
-    title: "Every Living Thing",
+    id: "builtin-ks3-passage-1",
+    title: "ARAL KS3 Plus: Be Stunned — The Lobo Adventure",
     gradeLevel: 7,
     text:
-      "Every living thing is made of cells, the basic building blocks of life. " +
-      "Some organisms are made of a single cell, while others, like humans, are " +
-      "made of trillions. Inside a cell, structures called organelles perform " +
-      "specific jobs, such as producing energy or making proteins.",
+      "One place in the province of Batangas that also captures the attention of tourists is Lobo. " +
+      "It has long been recognized for its clean beaches, rich marine life, and historic Spanish lighthouse overlooking Verde Island Passage. " +
+      "Going to Lobo is challenging. Tourists must travel through winding mountain roads and steep cliffs before reaching the coastal town. " +
+      "However, the travel fatigue quickly vanishes once the expansive turquoise sea comes into full view. " +
+      "Aside from its coastline, Lobo is also home to rolling mountain ranges covered in lush green vegetation.",
     questions: [
       {
-        question: "What are the basic building blocks of life?",
-        options: ["Cells", "Organs", "Tissues", "Bones"],
-        answer: "Cells",
+        question: "What body of water can be seen from the historic Spanish lighthouse in Lobo?",
+        options: ["Manila Bay", "Verde Island Passage", "Taal Lake", "Lingayen Gulf"],
+        answer: "Verde Island Passage",
       },
       {
-        question: "What are structures inside cells that perform specific jobs called?",
-        options: ["Organelles", "Membranes", "Nuclei", "Proteins"],
-        answer: "Organelles",
+        question: "Why is traveling to Lobo described as challenging?",
+        options: [
+          "Tourists must pass winding mountain roads and steep cliffs",
+          "Travelers must hike without roads",
+          "Only boats can reach the town",
+          "The area is frequently flooded",
+        ],
+        answer: "Tourists must pass winding mountain roads and steep cliffs",
       },
     ],
   },
   {
-    id: "builtin-passage-2",
-    title: "Ang Matalinong Matsing",
-    gradeLevel: 4,
+    id: "builtin-ks3-passage-2",
+    title: "ARAL KS3 Filipino: Ang Alamat ng Bulkang Mayon",
+    gradeLevel: 7,
     text:
-      "May isang matalinong matsing na nakatira sa tabi ng ilog. Araw-araw ay kumakain siya ng masasarap " +
-      "na prutas mula sa mataas na puno. Isang araw, may buwaya na lumapit at nakiusap na bigyan siya ng pagkain. " +
-      "Naging magkaibigan ang dalawa at nagbahaginan ng biyaya.",
+      "Sa isang payapang bayan sa Albay, may isang dalagang ubod ng ganda na nagngangalang Daragang Magayon. " +
+      "Maraming mandirigma mula sa iba't ibang tribo ang nagtangkang sumuyo sa kaniya, ngunit ang kaniyang puso ay nabihag ng matapang na si Ulap. " +
+      "Subalit ang marahas na si Pagtuga ay nagbanta ng digmaan upang piliting makuha ang kamay ng dalaga. " +
+      "Sa matinding labanan, kapwa nasawi sina Magayon at Ulap habang ipinaglalaban ang kanilang wagas na pag-ibig.",
     questions: [
       {
-        question: "Saan nakatira ang matalinong matsing?",
-        options: ["Sa tabi ng ilog", "Sa tuktok ng bundok", "Sa loob ng kweba", "Sa gitna ng dagat"],
-        answer: "Sa tabi ng ilog",
+        question: "Sino ang matapang na mandirigmang nabihag ang puso ni Daragang Magayon?",
+        options: ["Ulap", "Pagtuga", "Makusog", "Kaptan"],
+        answer: "Ulap",
       },
       {
-        question: "Sino ang lumapit sa matsing upang humingi ng pagkain?",
-        options: ["Buwaya", "Pagong", "Ibon", "Ahas"],
-        answer: "Buwaya",
+        question: "Ano ang naging bunga ng labanan nina Ulap at Pagtuga?",
+        options: [
+          "Kapwa nasawi sina Magayon at Ulap",
+          "Naitakas ni Ulap si Magayon",
+          "Nagwagi si Pagtuga at pinakasalan ang dalaga",
+          "Nagkaroon ng kasunduan ang dalawang tribo",
+        ],
+        answer: "Kapwa nasawi sina Magayon at Ulap",
       },
     ],
   },
   {
-    id: "builtin-passage-3",
-    title: "The Friendly Dolphin",
-    gradeLevel: 3,
+    id: "builtin-ks3-passage-3",
+    title: "ARAL KS3 Basic: The Philippine Eagle — King of Birds",
+    gradeLevel: 7,
     text:
-      "Dolphins are smart animals that live in the ocean. They love to leap through the waves and play with other dolphins. " +
-      "Dolphins communicate using clicks and whistles. Fishermen in many coastal villages consider them good companions at sea.",
+      "The Philippine Eagle is one of the largest and most powerful birds of prey in the entire world. " +
+      "It lives exclusively in the tropical rainforests of Luzon, Samar, Leyte, and Mindanao. " +
+      "This majestic eagle is easily recognized by its brown and white plumage and its crown of long, shaggy feathers. " +
+      "Sadly, the Philippine Eagle is critically endangered. Massive deforestation and illegal hunting have drastically reduced its natural habitat.",
     questions: [
       {
-        question: "Where do dolphins live?",
-        options: ["In the ocean", "In lakes", "In rivers", "On trees"],
-        answer: "In the ocean",
+        question: "In which islands of the Philippines can the Philippine Eagle be found?",
+        options: ["Luzon, Samar, Leyte, and Mindanao", "Palawan, Mindoro, and Romblon", "Batanes, Cebu, and Bohol", "Panay, Negros, and Guimaras"],
+        answer: "Luzon, Samar, Leyte, and Mindanao",
       },
       {
-        question: "How do dolphins communicate?",
-        options: ["Clicks and whistles", "Songs only", "Silent gestures", "Splashing water"],
-        answer: "Clicks and whistles",
+        question: "What distinct physical feature helps in identifying the Philippine Eagle?",
+        options: ["A crown of long, shaggy feathers", "Bright yellow tail feathers", "Blue markings on its chest", "A curved red beak"],
+        answer: "A crown of long, shaggy feathers",
       },
     ],
   },
   {
-    id: "builtin-passage-4",
-    title: "The Water Cycle",
-    gradeLevel: 5,
+    id: "builtin-ks3-passage-4",
+    title: "ARAL KS3 Basic: Mangroves — The Green Wall of the Coast",
+    gradeLevel: 8,
     text:
-      "The water cycle is the continuous movement of water on, above, and below the surface of the Earth. " +
-      "The sun warms water in puddles, lakes, and oceans, turning it into vapor through evaporation. " +
-      "As vapor rises into the sky, it cools down and condenses to form clouds.",
+      "Mangroves are specialized trees and shrubs that thrive in salty coastal waters and intertidal zones across tropical countries. " +
+      "Unlike ordinary land plants, mangroves possess dense, tangled aerial roots that arch high above the water's surface. " +
+      "These intricate root networks function as natural breakwaters, significantly reducing the destructive force of storm surges and tidal waves. " +
+      "Beyond physical coastal defense, mangrove ecosystems serve as vital nurseries for numerous fish, crab, and shrimp species.",
     questions: [
       {
-        question: "What warms the water on Earth causing evaporation?",
-        options: ["The sun", "The wind", "The moon", "The clouds"],
-        answer: "The sun",
+        question: "Where do mangrove trees and shrubs naturally thrive?",
+        options: ["In salty coastal waters and intertidal zones", "In high mountain ridges", "In freshwater freshwater lakes only", "In dry desert sands"],
+        answer: "In salty coastal waters and intertidal zones",
       },
       {
-        question: "What forms when water vapor cools and condenses?",
-        options: ["Clouds", "Rain drops", "Puddles", "Rainbows"],
-        answer: "Clouds",
+        question: "How do the tangled aerial root networks of mangroves protect coastlines?",
+        options: [
+          "They act as natural breakwaters reducing wave energy",
+          "They block sunlight from the ocean floor",
+          "They absorb all coastal rainwater",
+          "They prevent all fish from leaving the shore",
+        ],
+        answer: "They act as natural breakwaters reducing wave energy",
       },
     ],
   },
@@ -257,10 +279,8 @@ export function computeLocalPhilIriEvaluation({
   const durationMinutes = Math.max(1, durationSec) / 60;
   const wpm = Math.max(0, Math.round(wordsDecoded / durationMinutes));
 
-  let masteryLevel = "Frustration";
-  if (wordsDecoded <= 0) masteryLevel = "Non-Reader";
-  else if (accuracy >= 97) masteryLevel = "Independent";
-  else if (accuracy >= 90) masteryLevel = "Instructional";
+  const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
+  const evaluation = evaluateReadingPerformance(accuracy, null, wordsTotal, decodedForEval);
 
   // Build miscue items for the passage words so word-by-word reader is immediately clickable
   const miscueItems = words.map((w, idx) => {
@@ -284,7 +304,10 @@ export function computeLocalPhilIriEvaluation({
   return {
     accuracy,
     wpm,
-    masteryLevel,
+    masteryLevel: evaluation.masteryBand, // Standard DepEd Mastery Band
+    masteryBand: evaluation.masteryBand,
+    philIriLevel: evaluation.philIriLevel, // Phil-IRI Oral Reading Level
+    level: evaluation.philIriLevel,
     miscueTotal,
     miscueBreakdown: breakdown,
     miscueItems,

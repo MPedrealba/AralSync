@@ -198,7 +198,7 @@ export default function CoordinatorUserManagementPage() {
         body: JSON.stringify({
           name: name.trim(),
           username: username.trim(),
-          password,
+          password: password.trim() || "password123",
           role,
           specialization: role === "teacher" && assignedSubject === "Reading" ? "reading" : specialization,
           assignedSubject: role === "teacher" ? assignedSubject : undefined,
@@ -987,15 +987,19 @@ export default function CoordinatorUserManagementPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Temporary Password *</label>
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Temporary Password <span className="font-normal text-slate-400">(Default: password123)</span>
+                    </label>
                     <input
                       type="password"
-                      required
-                      placeholder="••••••••"
+                      placeholder="password123"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:bg-white focus:ring-1 focus:ring-red-800"
                     />
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Defaults to &ldquo;password123&rdquo; if left empty. Staff will be forced to change it upon first login.
+                    </p>
                   </div>
                 </div>
 

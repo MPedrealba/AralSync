@@ -85,3 +85,111 @@ export async function DELETE(
     return authErrorResponse(e);
   }
 }
+
+/**
+ * PATCH /api/teacher/answer-keys/:id
+ * Updates answers, question choices, or title on an existing AnswerKey.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(req, ["teacher"]);
+    await connectDB();
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Answer key id is required." },
+        { status: 400 }
+      );
+    }
+
+    const body = await req.json();
+    const updateData: Record<string, any> = {};
+
+    if (Array.isArray(body.answers)) {
+      updateData.answers = body.answers;
+      updateData.answerLetters = body.answers;
+    }
+    if (Array.isArray(body.questions)) {
+      updateData.questions = body.questions;
+    }
+    if (typeof body.title === "string" && body.title.trim()) {
+      updateData.title = body.title.trim();
+    }
+    if (typeof body.isOnline === "boolean") {
+      updateData.isOnline = body.isOnline;
+    }
+    if (typeof body.timeLimitMinutes === "number") {
+      updateData.timeLimitMinutes = Math.max(0, body.timeLimitMinutes);
+    }
+    if (body.dueDate !== undefined) {
+      updateData.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+    }
+    if (body.targetGrade !== undefined) {
+      updateData.targetGrade = body.targetGrade ? Number(body.targetGrade) : null;
+    }
+    if (typeof body.targetSection === "string") {
+      updateData.targetSection = body.targetSection.trim();
+    }
+
+    const updated = await AnswerKey.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: "Answer key not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: updated,
+    });
+  } catch (e: any) {
+    return authErrorResponse(e);
+  }
+}
+
+/**
+ * GET /api/teacher/answer-keys/:id
+ * Fetches a single answer key with questions and online delivery settings.
+ */
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(req, ["teacher"]);
+    await connectDB();
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Answer key id is required." },
+        { status: 400 }
+      );
+    }
+
+    const key = await AnswerKey.findById(id).lean();
+    if (!key) {
+      return NextResponse.json(
+        { success: false, error: "Answer key not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: key,
+    });
+  } catch (e: any) {
+    return authErrorResponse(e);
+  }
+}
