@@ -87,7 +87,7 @@ interface Props {
 
 export default function ClassRecordMatrix({
   initialGrade = "7",
-  initialSection = "Rosal",
+  initialSection = "",
   initialSubject = "Reading",
   userRole = "teacher",
 }: Props) {
@@ -141,7 +141,7 @@ export default function ClassRecordMatrix({
         const json = await parseJsonResponse(res);
         if (isMounted && res.ok && json.success) {
           const map: Record<string, string[]> = json.gradeSectionsMap || json.data?.gradeSectionsMap || {};
-          const grades: any[] = json.availableGrades || json.allGrades || json.data?.availableGrades;
+          const grades: (string | number)[] = json.availableGrades || json.allGrades || json.data?.availableGrades;
 
           setGradeSectionsMap(map);
           if (Array.isArray(grades) && grades.length > 0) {
@@ -156,7 +156,7 @@ export default function ClassRecordMatrix({
             setSection("");
           }
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.error("Failed to load cohort sections:", e);
       } finally {
         if (isMounted) setLoadingCohorts(false);
@@ -215,8 +215,9 @@ export default function ClassRecordMatrix({
       if (Array.isArray(json.data?.availableGrades) && json.data.availableGrades.length > 0) {
         setAvailableGrades((prev) => (prev.length <= 4 ? json.data.availableGrades.map(String) : prev));
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load class record matrix.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load class record matrix.";
+      setError(message);
       setMatrixData(null);
     } finally {
       setLoading(false);
