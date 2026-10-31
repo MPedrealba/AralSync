@@ -3,16 +3,28 @@ import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import { extractSurnamePassword } from '../src/lib/nameUtils.ts';
 
-// Helper simulating login route's student password check logic
-async function verifyLoginPassword(inputPassword, storedHashedPassword, userRole) {
-  let isMatch = await bcrypt.compare(inputPassword, storedHashedPassword);
+// Helper simulating login route's student password check logic with self-healing
+async function verifyLoginPassword(inputPassword, user, userRole, onSelfHeal) {
+  let isMatch = await bcrypt.compare(inputPassword, user.password);
   if (!isMatch && userRole === 'student') {
     const normalizedInput = String(inputPassword).toLowerCase().replace(/[^a-z0-9]/gi, '');
     if (normalizedInput && normalizedInput !== inputPassword) {
-      isMatch = await bcrypt.compare(normalizedInput, storedHashedPassword);
+      isMatch = await bcrypt.compare(normalizedInput, user.password);
     }
     if (!isMatch && normalizedInput) {
-      isMatch = await bcrypt.compare(normalizedInput.toUpperCase(), storedHashedPassword);
+      isMatch = await bcrypt.compare(normalizedInput.toUpperCase(), user.password);
+    }
+
+    // Self-healing fallback:
+    if (!isMatch && normalizedInput) {
+      const expectedSurname = extractSurnamePassword(user.name || '', user.username || '');
+      if (expectedSurname && normalizedInput === expectedSurname) {
+        isMatch = true;
+        if (onSelfHeal) {
+          const newHashed = await bcrypt.hash(expectedSurname, 10);
+          onSelfHeal(newHashed);
+        }
+      }
     }
   }
   return isMatch;
@@ -68,46 +80,76 @@ describe('Student Surname Password Extraction & Login Verification Suite', () =>
     it('authenticates when student enters exact lowercase surname', async () => {
       const defaultPassword = extractSurnamePassword('Juan dela Cruz', '102948');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      const user = { name: 'Juan dela Cruz', username: '102948', password: hashedPassword };
 
-      const isValid = await verifyLoginPassword('delacruz', hashedPassword, 'student');
+      const isValid = await verifyLoginPassword('delacruz', user, 'student');
       assert.equal(isValid, true);
     });
 
     it('authenticates when student enters spaced/capitalized surname', async () => {
       const defaultPassword = extractSurnamePassword('Dela Cruz, Juan M.', '102948');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      const user = { name: 'Dela Cruz, Juan M.', username: '102948', password: hashedPassword };
 
-      assert.equal(await verifyLoginPassword('Dela Cruz', hashedPassword, 'student'), true);
-      assert.equal(await verifyLoginPassword('DELACRUZ', hashedPassword, 'student'), true);
-      assert.equal(await verifyLoginPassword('dela cruz', hashedPassword, 'student'), true);
-      assert.equal(await verifyLoginPassword('Dela-Cruz', hashedPassword, 'student'), true);
+      assert.equal(await verifyLoginPassword('Dela Cruz', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('DELACRUZ', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('dela cruz', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('Dela-Cruz', user, 'student'), true);
+    });
+
+    it('self-heals seeded student accounts previously hashed with password123 (e.g. Alyssa Cabrera)', async () => {
+      // Seeded student has password123 as hash
+      const seededHash = await bcrypt.hash('password123', 10);
+      const user = {
+        name: 'Alyssa Cabrera',
+        username: '136860100041',
+        password: seededHash,
+      };
+
+      let upgradedHash = null;
+      // Alyssa attempts to log in with her surname in uppercase "CABRERA"
+      const isValidFirstLogin = await verifyLoginPassword('CABRERA', user, 'student', (newHash) => {
+        upgradedHash = newHash;
+        user.password = newHash; // Simulate MongoDB update
+      });
+
+      assert.equal(isValidFirstLogin, true, 'First login with surname should succeed via self-healing');
+      assert.ok(upgradedHash, 'Password hash should be upgraded in DB');
+
+      // Verify that subsequent logins now match directly via bcrypt against the upgraded hash
+      const isValidSecondLogin = await verifyLoginPassword('cabrera', user, 'student');
+      assert.equal(isValidSecondLogin, true, 'Subsequent login should match upgraded hash directly');
     });
 
     it('preserves backward compatibility for older student accounts hashed with uppercase LRN', async () => {
       const oldHashedPassword = await bcrypt.hash('102948ABC', 10);
+      const user = { name: 'Mario Rossi', username: '102948ABC', password: oldHashedPassword };
 
       // Student enters lowercase or exact
-      assert.equal(await verifyLoginPassword('102948abc', oldHashedPassword, 'student'), true);
-      assert.equal(await verifyLoginPassword('102948ABC', oldHashedPassword, 'student'), true);
+      assert.equal(await verifyLoginPassword('102948abc', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('102948ABC', user, 'student'), true);
     });
 
     it('rejects incorrect passwords for students', async () => {
       const defaultPassword = extractSurnamePassword('Juan dela Cruz', '102948');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      const user = { name: 'Juan dela Cruz', username: '102948', password: hashedPassword };
 
-      assert.equal(await verifyLoginPassword('wrongpassword', hashedPassword, 'student'), false);
-      assert.equal(await verifyLoginPassword('santos', hashedPassword, 'student'), false);
+      assert.equal(await verifyLoginPassword('wrongpassword', user, 'student'), false);
+      assert.equal(await verifyLoginPassword('santos', user, 'student'), false);
     });
 
-    it('does not apply loose normalization to non-student roles', async () => {
+    it('does not apply loose normalization or self-healing to non-student roles', async () => {
       const facultyPassword = 'Password123!';
       const facultyHashed = await bcrypt.hash(facultyPassword, 10);
+      const facultyUser = { name: 'Teacher Maria Santos', username: 'msantos', password: facultyHashed };
 
       // Matches exact
-      assert.equal(await verifyLoginPassword('Password123!', facultyHashed, 'teacher'), true);
-      // Fails on normalized lower
-      assert.equal(await verifyLoginPassword('password123', facultyHashed, 'teacher'), false);
-      assert.equal(await verifyLoginPassword('password123!', facultyHashed, 'coordinator'), false);
+      assert.equal(await verifyLoginPassword('Password123!', facultyUser, 'teacher'), true);
+      // Fails on normalized lower or surname guessing
+      assert.equal(await verifyLoginPassword('password123', facultyUser, 'teacher'), false);
+      assert.equal(await verifyLoginPassword('password123!', facultyUser, 'coordinator'), false);
+      assert.equal(await verifyLoginPassword('santos', facultyUser, 'teacher'), false);
     });
   });
 });

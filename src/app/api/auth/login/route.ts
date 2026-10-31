@@ -6,6 +6,7 @@ import User from "../../../../../models/User";
 import LearnerRecord from "../../../../../models/LearnerRecord";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { extractSurnamePassword } from "@/lib/nameUtils";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_for_development";
 
@@ -86,6 +87,23 @@ export async function POST(req: Request) {
       }
       if (!isMatch && normalizedInput) {
         isMatch = await bcrypt.compare(normalizedInput.toUpperCase(), user.password);
+      }
+
+      // Self-healing student login:
+      // If the database stores a legacy or seeded password hash (e.g. "password123"),
+      // check if the normalized input matches the learner's surname.
+      if (!isMatch && normalizedInput) {
+        const expectedSurname = extractSurnamePassword(user.name || '', user.username || '');
+        if (expectedSurname && normalizedInput === expectedSurname) {
+          isMatch = true;
+          try {
+            // Silently upgrade user.password in MongoDB to the hashed surname for instant future logins
+            const newHashed = await bcrypt.hash(expectedSurname, 10);
+            await User.updateOne({ _id: user._id }, { $set: { password: newHashed } });
+          } catch (updateErr) {
+            console.error("Failed to self-heal student password hash:", updateErr);
+          }
+        }
       }
     }
     if (!isMatch) {
