@@ -621,8 +621,13 @@ export default function Profile() {
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none disabled:opacity-50"
+                disabled={
+                  saving ||
+                  !name.trim() ||
+                  !username.trim() ||
+                  (Boolean(newPassword) && (!currentPassword.trim() || !confirmPassword.trim() || newPassword !== confirmPassword))
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <>

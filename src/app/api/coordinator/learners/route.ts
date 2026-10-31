@@ -16,7 +16,7 @@ import { logAudit } from '@/lib/audit';
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['coordinator']);
+    await requireAuth(req, ['coordinator', 'principal']);
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -77,6 +77,9 @@ export async function GET(req: NextRequest) {
       LearnerRecord.find(filter)
         .populate({ path: 'studentId', select: 'name username active', strictPopulate: false })
         .populate({ path: 'assignedTeacherId', select: 'name username', strictPopulate: false })
+        .populate({ path: 'assignedTeachers.reading', select: 'name username', strictPopulate: false })
+        .populate({ path: 'assignedTeachers.math', select: 'name username', strictPopulate: false })
+        .populate({ path: 'assignedTeachers.science', select: 'name username', strictPopulate: false })
         .sort({ gradeLevel: 1, section: 1 })
         .lean(),
     ]);
@@ -134,6 +137,14 @@ export async function GET(req: NextRequest) {
           address: r.address || '',
           assignedTeacherId: teacher._id ? teacher._id.toString() : null,
           assignedTeacherName: teacher.name || r.assignedTeacherName || null,
+          assignedTeachers: {
+            reading: r.assignedTeachers?.reading?._id ? r.assignedTeachers.reading._id.toString() : (r.assignedTeachers?.reading ? r.assignedTeachers.reading.toString() : null),
+            math: r.assignedTeachers?.math?._id ? r.assignedTeachers.math._id.toString() : (r.assignedTeachers?.math ? r.assignedTeachers.math.toString() : null),
+            science: r.assignedTeachers?.science?._id ? r.assignedTeachers.science._id.toString() : (r.assignedTeachers?.science ? r.assignedTeachers.science.toString() : null),
+          },
+          readingTeacherName: r.assignedTeachers?.reading?.name || r.readingTeacherName || null,
+          mathTeacherName: r.assignedTeachers?.math?.name || r.mathTeacherName || null,
+          scienceTeacherName: r.assignedTeachers?.science?.name || r.scienceTeacherName || null,
         };
       })
       .filter((l: any) => {
@@ -176,7 +187,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const actor = await requireAuth(req, ['coordinator']);
+    const actor = await requireAuth(req, ['coordinator', 'principal']);
     await connectDB();
 
     const body = await req.json();
@@ -190,6 +201,10 @@ export async function POST(req: NextRequest) {
       address,
       riskLevel,
       assignedTeacherId,
+      assignedTeachers,
+      readingTeacherId,
+      mathTeacherId,
+      scienceTeacherId,
     } = body;
 
     const trimmedLrn = (lrn || '').toString().trim();
@@ -227,6 +242,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Resolve subject-specific teachers if provided
+    const resolvedReadingId = assignedTeachers?.reading || readingTeacherId;
+    const resolvedMathId = assignedTeachers?.math || mathTeacherId;
+    const resolvedScienceId = assignedTeachers?.science || scienceTeacherId;
+
+    let readingTeacherDoc: any = null;
+    let mathTeacherDoc: any = null;
+    let scienceTeacherDoc: any = null;
+
+    if (resolvedReadingId && resolvedReadingId !== 'unassigned' && mongoose.Types.ObjectId.isValid(resolvedReadingId)) {
+      readingTeacherDoc = await User.findById(resolvedReadingId);
+    }
+    if (resolvedMathId && resolvedMathId !== 'unassigned' && mongoose.Types.ObjectId.isValid(resolvedMathId)) {
+      mathTeacherDoc = await User.findById(resolvedMathId);
+    }
+    if (resolvedScienceId && resolvedScienceId !== 'unassigned' && mongoose.Types.ObjectId.isValid(resolvedScienceId)) {
+      scienceTeacherDoc = await User.findById(resolvedScienceId);
+    }
+
     // Create student user account
     const hashedPassword = await bcrypt.hash(trimmedLrn.toUpperCase(), 10);
     const userDoc = await User.create({
@@ -250,8 +284,16 @@ export async function POST(req: NextRequest) {
       address: address ? address.trim() : undefined,
       riskLevel: riskLevel || 'Pending Assessment',
       masteryStatus: 'Beginning',
-      assignedTeacherId: assignedTeacherDoc ? assignedTeacherDoc._id : null,
-      assignedTeacherName: assignedTeacherDoc ? assignedTeacherDoc.name : null,
+      assignedTeacherId: assignedTeacherDoc ? assignedTeacherDoc._id : (readingTeacherDoc?._id || mathTeacherDoc?._id || scienceTeacherDoc?._id || null),
+      assignedTeacherName: assignedTeacherDoc ? assignedTeacherDoc.name : (readingTeacherDoc?.name || mathTeacherDoc?.name || scienceTeacherDoc?.name || null),
+      assignedTeachers: {
+        reading: readingTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc._id : null),
+        math: mathTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc._id : null),
+        science: scienceTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc._id : null),
+      },
+      readingTeacherName: readingTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc.name : null),
+      mathTeacherName: mathTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc.name : null),
+      scienceTeacherName: scienceTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc.name : null),
     });
 
     await logAudit({

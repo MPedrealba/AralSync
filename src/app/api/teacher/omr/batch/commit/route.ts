@@ -151,7 +151,15 @@ export async function POST(req: NextRequest) {
         competency,
         masteryLevel: item.masteryLevel,
         answerKeyRef: keyDoc?._id || undefined,
-        assessmentCategory: keyDoc?.assessmentType || (title.toLowerCase().includes('exam') ? 'exam' : 'quiz'),
+        assessmentCategory: keyDoc?.assessmentType || keyDoc?.assessmentCategory || (
+          title.toLowerCase().includes('pre-test') || title.toLowerCase().includes('pretest') || title.toLowerCase().includes('baseline')
+            ? 'pre-test'
+            : title.toLowerCase().includes('post-test') || title.toLowerCase().includes('posttest') || title.toLowerCase().includes('endline')
+            ? 'post-test'
+            : title.toLowerCase().includes('exam')
+            ? 'exam'
+            : 'quiz'
+        ),
         topics: Array.isArray(keyDoc?.topics) && keyDoc.topics.length > 0 ? keyDoc.topics : (keyDoc?.topic ? [keyDoc.topic] : []),
         writtenItems,
         omrSheetUrl: item.omrSheetUrl || null,

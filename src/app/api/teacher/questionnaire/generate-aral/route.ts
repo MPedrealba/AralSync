@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../../../database/db';
 import Question from '../../../../../../models/Question';
 import ReadingPassage from '../../../../../../models/ReadingPassage';
+import LearningMaterial from '../../../../../../models/LearningMaterial';
 import AnswerKey from '../../../../../../models/AnswerKey';
 import User from '../../../../../../models/User';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const assessmentType: 'quiz' | 'exam' = body?.assessmentType === 'exam' ? 'exam' : 'quiz';
+    const rawType = body?.assessmentType;
+    const assessmentType: 'quiz' | 'exam' | 'pre-test' | 'post-test' =
+      rawType === 'exam' || rawType === 'pre-test' || rawType === 'post-test' ? rawType : 'quiz';
 
     // Parse topics (supports array of 1-2 topics or single topic)
     let requestedTopics: string[] = [];
@@ -61,7 +64,12 @@ export async function POST(req: NextRequest) {
     }
 
     const passageId = body?.passageId;
-    const targetCount = Math.min(50, Math.max(5, Number(body?.count) || (assessmentType === 'exam' ? 50 : 10)));
+    const materialId = body?.materialId;
+    let materialDoc: any = null;
+    if (materialId) {
+      materialDoc = await LearningMaterial.findById(materialId).lean();
+    }
+    const targetCount = Math.min(50, Math.max(5, Number(body?.count) || (assessmentType === 'quiz' ? 10 : (assessmentType === 'exam' ? 50 : 20))));
     const writtenCount = Math.max(0, Math.min(targetCount, Number(body?.writtenCount) || 0));
     const allowRetake = Boolean(body?.allowRetake);
 
@@ -132,7 +140,29 @@ export async function POST(req: NextRequest) {
 
         if (requestedTopics.length === 1) {
           const t = requestedTopics[0];
-          const topicQuestions = await Question.find({ subject: targetSubject, topic: t, ...aralFilter }).lean();
+          let topicQuestions: any[] = [];
+          if (materialId) {
+            topicQuestions = await Question.find({
+              subject: targetSubject,
+              topic: t,
+              $or: [
+                { materialId },
+                ...(materialDoc?.title ? [{ sourceMaterial: materialDoc.title }] : []),
+                ...(materialDoc?.title ? [{ source: new RegExp(materialDoc.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }] : []),
+              ],
+            }).lean();
+          }
+
+          const generalQuestions = await Question.find({ subject: targetSubject, topic: t, ...aralFilter }).lean();
+
+          if (topicQuestions.length > 0) {
+            const existingIds = new Set(topicQuestions.map((q) => String(q._id)));
+            const additional = generalQuestions.filter((q) => !existingIds.has(String(q._id)));
+            topicQuestions = [...topicQuestions, ...additional];
+          } else {
+            topicQuestions = generalQuestions;
+          }
+
           if (topicQuestions.length === 0) {
             return NextResponse.json({ success: false, error: `No questions found in learning materials for topic "${t}".` }, { status: 404 });
           }
@@ -150,8 +180,27 @@ export async function POST(req: NextRequest) {
           const half = Math.floor(targetCount / 2);
           const remainder = targetCount - half;
 
-          const q1 = await Question.find({ subject: targetSubject, topic: requestedTopics[0], ...aralFilter }).lean();
-          const q2 = await Question.find({ subject: targetSubject, topic: requestedTopics[1], ...aralFilter }).lean();
+          let q1: any[] = [];
+          let q2: any[] = [];
+          if (materialId) {
+            const matFilter = {
+              $or: [
+                { materialId },
+                ...(materialDoc?.title ? [{ sourceMaterial: materialDoc.title }] : []),
+                ...(materialDoc?.title ? [{ source: new RegExp(materialDoc.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }] : []),
+              ],
+            };
+            q1 = await Question.find({ subject: targetSubject, topic: requestedTopics[0], ...matFilter }).lean();
+            q2 = await Question.find({ subject: targetSubject, topic: requestedTopics[1], ...matFilter }).lean();
+          }
+
+          const genQ1 = await Question.find({ subject: targetSubject, topic: requestedTopics[0], ...aralFilter }).lean();
+          const genQ2 = await Question.find({ subject: targetSubject, topic: requestedTopics[1], ...aralFilter }).lean();
+
+          const q1Ids = new Set(q1.map((q) => String(q._id)));
+          q1 = [...q1, ...genQ1.filter((q) => !q1Ids.has(String(q._id)))];
+          const q2Ids = new Set(q2.map((q) => String(q._id)));
+          q2 = [...q2, ...genQ2.filter((q) => !q2Ids.has(String(q._id)))];
 
           if (q1.length === 0 && q2.length === 0) {
             return NextResponse.json({ success: false, error: 'No questions found for the selected topics.' }, { status: 404 });
@@ -182,6 +231,9 @@ export async function POST(req: NextRequest) {
         const passage = await ReadingPassage.findById(passageId).lean();
         if (!passage) {
           return NextResponse.json({ success: false, error: 'Reading passage not found.' }, { status: 404 });
+        }
+        if (!materialDoc && (passage as any).materialId) {
+          materialDoc = await LearningMaterial.findById((passage as any).materialId).lean();
         }
         finalTopic = (passage as any).title || 'Reading Comprehension';
         finalTopicsList = [finalTopic];
@@ -241,11 +293,26 @@ export async function POST(req: NextRequest) {
 
       const questionsByTopic: Record<string, any[]> = {};
       for (const t of allTopics) {
-        questionsByTopic[t] = await Question.find({
+        let poolForTopic: any[] = [];
+        if (materialId) {
+          poolForTopic = await Question.find({
+            subject: targetSubject,
+            topic: t,
+            $or: [
+              { materialId },
+              ...(materialDoc?.title ? [{ sourceMaterial: materialDoc.title }] : []),
+              ...(materialDoc?.title ? [{ source: new RegExp(materialDoc.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }] : []),
+            ],
+          }).lean();
+        }
+        const general = await Question.find({
           subject: targetSubject,
           topic: t,
           ...(targetSubject === 'Reading' ? { source: { $regex: /ARAL/i } } : {}),
         }).lean();
+        const existingIds = new Set(poolForTopic.map((q) => String(q._id)));
+        poolForTopic = [...poolForTopic, ...general.filter((q) => !existingIds.has(String(q._id)))];
+        questionsByTopic[t] = poolForTopic;
       }
 
       let examPool: any[] = [];
@@ -328,25 +395,37 @@ export async function POST(req: NextRequest) {
     }));
 
     const subjectDisplay = targetSubject === 'Math' ? 'Mathematics' : targetSubject;
-    const title =
-      assessmentType === 'exam'
+    const autoTitle =
+      assessmentType === 'pre-test'
+        ? `ARAL Baseline Diagnostic Pre-Test: ${subjectDisplay} (${itemCount} items)`
+        : assessmentType === 'post-test'
+        ? `ARAL Endline Evaluation Post-Test: ${subjectDisplay} (${itemCount} items)`
+        : assessmentType === 'exam'
         ? `Comprehensive Exam: ${subjectDisplay} (${itemCount} items • Whole Curriculum)`
         : (finalTopicsList.length > 1
             ? `Weekly Quiz: ${finalTopicsList.join(' & ')} (${itemCount} items)`
             : `Weekly Quiz: ${finalTopic} (${itemCount} items)`);
+    const title =
+      typeof body?.title === 'string' && body.title.trim().length > 0
+        ? body.title.trim()
+        : autoTitle;
 
     // Save official AnswerKey linked to this teacher and assessment category
+    const cleanType = assessmentType.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const answerKey = await AnswerKey.create({
       title,
       subject: targetSubject,
       assessmentType,
+      assessmentCategory: assessmentType,
       topic: finalTopic,
       topics: finalTopicsList,
       teacherId: authUser.id,
+      materialId: materialDoc?._id || undefined,
+      sourceMaterial: materialDoc?.title || undefined,
       items: itemCount,
       totalItems: itemCount,
       examId: null,
-      questionnaireId: `Q-${assessmentType.toUpperCase()}-${Date.now()}`,
+      questionnaireId: `Q-${cleanType}-${Date.now()}`,
       answers: answerLetters,
       structuredAnswers,
       answerLetters,
@@ -363,9 +442,12 @@ export async function POST(req: NextRequest) {
       data: {
         title,
         assessmentType,
+        assessmentCategory: assessmentType,
         subject: targetSubject,
         topic: finalTopic,
         topics: finalTopicsList,
+        materialId: materialDoc?._id ? String(materialDoc._id) : undefined,
+        sourceMaterial: materialDoc?.title || undefined,
         gradeLevel: 7,
         itemCount,
         writtenCount,
@@ -382,9 +464,12 @@ export async function POST(req: NextRequest) {
           id: String(answerKey._id),
           title: answerKey.title,
           assessmentType: answerKey.assessmentType,
+          assessmentCategory: answerKey.assessmentCategory || answerKey.assessmentType,
           subject: answerKey.subject,
           topic: answerKey.topic,
           topics: answerKey.topics,
+          materialId: materialDoc?._id ? String(materialDoc._id) : undefined,
+          sourceMaterial: materialDoc?.title || undefined,
           items: answerKey.items,
           totalItems: answerKey.totalItems,
           sections,

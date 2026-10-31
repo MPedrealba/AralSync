@@ -12,6 +12,7 @@ import Recommendation from '../../../../../models/Recommendation';
 import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics, calculateRiskLevelFromScore } from '@/lib/philIriSync';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
+import { getRecommendationsForLearner, Subject } from '@/lib/dynamicRecommendations';
 
 /* ──────────────────────────────────────────────────────────────
  *  OMR Processing — OpenCV via Python microservice
@@ -243,7 +244,15 @@ export async function POST(req: NextRequest) {
       competency,
       masteryLevel: mastery,
       answerKeyRef: keyDoc?._id || undefined,
-      assessmentCategory: keyDoc?.assessmentType || (title.toLowerCase().includes('exam') ? 'exam' : 'quiz'),
+      assessmentCategory: keyDoc?.assessmentType || keyDoc?.assessmentCategory || (
+        title.toLowerCase().includes('pre-test') || title.toLowerCase().includes('pretest') || title.toLowerCase().includes('baseline')
+          ? 'pre-test'
+          : title.toLowerCase().includes('post-test') || title.toLowerCase().includes('posttest') || title.toLowerCase().includes('endline')
+          ? 'post-test'
+          : title.toLowerCase().includes('exam')
+          ? 'exam'
+          : 'quiz'
+      ),
       topics: Array.isArray(keyDoc?.topics) && keyDoc.topics.length > 0 ? keyDoc.topics : (keyDoc?.topic ? [keyDoc.topic] : []),
       writtenItems,
       omrSheetUrl,
@@ -505,13 +514,14 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    // ── Targeted ARAL Recommendations ──
-    const targetSubject = subject || assessment.subject || 'Math';
-    const recommendations = await Recommendation.find({
-      subject: targetSubject === 'Math' ? 'Math' : targetSubject === 'Science' ? 'Science' : 'Reading',
-    })
-      .limit(3)
-      .lean();
+    // ── Targeted Dynamic ARAL Recommendations ──
+    const targetSubject = (subject || assessment.subject || 'Math') as Subject;
+    const { recommendations, learnerTier, programLevel } = await getRecommendationsForLearner({
+      studentId: actualStudentId,
+      subject: targetSubject,
+      score: percentage,
+      limit: 3,
+    });
 
     return ok({
       assessment: {
@@ -535,6 +545,12 @@ export async function PUT(req: NextRequest) {
         description: r.description || '',
         subject: r.subject || '',
         kind: r.kind || 'Activity',
+        workbookUrl: r.workbookUrl || null,
+        pageStart: r.pageStart || null,
+        pageEnd: r.pageEnd || null,
+        sessionInfo: r.sessionInfo || null,
+        proficiencyTier: r.proficiencyTier || learnerTier,
+        programLevel: r.programLevel || programLevel,
       })),
     });
   } catch (error) {

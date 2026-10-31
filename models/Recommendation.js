@@ -20,6 +20,10 @@ const RecommendationSchema = new mongoose.Schema(
     tutorGuideUrl: { type: String, default: null },
     keyStage: { type: String, default: null },
     programLevel: { type: String, default: null },
+    proficiencyTier: { type: String, default: null }, // 'Beginning' | 'Developing' | 'Proficient' | 'Frustration' | 'Instructional' | 'Independent'
+    materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningMaterial', default: null },
+    passageId: { type: mongoose.Schema.Types.ObjectId, ref: 'ReadingPassage', default: null },
+    isDynamic: { type: Boolean, default: false },
     targetGrades: [{ type: Number }],
     pageStart: { type: Number, default: null },
     pageEnd: { type: Number, default: null },
@@ -29,6 +33,8 @@ const RecommendationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports =
-  mongoose.models.Recommendation ||
-  mongoose.model('Recommendation', RecommendationSchema);
+if (mongoose.models && mongoose.models.Recommendation) {
+  delete mongoose.models.Recommendation;
+}
+
+module.exports = mongoose.model('Recommendation', RecommendationSchema);

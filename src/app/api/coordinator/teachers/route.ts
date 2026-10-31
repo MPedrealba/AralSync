@@ -20,17 +20,27 @@ export async function GET(req: NextRequest) {
       .lean();
 
     // Fetch all assigned learners with student user details
-    const records = await LearnerRecord.find({ assignedTeacherId: { $ne: null } })
+    const records = await LearnerRecord.find({
+      $or: [
+        { assignedTeacherId: { $ne: null } },
+        { 'assignedTeachers.reading': { $ne: null } },
+        { 'assignedTeachers.math': { $ne: null } },
+        { 'assignedTeachers.science': { $ne: null } },
+      ],
+    })
       .populate({ path: 'studentId', select: 'name username active', strictPopulate: false })
       .sort({ gradeLevel: 1, section: 1 })
       .lean();
 
     const teacherStudentsMap = new Map<string, any[]>();
     for (const r of records as any[]) {
-      if (!r.assignedTeacherId) continue;
-      const tid = r.assignedTeacherId.toString();
-      if (!teacherStudentsMap.has(tid)) teacherStudentsMap.set(tid, []);
-      teacherStudentsMap.get(tid)!.push({
+      const teacherIds = new Set<string>();
+      if (r.assignedTeacherId) teacherIds.add(r.assignedTeacherId.toString());
+      if (r.assignedTeachers?.reading) teacherIds.add(r.assignedTeachers.reading.toString());
+      if (r.assignedTeachers?.math) teacherIds.add(r.assignedTeachers.math.toString());
+      if (r.assignedTeachers?.science) teacherIds.add(r.assignedTeachers.science.toString());
+
+      const studentPayload = {
         id: r._id.toString(),
         studentId: r.studentId?._id ? r.studentId._id.toString() : null,
         name: r.studentId?.name || 'Unknown Learner',
@@ -40,7 +50,12 @@ export async function GET(req: NextRequest) {
         riskLevel: r.riskLevel || 'Low Risk',
         readingLevel: r.readingLevel || 'Not Assessed',
         masteryStatus: r.masteryStatus || 'Beginning',
-      });
+      };
+
+      for (const tid of teacherIds) {
+        if (!teacherStudentsMap.has(tid)) teacherStudentsMap.set(tid, []);
+        teacherStudentsMap.get(tid)!.push(studentPayload);
+      }
     }
 
     const formatted = teachers.map((t: any) => {

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     });
 
     // 2. Pre-test vs Post-test by grade (earliest vs latest score per student within each subject bucket)
-    const byStudent = new Map<string, { subject: string; score: number; date: number; grade: number }[]>();
+    const byStudent = new Map<string, { subject: string; score: number; date: number; grade: number; category?: string }[]>();
     const gradeOf = new Map<string, number>();
     // Pull grades from LearnerRecord so assessments don't need to carry it
     // (grade data lives on LearnerRecord — fetched below).
@@ -53,9 +53,19 @@ export async function GET(req: NextRequest) {
       if (!subj || a.score == null) continue;
       const sid = String(a.studentId);
       const date = new Date(a.date).getTime();
+      const title = (a.title || '').toLowerCase();
+      const category = a.assessmentCategory || (
+        title.includes('pre-test') || title.includes('pretest') || title.includes('baseline')
+          ? 'pre-test'
+          : title.includes('post-test') || title.includes('posttest') || title.includes('endline')
+          ? 'post-test'
+          : title.includes('exam')
+          ? 'exam'
+          : 'quiz'
+      );
       // treat as array keyed by student
       const key = `${sid}`;
-      const entry = { subject: subj, score: a.score, date, grade: 0 };
+      const entry = { subject: subj, score: a.score, date, grade: 0, category };
       const existing = byStudent.get(key);
       if (!existing) byStudent.set(key, [entry]);
       else existing.push(entry);
@@ -73,7 +83,26 @@ export async function GET(req: NextRequest) {
       const bucket = gradeAvgs.get(grade)!;
       for (const subj of ['Math', 'Reading', 'Science']) {
         const subjList = list.filter((e) => e.subject === subj).sort((a, b) => a.date - b.date);
-        if (subjList.length >= 2) {
+        if (subjList.length === 0) continue;
+
+        // Check if there are explicit pre-test and post-test assessments
+        const explicitPre = subjList.find((e) => e.category === 'pre-test');
+        const explicitPost = [...subjList].reverse().find((e) => e.category === 'post-test');
+
+        if (explicitPre && explicitPost) {
+          bucket.pre.push(explicitPre.score);
+          bucket.post.push(explicitPost.score);
+        } else if (explicitPre && !explicitPost) {
+          bucket.pre.push(explicitPre.score);
+          const later = subjList.filter((e) => e !== explicitPre);
+          if (later.length > 0) bucket.post.push(later[later.length - 1].score);
+          else bucket.post.push(explicitPre.score);
+        } else if (!explicitPre && explicitPost) {
+          const earlier = subjList.filter((e) => e !== explicitPost);
+          if (earlier.length > 0) bucket.pre.push(earlier[0].score);
+          else bucket.pre.push(explicitPost.score);
+          bucket.post.push(explicitPost.score);
+        } else if (subjList.length >= 2) {
           bucket.pre.push(subjList[0].score);
           bucket.post.push(subjList[subjList.length - 1].score);
         } else if (subjList.length === 1) {

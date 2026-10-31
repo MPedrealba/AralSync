@@ -70,8 +70,16 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
       try {
         const res = await fetch("/api/teacher/learners");
         const json = await parseJsonResponse(res);
-        if (json.success) {
-          const list = json.data.map((s: any) => ({ id: s.studentId, name: s.name }));
+        if (json.success && Array.isArray(json.data)) {
+          const seen = new Set<string>();
+          const list: { id: string; name: string }[] = [];
+          for (const s of json.data) {
+            const sid = String(s.studentId || s.id || "").trim();
+            if (sid && !seen.has(sid)) {
+              seen.add(sid);
+              list.push({ id: sid, name: s.name || "Learner" });
+            }
+          }
           setLearners(list);
         }
       } catch (e) {
@@ -131,8 +139,8 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
               className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
             >
               <option value="">All Learners · Overall</option>
-              {learners.map((l) => (
-                <option key={l.id} value={l.id}>
+              {learners.map((l, index) => (
+                <option key={l.id ? `learner-${l.id}` : `learner-${index}`} value={l.id}>
                   {l.name}
                 </option>
               ))}
@@ -145,8 +153,8 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                   className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
                 >
                   <option value="">All Grades</option>
-                  {data.filters.grades.map((g) => (
-                    <option key={g} value={g}>
+                  {data.filters.grades.map((g, index) => (
+                    <option key={g ? `grade-${g}` : `grade-${index}`} value={g}>
                       Grade {g}
                     </option>
                   ))}
@@ -157,8 +165,8 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                   className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
                 >
                   <option value="">All Sections</option>
-                  {data.filters.sections.map((s) => (
-                    <option key={s} value={s}>
+                  {data.filters.sections.map((s, index) => (
+                    <option key={s ? `section-${s}` : `section-${index}`} value={s}>
                       {s}
                     </option>
                   ))}
@@ -441,11 +449,11 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {data.overall.byLearner.map((s) => {
+                      {data.overall.byLearner.map((s, idx) => {
                         const pct = s.total ? Math.round((s.completed / s.total) * 100) : 0;
                         return (
                           <tr
-                            key={s.id}
+                            key={s.id ? `learner-row-${s.id}` : `learner-row-${idx}`}
                             onClick={() => setLearnerId(s.id)}
                             className="cursor-pointer transition-colors hover:bg-blue-50/40"
                           >

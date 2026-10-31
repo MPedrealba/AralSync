@@ -210,4 +210,61 @@ describe('Math Assessment Generator & Curriculum Topics Engine', () => {
     assert.match(res.fallbackNotice, /quota exhausted/);
     assert.strictEqual(res.data.questions.length, 1);
   });
+
+  test('prioritizes questions matching materialId before backfilling from general pool', () => {
+    function prioritizeMaterialQuestions(materialPool, generalPool, count) {
+      let pool = [...materialPool];
+      if (pool.length < count) {
+        const existingIds = new Set(pool.map((q) => String(q._id)));
+        pool = [...pool, ...generalPool.filter((q) => !existingIds.has(String(q._id)))];
+      }
+      return pool.slice(0, count);
+    }
+
+    const materialQuestions = [
+      { _id: 'mat_1', prompt: 'Material Question 1', materialId: 'm123' },
+      { _id: 'mat_2', prompt: 'Material Question 2', materialId: 'm123' },
+    ];
+    const generalQuestions = [
+      { _id: 'mat_1', prompt: 'Material Question 1', materialId: 'm123' },
+      { _id: 'gen_1', prompt: 'General Question 1' },
+      { _id: 'gen_2', prompt: 'General Question 2' },
+      { _id: 'gen_3', prompt: 'General Question 3' },
+    ];
+
+    const result = prioritizeMaterialQuestions(materialQuestions, generalQuestions, 3);
+    assert.strictEqual(result.length, 3);
+    // Material questions appear first
+    assert.strictEqual(result[0]._id, 'mat_1');
+    assert.strictEqual(result[1]._id, 'mat_2');
+    // General question backfills the remaining slot without duplication
+    assert.strictEqual(result[2]._id, 'gen_1');
+  });
+
+  test('attaches materialId and sourceMaterial to generated AnswerKey payload', () => {
+    function buildAnswerKeyPayload(materialDoc, subject, title, items) {
+      return {
+        title,
+        subject,
+        materialId: materialDoc?._id || undefined,
+        sourceMaterial: materialDoc?.title || undefined,
+        items,
+        totalItems: items,
+      };
+    }
+
+    const materialDoc = {
+      _id: '6acde2293b451ecc566a3838',
+      title: 'Grade 7 Mathematics Learner Workbook (Quarter 1)',
+    };
+
+    const payload = buildAnswerKeyPayload(materialDoc, 'Math', 'Grade 7 Mathematics Assessment', 10);
+    assert.strictEqual(payload.materialId, '6acde2293b451ecc566a3838');
+    assert.strictEqual(payload.sourceMaterial, 'Grade 7 Mathematics Learner Workbook (Quarter 1)');
+    assert.strictEqual(payload.items, 10);
+
+    const payloadWithoutMaterial = buildAnswerKeyPayload(null, 'Reading', 'Weekly Reading Quiz', 10);
+    assert.strictEqual(payloadWithoutMaterial.materialId, undefined);
+    assert.strictEqual(payloadWithoutMaterial.sourceMaterial, undefined);
+  });
 });

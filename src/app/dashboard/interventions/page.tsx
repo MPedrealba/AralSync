@@ -32,8 +32,10 @@ import {
   Loader2,
   Lock,
   Layers,
+  FileSpreadsheet,
 } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import ClassRecordMatrix from "@/components/ClassRecordMatrix";
 
 /* =========================================================================
    Types & Interfaces
@@ -81,6 +83,42 @@ interface LearnerOption {
   lrn: string;
   section: string;
 }
+
+export interface SubmissionItem {
+  id: string;
+  title: string;
+  learner: string;
+  gradeSection: string;
+  category: string;
+  type: string;
+  dueDate?: string | null;
+  submissionText?: string;
+  submissionFileUrl?: string | null;
+  submittedAt?: string | null;
+  status: "Not Started" | "In Progress" | "Submitted" | "Reviewed" | "Completed" | string;
+  gradeScore?: number | string | null;
+  teacherRemarks?: string;
+  instructions?: string;
+  workbookUrl?: string | null;
+  sessionInfo?: string | null;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+}
+
+export const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
+  "Not Started": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  "In Progress": { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+  "Submitted": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+  "Reviewed": { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+  "Completed": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+};
+
+export const fmtDate = (d?: string | null) => {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
 
 /* =========================================================================
    Constants & Subject Helpers
@@ -142,6 +180,28 @@ export default function InterventionsPage() {
   // Auto-assign action state
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Top-level View A tabs: "assignments" | "submissions" | "matrix"
+  const [classworkTab, setClassworkTab] = useState<"assignments" | "submissions" | "matrix">(
+    searchParams.get("tab") === "matrix" ? "matrix" : "assignments"
+  );
+
+  // Global student submissions state (for "Student Submissions" tab)
+  const [allSubmissions, setAllSubmissions] = useState<SubmissionItem[]>([]);
+  const [loadingAllSubmissions, setLoadingAllSubmissions] = useState(false);
+  const [allSubmissionsError, setAllSubmissionsError] = useState("");
+  const [subSearch, setSubSearch] = useState("");
+  const [subStatusFilter, setSubStatusFilter] = useState("All");
+  const [subSubjectFilter, setSubSubjectFilter] = useState("All");
+
+  // Drawer / modal for reviewing a submission from the submissions table
+  const [reviewingSubmission, setReviewingSubmission] = useState<SubmissionItem | null>(null);
+  const [drawerGradeInput, setDrawerGradeInput] = useState<string>("");
+  const [drawerRemarksInput, setDrawerRemarksInput] = useState<string>("");
+  const [drawerGradingStatus, setDrawerGradingStatus] = useState<"Reviewed" | "Completed">("Reviewed");
+  const [drawerGradingSaving, setDrawerGradingSaving] = useState(false);
+  const [drawerGradingError, setDrawerGradingError] = useState("");
+  const [submissionFeedbackToast, setSubmissionFeedbackToast] = useState<string | null>(null);
 
   // View B: Submissions & Grading state
   const [activeAssignment, setActiveAssignment] = useState<AssignmentGroup | null>(null);
@@ -239,9 +299,92 @@ export default function InterventionsPage() {
     }
   }, []);
 
+  const loadAllSubmissions = useCallback(async () => {
+    setLoadingAllSubmissions(true);
+    setAllSubmissionsError("");
+    try {
+      const res = await fetch("/api/teacher/interventions");
+      const json = await parseJsonResponse(res);
+      if (json.success && Array.isArray(json.data)) {
+        setAllSubmissions(json.data);
+      } else {
+        setAllSubmissionsError(json.error || "Failed to load student submissions.");
+      }
+    } catch {
+      setAllSubmissionsError("Failed to load student submissions.");
+    } finally {
+      setLoadingAllSubmissions(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadAssignments();
-  }, [loadAssignments]);
+    loadAllSubmissions();
+  }, [loadAssignments, loadAllSubmissions]);
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "matrix") {
+      setClassworkTab("matrix");
+    }
+  }, [searchParams]);
+
+  const openReviewModal = (sub: SubmissionItem) => {
+    setReviewingSubmission(sub);
+    setDrawerGradeInput(sub.gradeScore !== null && sub.gradeScore !== undefined ? String(sub.gradeScore) : "");
+    setDrawerRemarksInput(sub.teacherRemarks || "");
+    setDrawerGradingStatus(sub.status === "Completed" ? "Completed" : "Reviewed");
+    setDrawerGradingError("");
+  };
+
+  const handleSaveGradeDrawer = async (statusOverride?: "Reviewed" | "Completed") => {
+    if (!reviewingSubmission) return;
+    setDrawerGradingSaving(true);
+    setDrawerGradingError("");
+
+    const nextStatus = statusOverride || drawerGradingStatus;
+
+    try {
+      const res = await fetch(`/api/teacher/interventions/${reviewingSubmission.id}/grade`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(drawerGradeInput && drawerGradeInput.trim() !== ""
+            ? { gradeScore: Number(drawerGradeInput.trim()) || drawerGradeInput.trim() }
+            : {}),
+          teacherRemarks: drawerRemarksInput ? drawerRemarksInput.trim() : "",
+          status: nextStatus,
+        }),
+      });
+
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setAllSubmissions((prev) =>
+          prev.map((item) =>
+            item.id === reviewingSubmission.id
+              ? {
+                  ...item,
+                  status: nextStatus,
+                  gradeScore: drawerGradeInput ? drawerGradeInput.trim() : null,
+                  teacherRemarks: drawerRemarksInput ? drawerRemarksInput.trim() : "",
+                  reviewed: true,
+                  gradedAt: new Date().toISOString(),
+                }
+              : item
+          )
+        );
+        setSubmissionFeedbackToast(`Grade and feedback recorded for ${reviewingSubmission.learner}.`);
+        setTimeout(() => setSubmissionFeedbackToast(null), 4000);
+        setReviewingSubmission(null);
+        loadAssignments();
+      } else {
+        setDrawerGradingError(json.error || "Failed to save grade and remarks.");
+      }
+    } catch {
+      setDrawerGradingError("Failed to save grade and remarks. Please try again.");
+    } finally {
+      setDrawerGradingSaving(false);
+    }
+  };
 
   // Load submissions for a specific assignment (View B)
   const loadSubmissions = useCallback(async (assignmentId: string) => {
@@ -303,8 +446,9 @@ export default function InterventionsPage() {
     setSubmissions([]);
     setSelectedSubmissionId(null);
     setSaveSuccessMsg(null);
-    // Refresh assignments counts
+    // Refresh assignments counts and submissions
     loadAssignments();
+    loadAllSubmissions();
   };
 
   /* -------------------------------------------------------------------------
@@ -358,6 +502,7 @@ export default function InterventionsPage() {
           }${s.noMaterial ? ` · ${s.noMaterial} had no matching material` : ""}.`,
         });
         loadAssignments();
+        loadAllSubmissions();
       } else {
         setAssignMsg({
           ok: false,
@@ -423,8 +568,9 @@ export default function InterventionsPage() {
         setCreatePageEnd("");
         setSelectedLearnerIds([]);
         setCreateTargetMode("all");
-        // Reload assignments list
+        // Reload assignments list & submissions
         loadAssignments();
+        loadAllSubmissions();
       } else {
         setCreateError(json.error || "Failed to create assignment.");
       }
@@ -466,7 +612,7 @@ export default function InterventionsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          gradeScore: numericScore,
+          ...(numericScore !== null ? { gradeScore: numericScore } : {}),
           teacherRemarks: remarksInput,
           status: "Completed",
         }),
@@ -581,6 +727,33 @@ export default function InterventionsPage() {
     return filteredRoster.findIndex((s) => s.id === selectedSubmissionId);
   }, [filteredRoster, selectedSubmissionId]);
 
+  /* -------------------------------------------------------------------------
+     Filtered Submissions for View A (Submissions Tab)
+     ------------------------------------------------------------------------- */
+
+  const pendingSubmissionsCount = useMemo(() => {
+    return allSubmissions.filter((s) => s.status === "Submitted").length;
+  }, [allSubmissions]);
+
+  const filteredSubmissions = useMemo(() => {
+    return allSubmissions.filter((s) => {
+      if (subStatusFilter !== "All" && s.status !== subStatusFilter) return false;
+      if (assignedSubject !== "All") {
+        if (!s.category.toLowerCase().includes(assignedSubject.toLowerCase())) return false;
+      } else if (subSubjectFilter !== "All") {
+        if (!s.category.toLowerCase().includes(subSubjectFilter.toLowerCase())) return false;
+      }
+      if (subSearch.trim()) {
+        const q = subSearch.toLowerCase();
+        const matchLearner = (s.learner || "").toLowerCase().includes(q);
+        const matchTitle = (s.title || "").toLowerCase().includes(q);
+        const matchSection = (s.gradeSection || "").toLowerCase().includes(q);
+        if (!matchLearner && !matchTitle && !matchSection) return false;
+      }
+      return true;
+    });
+  }, [allSubmissions, subStatusFilter, assignedSubject, subSubjectFilter, subSearch]);
+
   /* =========================================================================
      RENDER
      ========================================================================= */
@@ -619,13 +792,13 @@ export default function InterventionsPage() {
                 </p>
               </div>
 
-              {/* Actions & Filters */}
+              {/* Actions */}
               <div className="flex flex-wrap items-center gap-2.5">
                 {/* Auto Assign Button */}
                 <button
                   onClick={runAutoAssign}
                   disabled={assigning}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-800 px-3.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-slate-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-800 px-3.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-slate-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                   title="Automatically assign interventions based on lowest diagnostic competencies"
                 >
                   <Wand2 className={`h-4 w-4 ${assigning ? "animate-spin" : "text-amber-300"}`} />
@@ -640,58 +813,21 @@ export default function InterventionsPage() {
                     }
                     setIsCreateOpen(true);
                   }}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98] cursor-pointer"
                 >
                   <Plus className="h-4 w-4 stroke-[2.5]" />
                   <span>Create Activity</span>
                 </button>
-
-                {/* Subject Indicator / Dropdown */}
-                {assignedSubject === "All" ? (
-                  <select
-                    value={subjectFilter}
-                    onChange={(e) => setSubjectFilter(e.target.value)}
-                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
-                  >
-                    <option value="All">All Subjects</option>
-                    <option value="Reading">Reading</option>
-                    <option value="Math">Math</option>
-                    <option value="Science">Science</option>
-                  </select>
-                ) : (
-                  <div className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 text-xs font-bold text-red-900 shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-red-700 animate-pulse" />
-                    <span>Assigned Subject: {assignedSubject}</span>
-                  </div>
-                )}
-
-                {/* Section Filter */}
-                <select
-                  value={sectionFilter}
-                  onChange={(e) => setSectionFilter(e.target.value)}
-                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
-                >
-                  <option value="All">All Sections</option>
-                  {SECTIONS_LIST.map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Search Box */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search activities..."
-                    className="h-10 w-44 sm:w-56 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
-                  />
-                </div>
               </div>
             </div>
+
+            {/* Global feedback toast for grading */}
+            {submissionFeedbackToast && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-2xs">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{submissionFeedbackToast}</span>
+              </div>
+            )}
 
             {/* Auto Assign Feedback Banner */}
             {assignMsg && (
@@ -712,18 +848,122 @@ export default function InterventionsPage() {
               </div>
             )}
 
-            {/* Error Message */}
-            {error && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-sm font-semibold text-rose-800">
-                {error}
+            {/* Top-Level Tab Switcher */}
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+              <div className="flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-xs">
                 <button
-                  onClick={loadAssignments}
-                  className="ml-3 rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                  type="button"
+                  onClick={() => setClassworkTab("assignments")}
+                  className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                    classworkTab === "assignments"
+                      ? "bg-red-800 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
                 >
-                  Retry
+                  <BookOpen className="h-4 w-4" />
+                  <span>Activities &amp; Assignments</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassworkTab("submissions")}
+                  className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                    classworkTab === "submissions"
+                      ? "bg-red-800 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <Award className="h-4 w-4" />
+                  <span>Student Submissions</span>
+                  {pendingSubmissionsCount > 0 && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        classworkTab === "submissions" ? "bg-white text-red-800" : "bg-red-800 text-white"
+                      }`}
+                    >
+                      {pendingSubmissionsCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassworkTab("matrix")}
+                  className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                    classworkTab === "matrix"
+                      ? "bg-red-800 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>e-Class Record Matrix</span>
                 </button>
               </div>
-            )}
+            </div>
+
+            {/* ━━━ SUB-TAB: ACTIVITIES & ASSIGNMENTS ━━━ */}
+            {classworkTab === "assignments" && (
+              <div className="space-y-6">
+                {/* Filters Bar for assignments */}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Subject Indicator / Dropdown */}
+                    {assignedSubject === "All" ? (
+                      <select
+                        value={subjectFilter}
+                        onChange={(e) => setSubjectFilter(e.target.value)}
+                        className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                      >
+                        <option value="All">All Subjects</option>
+                        <option value="Reading">Reading</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                      </select>
+                    ) : (
+                      <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 text-xs font-bold text-red-900 shadow-2xs">
+                        <span className="h-2 w-2 rounded-full bg-red-700 animate-pulse" />
+                        <span>Assigned Subject: {assignedSubject}</span>
+                      </div>
+                    )}
+
+                    {/* Section Filter */}
+                    <select
+                      value={sectionFilter}
+                      onChange={(e) => setSectionFilter(e.target.value)}
+                      className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                    >
+                      <option value="All">All Sections</option>
+                      {SECTIONS_LIST.map((sec) => (
+                        <option key={sec} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Search Box */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search activities..."
+                      className="h-9 w-44 sm:w-60 rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
+                    />
+                  </div>
+                </div>
+
+                {/* Error Message */}
+                {error && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-sm font-semibold text-rose-800">
+                    {error}
+                    <button
+                      onClick={loadAssignments}
+                      className="ml-3 rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
 
             {/* Assignments Grid */}
             {loading ? (
@@ -888,6 +1128,212 @@ export default function InterventionsPage() {
             )}
           </div>
         )}
+
+        {/* ━━━ SUB-TAB: STUDENT SUBMISSIONS ━━━ */}
+        {classworkTab === "submissions" && (
+          <div className="space-y-4">
+            {/* Filters Bar */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[200px]">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={subSearch}
+                    onChange={(e) => setSubSearch(e.target.value)}
+                    placeholder="Search learner, activity, or section…"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-red-800"
+                  />
+                </div>
+                <select
+                  value={subStatusFilter}
+                  onChange={(e) => setSubStatusFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800 cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Submitted">Submitted (Pending Review)</option>
+                  <option value="Reviewed">Reviewed</option>
+                  <option value="Completed">Completed</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Not Started">Not Started</option>
+                </select>
+                {assignedSubject === "All" ? (
+                  <select
+                    value={subSubjectFilter}
+                    onChange={(e) => setSubSubjectFilter(e.target.value)}
+                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800 cursor-pointer"
+                  >
+                    <option value="All">All Subjects</option>
+                    <option value="Reading">Reading</option>
+                    <option value="Math">Math</option>
+                    <option value="Science">Science</option>
+                  </select>
+                ) : (
+                  <div className="flex h-9 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-700">
+                    {assignedSubject}
+                  </div>
+                )}
+              </div>
+
+              <div className="text-xs text-slate-500 font-medium">
+                Showing <strong className="text-slate-800">{filteredSubmissions.length}</strong> of {allSubmissions.length} submission(s)
+              </div>
+            </div>
+
+            {/* Submissions Table / Cards */}
+            {loadingAllSubmissions ? (
+              <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-white">
+                <Loader2 className="h-7 w-7 animate-spin text-red-800" />
+              </div>
+            ) : allSubmissionsError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-xs font-semibold text-rose-700">
+                {allSubmissionsError}
+                <button
+                  type="button"
+                  onClick={loadAllSubmissions}
+                  className="ml-3 rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredSubmissions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-xs">
+                <Award className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-700">No student submissions found</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {subSearch || subStatusFilter !== "All" || subSubjectFilter !== "All"
+                    ? "Try adjusting your filters or search terms."
+                    : "When learners complete and turn in assigned activities, their work will appear here for review and scoring."}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase text-[11px] text-slate-600 tracking-wider">
+                        <th className="py-3 px-4">Learner</th>
+                        <th className="py-3 px-4">Activity Title</th>
+                        <th className="py-3 px-4">Subject &amp; Type</th>
+                        <th className="py-3 px-4">Due Date</th>
+                        <th className="py-3 px-4">Submitted Date</th>
+                        <th className="py-3 px-4">Attached Work</th>
+                        <th className="py-3 px-4">Status &amp; Score</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-normal text-slate-700">
+                      {filteredSubmissions.map((sub) => {
+                        const st = statusConfig[sub.status] || statusConfig["Not Started"];
+                        return (
+                          <tr key={sub.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3.5 px-4 font-semibold text-slate-900">
+                              <div>{sub.learner}</div>
+                              <div className="text-[11px] text-slate-400 font-normal">
+                                {sub.gradeSection || "DepEd Learner"}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-medium text-slate-900 max-w-[220px] truncate" title={sub.title}>
+                              <div className="truncate">{sub.title}</div>
+                              {sub.sessionInfo && (
+                                <div className="text-[11px] text-slate-400 font-normal truncate">
+                                  {sub.sessionInfo}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                {sub.category} • {sub.type || "Activity"}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
+                              {fmtDate(sub.dueDate)}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
+                              {sub.submittedAt ? (
+                                <span className="text-slate-800 font-semibold">{fmtDate(sub.submittedAt)}</span>
+                              ) : (
+                                <span className="text-slate-400 italic">Not submitted</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {sub.submissionFileUrl ? (
+                                <a
+                                  href={sub.submissionFileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  <Paperclip className="h-3 w-3" />
+                                  <span>View File</span>
+                                </a>
+                              ) : sub.submissionText ? (
+                                <span className="text-[11px] text-slate-500 italic max-w-[140px] truncate block" title={sub.submissionText}>
+                                  &ldquo;{sub.submissionText}&rdquo;
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${st.bg} ${st.text} ${st.border}`}>
+                                  {sub.status === "Submitted" ? "Pending Review" : sub.status}
+                                </span>
+                                {sub.gradeScore !== null && sub.gradeScore !== undefined && (
+                                  <span className="text-[10px] font-bold text-slate-700">
+                                    Score: {sub.gradeScore}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openReviewModal(sub)}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] cursor-pointer"
+                                  title="View what the student submitted"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openReviewModal(sub)}
+                                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] cursor-pointer ${
+                                    sub.status === "Submitted"
+                                      ? "bg-red-800 text-white hover:bg-red-900"
+                                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <Award className="h-3.5 w-3.5" />
+                                  <span>{sub.status === "Submitted" ? "Grade" : "Score"}</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ━━━ SUB-TAB: e-CLASS RECORD MATRIX ━━━ */}
+        {classworkTab === "matrix" && (
+          <div className="space-y-4">
+            <ClassRecordMatrix
+              initialSubject={assignedSubject !== "All" ? assignedSubject : "Reading"}
+              userRole="teacher"
+            />
+          </div>
+        )}
+      </div>
+    )}
 
         {/* =====================================================================
             VIEW B: SUBMISSIONS & GRADING WORKSPACE (Split Screen Workspace)
@@ -1846,6 +2292,230 @@ export default function InterventionsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ━━━ DRAWER / MODAL: REVIEW & GRADE SUBMISSION ━━━ */}
+      {reviewingSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 m-3 sm:m-auto">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 py-3.5 sm:py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                      statusConfig[reviewingSubmission.status]?.bg || "bg-slate-100"
+                    } ${
+                      statusConfig[reviewingSubmission.status]?.text || "text-slate-700"
+                    } ${
+                      statusConfig[reviewingSubmission.status]?.border || "border-slate-200"
+                    }`}
+                  >
+                    {reviewingSubmission.status}
+                  </span>
+                  <span className="text-xs text-slate-500">• {reviewingSubmission.category}</span>
+                </div>
+                <h2 className="text-base font-bold text-slate-900 mt-1">{reviewingSubmission.title}</h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Learner: <strong className="text-slate-800">{reviewingSubmission.learner}</strong> ({reviewingSubmission.gradeSection || "DepEd Learner"})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingSubmission(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
+              {drawerGradingError && (
+                <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{drawerGradingError}</span>
+                </div>
+              )}
+
+              {/* Instructions given to learner */}
+              {reviewingSubmission.instructions && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
+                    Assigned Task Instructions:
+                  </span>
+                  <p className="text-xs text-slate-700 leading-relaxed">{reviewingSubmission.instructions}</p>
+                </div>
+              )}
+
+              {/* ARAL Workbook Reference */}
+              {reviewingSubmission.workbookUrl && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-0.5">
+                      ARAL Workbook Reference
+                    </span>
+                    <div className="text-xs text-slate-800 font-semibold flex items-center gap-2">
+                      <span>{reviewingSubmission.sessionInfo || "Workbook Activity"}</span>
+                      {reviewingSubmission.pageStart && (
+                        <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                          pp. {reviewingSubmission.pageStart}–{reviewingSubmission.pageEnd || reviewingSubmission.pageStart}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <a
+                    href={`${reviewingSubmission.workbookUrl}${reviewingSubmission.pageStart ? `#page=${reviewingSubmission.pageStart}` : ""}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-red-800" />
+                    <span>Open Workbook Page</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Student's Submission Content */}
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 uppercase tracking-wide">
+                    <FileText className="h-4 w-4 text-blue-700" />
+                    <span>Student Response</span>
+                  </span>
+                  {reviewingSubmission.submittedAt && (
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Submitted on {fmtDate(reviewingSubmission.submittedAt)}
+                    </span>
+                  )}
+                </div>
+
+                {reviewingSubmission.submissionText ? (
+                  <div className="rounded-xl border border-blue-100 bg-white p-3.5 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap">
+                    {reviewingSubmission.submissionText}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 italic">No written reflection or text response provided.</div>
+                )}
+
+                {/* Uploaded File Link / Preview */}
+                {reviewingSubmission.submissionFileUrl && (
+                  <div className="pt-2 border-t border-blue-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Paperclip className="h-4 w-4 text-blue-600" />
+                        <span className="text-xs font-semibold text-slate-800">Completed Worksheet / File</span>
+                      </div>
+                      <a
+                        href={reviewingSubmission.submissionFileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Open Document / Image in New Tab</span>
+                      </a>
+                    </div>
+
+                    {/* Inline preview for image submissions */}
+                    {/\.(png|jpe?g|webp|gif)$/i.test(reviewingSubmission.submissionFileUrl) && (
+                      <div className="mt-2 rounded-xl overflow-hidden border border-blue-200 bg-white p-2 flex flex-col items-center">
+                        <img
+                          src={reviewingSubmission.submissionFileUrl}
+                          alt="Student Work Preview"
+                          className="max-h-80 w-auto object-contain rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Teacher Grading & Feedback Section */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  <Award className="h-4 w-4 text-red-800" />
+                  <span>Teacher Assessment &amp; Feedback</span>
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Score / Grade (e.g., 95/100, 10/10, Satisfactory)
+                    </label>
+                    <input
+                      type="text"
+                      value={drawerGradeInput}
+                      onChange={(e) => setDrawerGradeInput(e.target.value)}
+                      placeholder="e.g. 95/100"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none focus:border-red-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Completion Status
+                    </label>
+                    <select
+                      value={drawerGradingStatus}
+                      onChange={(e) => setDrawerGradingStatus(e.target.value as "Reviewed" | "Completed")}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 cursor-pointer"
+                    >
+                      <option value="Reviewed">Reviewed (Feedback Provided)</option>
+                      <option value="Completed">Completed (Passed / Finished)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Teacher Feedback &amp; Remarks (Visible to Student)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={drawerRemarksInput}
+                    onChange={(e) => setDrawerRemarksInput(e.target.value)}
+                    placeholder="Provide constructive feedback, praise, or areas for improvement..."
+                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-900 outline-none focus:border-red-800 leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setReviewingSubmission(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={drawerGradingSaving}
+                  onClick={() => handleSaveGradeDrawer("Reviewed")}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-2xs"
+                >
+                  Save Feedback
+                </button>
+                <button
+                  type="button"
+                  disabled={drawerGradingSaving}
+                  onClick={() => handleSaveGradeDrawer("Completed")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+                >
+                  {drawerGradingSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  <span>Approve &amp; Complete</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

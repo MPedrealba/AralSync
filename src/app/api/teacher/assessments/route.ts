@@ -59,7 +59,15 @@ export async function GET(req: NextRequest) {
         id: String(a._id),
         title: a.title || a.type || "Untitled",
         type: a.type,
-        assessmentCategory: a.assessmentCategory || (a.title?.toLowerCase().includes("exam") ? "exam" : "quiz"),
+        assessmentCategory: a.assessmentCategory || (
+          a.title?.toLowerCase().includes("pre-test") || a.title?.toLowerCase().includes("pretest") || a.title?.toLowerCase().includes("baseline")
+            ? "pre-test"
+            : a.title?.toLowerCase().includes("post-test") || a.title?.toLowerCase().includes("posttest") || a.title?.toLowerCase().includes("endline")
+            ? "post-test"
+            : a.title?.toLowerCase().includes("exam")
+            ? "exam"
+            : "quiz"
+        ),
         topics: Array.isArray(a.topics) ? a.topics : [],
         subject: a.subject || "—",
         studentName: name,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../../database/db";
 import Question from "../../../../../../models/Question";
+import LearningMaterial from "../../../../../../models/LearningMaterial";
 import AnswerKey from "../../../../../../models/AnswerKey";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
 import { buildTopicSections, getTopicInstructions, ROMAN_NUMERALS } from "@/lib/questionnaireSections";
@@ -51,6 +52,11 @@ export async function POST(req: NextRequest) {
     const requestedTopics: string[] = Array.isArray(body?.topics)
       ? body.topics.filter((t: any) => typeof t === "string" && t.trim().length > 0)
       : (body?.topic && typeof body.topic === "string" && body.topic.trim() ? [body.topic.trim()] : []);
+    const materialId = body?.materialId;
+    let materialDoc: any = null;
+    if (materialId) {
+      materialDoc = await LearningMaterial.findById(materialId).lean();
+    }
 
     if (!SUBJECTS.includes(subject) || !gradeLevel) {
       return NextResponse.json(
@@ -67,7 +73,35 @@ export async function POST(req: NextRequest) {
       ];
     }
 
-    const pool = await Question.find(filter).lean();
+    let pool: any[] = [];
+    if (materialId) {
+      const materialFilter: Record<string, unknown> = {
+        subject,
+        gradeLevel,
+        $or: [
+          { materialId },
+          ...(materialDoc?.title ? [{ sourceMaterial: materialDoc.title }] : []),
+          ...(materialDoc?.title ? [{ source: new RegExp(materialDoc.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }] : []),
+        ],
+      };
+      if (requestedTopics.length > 0) {
+        materialFilter.$and = [
+          {
+            $or: [
+              { topic: { $in: requestedTopics } },
+              { competency: { $in: requestedTopics } },
+            ],
+          },
+        ];
+      }
+      pool = await Question.find(materialFilter).lean();
+    }
+
+    if (pool.length < count) {
+      const generalPool = await Question.find(filter).lean();
+      const existingIds = new Set(pool.map((q) => String(q._id)));
+      pool = [...pool, ...generalPool.filter((q) => !existingIds.has(String(q._id)))];
+    }
     if (pool.length === 0) {
       const topicDesc = requestedTopics.length > 0
         ? ` matching selected topic(s) (${requestedTopics.slice(0, 3).join(", ")}${requestedTopics.length > 3 ? "..." : ""})`
@@ -252,12 +286,19 @@ export async function POST(req: NextRequest) {
       }));
 
     const itemCount = questions.length;
-    const assessmentType = body?.assessmentType === "exam" ? "exam" : "quiz";
+    const rawType = body?.assessmentType;
+    const assessmentType =
+      rawType === "exam" || rawType === "pre-test" || rawType === "post-test" ? rawType : "quiz";
     const topicSummary = requestedTopics.length > 0 ? requestedTopics.join(" & ") : "All Topics";
+    const subjectDisplay = subject === "Math" ? "Mathematics" : subject;
     const autoTitle =
-      assessmentType === "exam"
-        ? `Periodical Exam: ${subject === "Math" ? "Mathematics" : subject} Grade ${gradeLevel} (${itemCount} items)`
-        : `Weekly Quiz: ${subject === "Math" ? "Mathematics" : subject} Grade ${gradeLevel} (${itemCount} items)`;
+      assessmentType === "pre-test"
+        ? `ARAL Baseline Diagnostic Pre-Test: ${subjectDisplay} Grade ${gradeLevel} (${itemCount} items)`
+        : assessmentType === "post-test"
+        ? `ARAL Endline Evaluation Post-Test: ${subjectDisplay} Grade ${gradeLevel} (${itemCount} items)`
+        : assessmentType === "exam"
+        ? `Periodical Exam: ${subjectDisplay} Grade ${gradeLevel} (${itemCount} items)`
+        : `Weekly Quiz: ${subjectDisplay} Grade ${gradeLevel} (${itemCount} items)`;
     const title =
       typeof body?.title === "string" && body.title.trim().length > 0
         ? body.title.trim()
@@ -267,8 +308,11 @@ export async function POST(req: NextRequest) {
       title,
       subject,
       assessmentType,
+      assessmentCategory: assessmentType,
       topic: topicSummary,
       topics: requestedTopics,
+      materialId: materialDoc?._id || undefined,
+      sourceMaterial: materialDoc?.title || undefined,
       items: itemCount,
       totalItems: itemCount,
       answers: answerLetters,
@@ -291,9 +335,12 @@ export async function POST(req: NextRequest) {
       data: {
         title,
         assessmentType,
+        assessmentCategory: assessmentType,
         subject,
         topic: topicSummary,
         topics: requestedTopics,
+        materialId: materialDoc?._id ? String(materialDoc._id) : undefined,
+        sourceMaterial: materialDoc?.title || undefined,
         gradeLevel,
         itemCount,
         questions,
@@ -306,9 +353,12 @@ export async function POST(req: NextRequest) {
           id: String(answerKey._id),
           title: answerKey.title,
           assessmentType: answerKey.assessmentType,
+          assessmentCategory: answerKey.assessmentCategory || answerKey.assessmentType,
           subject: answerKey.subject,
           topic: answerKey.topic,
           topics: answerKey.topics,
+          materialId: materialDoc?._id ? String(materialDoc._id) : undefined,
+          sourceMaterial: materialDoc?.title || undefined,
           items: answerKey.items,
           totalItems: answerKey.totalItems,
           sections,

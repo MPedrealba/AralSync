@@ -44,14 +44,26 @@ const LearnerRecordSchema = new mongoose.Schema({
   },
   lastReadingAssessmentDate: { type: Date },
   lastReadingAssessmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Assessment' },
-  // ── Teacher Assignment ──
+  // ── Subject-Specific Teacher Assignments (Reading, Math, Science) ──
+  assignedTeachers: {
+    reading: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    math: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    science: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  },
+  readingTeacherName: { type: String, default: null },
+  mathTeacherName: { type: String, default: null },
+  scienceTeacherName: { type: String, default: null },
+  // Backwards compatibility primary/adviser teacher
   assignedTeacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   assignedTeacherName: { type: String, default: null }
 }, { timestamps: true, strictPopulate: false });
 
 LearnerRecordSchema.index({ assignedTeacherId: 1 });
+LearnerRecordSchema.index({ 'assignedTeachers.reading': 1 });
+LearnerRecordSchema.index({ 'assignedTeachers.math': 1 });
+LearnerRecordSchema.index({ 'assignedTeachers.science': 1 });
 
-if (mongoose.models.LearnerRecord && (!mongoose.models.LearnerRecord.schema.paths.assignedTeacherId || !mongoose.models.LearnerRecord.schema.paths.riskLevel?.enumValues?.includes('Pending Assessment'))) {
+if (mongoose.models.LearnerRecord && (!mongoose.models.LearnerRecord.schema.paths['assignedTeachers.reading'] || !mongoose.models.LearnerRecord.schema.paths.assignedTeacherId || !mongoose.models.LearnerRecord.schema.paths.riskLevel?.enumValues?.includes('Pending Assessment'))) {
   delete mongoose.models.LearnerRecord;
 }
 

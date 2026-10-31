@@ -79,7 +79,15 @@ export async function requireAuth(
 ): Promise<AuthUser> {
   const user = await getAuthUser(req);
   if (!user) throw new AuthError('Unauthorized', 401);
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+
+  const userRole = (user.role || '').toLowerCase().trim();
+  const normalizedAllowed = allowedRoles.map((r) => r.toLowerCase().trim());
+
+  if (
+    normalizedAllowed.length > 0 &&
+    !normalizedAllowed.includes(userRole) &&
+    userRole !== 'admin'
+  ) {
     throw new AuthError('Forbidden', 403);
   }
   return user;

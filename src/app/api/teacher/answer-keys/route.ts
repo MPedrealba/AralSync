@@ -81,7 +81,24 @@ export async function POST(req: NextRequest) {
 
     const teacherSubject = await getTeacherSubject(authUser);
     const body = await req.json();
-    const { title, subject, items, answers, assessmentType, topic, topics } = body;
+    const {
+      title,
+      subject,
+      items,
+      answers,
+      assessmentType,
+      topic,
+      topics,
+      questions,
+      sections,
+      passageTitle,
+      passageText,
+      isOnline,
+      timeLimitMinutes,
+      dueDate,
+      targetGrade,
+      targetSection,
+    } = body;
 
     const finalSubject = teacherSubject !== "All" ? teacherSubject : (subject || "Reading");
 
@@ -104,6 +121,8 @@ export async function POST(req: NextRequest) {
       return String(a);
     });
 
+    const finalItems = items ?? normalizedAnswers.length ?? (Array.isArray(questions) ? questions.length : 0);
+
     const key = await AnswerKey.create({
       title,
       subject: finalSubject || undefined,
@@ -111,9 +130,19 @@ export async function POST(req: NextRequest) {
       assessmentType: resolvedType,
       topic: topic || (resolvedTopics.length === 1 ? resolvedTopics[0] : ""),
       topics: resolvedTopics,
-      items: items ?? normalizedAnswers.length ?? 0,
+      items: finalItems,
+      totalItems: finalItems,
       answers: normalizedAnswers,
       answerLetters: normalizedAnswers,
+      questions: Array.isArray(questions) ? questions : [],
+      sections: Array.isArray(sections) ? sections : [],
+      passageTitle: passageTitle || "",
+      passageText: passageText || "",
+      isOnline: Boolean(isOnline),
+      timeLimitMinutes: Number(timeLimitMinutes) || 0,
+      dueDate: dueDate ? new Date(dueDate) : null,
+      targetGrade: targetGrade ? Number(targetGrade) : null,
+      targetSection: targetSection || "",
       created: new Date(),
     });
 
@@ -127,7 +156,11 @@ export async function POST(req: NextRequest) {
         topics: key.topics,
         subject: key.subject,
         items: key.items,
+        totalItems: key.totalItems,
         answers: key.answers,
+        passageTitle: key.passageTitle,
+        passageText: key.passageText,
+        isOnline: key.isOnline,
         created: key.created,
       },
     });

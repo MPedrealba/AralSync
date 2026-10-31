@@ -34,6 +34,36 @@ function calculateRiskLevelFromScore(percentage) {
   return 'Low Risk';
 }
 
+function calculateSilentReadingWpm(wordCount, elapsedSeconds) {
+  if (!wordCount || wordCount <= 0) return 0;
+  const sec = Math.max(elapsedSeconds || 1, 1);
+  return Math.round((wordCount / sec) * 60);
+}
+
+function groupQuestionsByPhilIriDomain(questions) {
+  const parts = {
+    'Part I: Literal Comprehension': [],
+    'Part II: Inferential Comprehension': [],
+    'Part III: Vocabulary & Word Study': [],
+    'Part IV: Critical & Evaluative': [],
+  };
+
+  questions.forEach(q => {
+    const domain = (q.domain || q.competency || '').toLowerCase();
+    if (domain.includes('literal')) {
+      parts['Part I: Literal Comprehension'].push(q);
+    } else if (domain.includes('infer')) {
+      parts['Part II: Inferential Comprehension'].push(q);
+    } else if (domain.includes('vocab')) {
+      parts['Part III: Vocabulary & Word Study'].push(q);
+    } else {
+      parts['Part IV: Critical & Evaluative'].push(q);
+    }
+  });
+
+  return parts;
+}
+
 describe('Phil-IRI 2024 Oral Reading Fluency Scoring Engine', () => {
   test('accurately calculates oral reading accuracy from attempted words and miscues', () => {
     // 100 words, 4 miscues -> 96%
@@ -85,4 +115,32 @@ describe('Phil-IRI 2024 Oral Reading Fluency Scoring Engine', () => {
     assert.equal(calculateRiskLevelFromScore(49), 'High Risk');
     assert.equal(calculateRiskLevelFromScore(25), 'High Risk');
   });
+
+  test('calculates silent reading speed (WPM) accurately with zero protection', () => {
+    // 300 words read in 120 seconds -> 150 WPM
+    assert.equal(calculateSilentReadingWpm(300, 120), 150);
+    // 180 words read in 60 seconds -> 180 WPM
+    assert.equal(calculateSilentReadingWpm(180, 60), 180);
+    // 250 words read in 0 seconds (boundary protection) -> 15000 WPM without NaN/infinite throw
+    assert.equal(calculateSilentReadingWpm(250, 0), 15000);
+    // 0 words -> 0 WPM
+    assert.equal(calculateSilentReadingWpm(0, 45), 0);
+  });
+
+  test('properly partitions 40 items across the 4 DepEd Phil-IRI domain parts', () => {
+    const mockQuestions = Array.from({ length: 40 }, (_, i) => ({
+      itemNumber: i + 1,
+      domain: i < 10 ? 'Literal' : i < 20 ? 'Inferential' : i < 30 ? 'Vocabulary' : 'Critical/Evaluative',
+      question: `Question ${i + 1}`,
+      options: ['A', 'B', 'C', 'D'],
+      answer: 'A',
+    }));
+
+    const grouped = groupQuestionsByPhilIriDomain(mockQuestions);
+    assert.equal(grouped['Part I: Literal Comprehension'].length, 10);
+    assert.equal(grouped['Part II: Inferential Comprehension'].length, 10);
+    assert.equal(grouped['Part III: Vocabulary & Word Study'].length, 10);
+    assert.equal(grouped['Part IV: Critical & Evaluative'].length, 10);
+  });
 });
+

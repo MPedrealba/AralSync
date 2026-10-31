@@ -7,6 +7,7 @@ import Assessment from '../../../../../../models/Assessment';
 import Intervention from '../../../../../../models/Intervention';
 import Recommendation from '../../../../../../models/Recommendation';
 import { getTeacherSubject, getSubjectFilter } from '@/lib/teacherScope';
+import { syncDynamicRecommendations, resolveLearnerProficiency, Subject } from '@/lib/dynamicRecommendations';
 
 /** Weakness (assessment competency) → Recommendation.subject. */
 const SUBJECT_BY_WEAKNESS: Record<string, string> = {
@@ -47,6 +48,11 @@ export async function POST(req: NextRequest) {
     if (teacherSubject !== 'All') {
       assessmentQuery.subject = teacherSubject;
       recommendationQuery.subject = teacherSubject;
+    }
+
+    const dynamicCount = await Recommendation.countDocuments({ isDynamic: true });
+    if (dynamicCount === 0) {
+      await syncDynamicRecommendations();
     }
 
     const [assessments, interventions, recommendations] = await Promise.all([
@@ -118,22 +124,29 @@ export async function POST(req: NextRequest) {
         // Resolve student's Key Stage and remediation level (Basic vs Plus)
         const grade = record.gradeLevel || 7;
         const targetKeyStage = grade >= 7 ? 'KS3' : grade >= 4 ? 'KS2' : 'KS1';
-        const isStruggling = record.riskLevel === 'High Risk' || record.readingLevel === 'Non-Reader' || record.readingLevel === 'Frustration';
-        const targetLevel = isStruggling ? 'Basic' : 'Plus';
+        const { tier, progLevel } = resolveLearnerProficiency(record, subject as Subject);
 
-        // Find best matching ARAL learning material activity
+        // Find best matching ARAL learning material activity by proficiency tier and grade
         let rec = recommendations.find((r: any) =>
           r.subject === subject &&
-          r.keyStage === targetKeyStage &&
-          r.programLevel === targetLevel &&
+          (r.proficiencyTier === tier || r.programLevel === progLevel) &&
+          (Array.isArray(r.targetGrades) && r.targetGrades.length > 0 ? r.targetGrades.includes(grade) : r.keyStage === targetKeyStage) &&
           (weakness ? r.title.toLowerCase().includes(weakness.toLowerCase()) || r.description?.toLowerCase().includes(weakness.toLowerCase()) : true)
         );
 
         if (!rec) {
           rec = recommendations.find((r: any) =>
             r.subject === subject &&
+            (r.proficiencyTier === tier || r.programLevel === progLevel) &&
+            (Array.isArray(r.targetGrades) && r.targetGrades.length > 0 ? r.targetGrades.includes(grade) : r.keyStage === targetKeyStage)
+          );
+        }
+
+        if (!rec) {
+          rec = recommendations.find((r: any) =>
+            r.subject === subject &&
             r.keyStage === targetKeyStage &&
-            r.programLevel === targetLevel
+            r.programLevel === progLevel
           );
         }
 
@@ -161,7 +174,7 @@ export async function POST(req: NextRequest) {
           studentId: sid,
           title: rec.title,
           category: rec.subject || weakness,
-          type: TYPE_MAP[rec.kind] || 'Activity',
+          type: (rec.kind && TYPE_MAP[rec.kind]) || 'Activity',
           status: 'Not Started',
           assignedDate: new Date(),
           weakness,

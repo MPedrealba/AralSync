@@ -30,13 +30,28 @@ export async function GET(req: NextRequest) {
 
     // Discover any sections taught by or assigned to this teacher
     const teacherSections = await LearnerRecord.distinct('section', {
-      $or: [{ assignedTeacherId: teacher.id }, { assignedTeacherId: teacherIdObj }],
+      $or: [
+        { assignedTeacherId: teacher.id },
+        { assignedTeacherId: teacherIdObj },
+        { 'assignedTeachers.reading': teacher.id },
+        { 'assignedTeachers.reading': teacherIdObj },
+        { 'assignedTeachers.math': teacher.id },
+        { 'assignedTeachers.math': teacherIdObj },
+        { 'assignedTeachers.science': teacher.id },
+        { 'assignedTeachers.science': teacherIdObj },
+      ],
       section: { $ne: null, $exists: true },
     });
 
     const teacherMatchConditions: any[] = [
       { assignedTeacherId: teacher.id },
       { assignedTeacherId: teacherIdObj },
+      { 'assignedTeachers.reading': teacher.id },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.math': teacher.id },
+      { 'assignedTeachers.math': teacherIdObj },
+      { 'assignedTeachers.science': teacher.id },
+      { 'assignedTeachers.science': teacherIdObj },
     ];
     if (teacherSections.length > 0) {
       teacherMatchConditions.push({ section: { $in: teacherSections } });
@@ -108,6 +123,10 @@ export async function GET(req: NextRequest) {
           section: r.section,
           riskLevel: r.riskLevel,
           masteryStatus: r.masteryStatus,
+          readingLevel: r.readingLevel || 'Not Assessed',
+          oralReadingLevel: r.oralReadingLevel || 'Not Assessed',
+          comprehensionLevel: r.comprehensionLevel || 'Not Assessed',
+          combinedReadingLevel: r.combinedReadingLevel || 'Not Assessed',
           guardian: r.guardian || '',
           contact: r.contact || '',
           address: r.address || '',

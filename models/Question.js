@@ -15,6 +15,8 @@ const QuestionSchema = new mongoose.Schema(
     // correctAnswer is stored as the letter ("A".."D") so it maps directly to an AnswerKey
     correctAnswer: { type: String, enum: ['A', 'B', 'C', 'D'], required: true },
     source: { type: String, default: 'DepEd ARAL Learning Resource' },
+    materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningMaterial', default: null },
+    sourceMaterial: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

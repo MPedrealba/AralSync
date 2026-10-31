@@ -7,6 +7,7 @@ import connectDB from '../../../../../database/db';
 import LearningMaterial from '../../../../../models/LearningMaterial';
 import { logAudit } from '@/lib/audit';
 import { ensureDefaultLearningMaterials } from '@/lib/learningMaterialsSeed';
+import { syncDynamicRecommendations } from '@/lib/dynamicRecommendations';
 
 /**
  * POST /api/coordinator/learning-materials
@@ -136,6 +137,8 @@ export async function POST(req: NextRequest) {
       uploadedBy: coordinator.id,
       createdAt: new Date(),
     });
+
+    await syncDynamicRecommendations().catch((err) => console.error('Failed to sync recommendations:', err));
 
     await logAudit({
       actorId: coordinator.id,

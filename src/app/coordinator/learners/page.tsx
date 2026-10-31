@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Search,
   ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -41,6 +42,8 @@ interface LearnerItem {
 interface TeacherOption {
   id: string;
   name: string;
+  assignedSubject?: string;
+  specialization?: string;
   studentCount?: number;
 }
 
@@ -114,11 +117,56 @@ function CoordinatorLearnersContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Batch Assignment State
+  // Batch Assignment State (3 Subject Remedial Teachers)
   const [batchGrade, setBatchGrade] = useState("7");
   const [batchSection, setBatchSection] = useState("Rosal");
-  const [batchTeacherId, setBatchTeacherId] = useState("");
+  const [isBatchCustomSection, setIsBatchCustomSection] = useState(false);
+  const [batchCustomSectionText, setBatchCustomSectionText] = useState("");
+  const [batchReadingTeacherId, setBatchReadingTeacherId] = useState("");
+  const [batchMathTeacherId, setBatchMathTeacherId] = useState("");
+  const [batchScienceTeacherId, setBatchScienceTeacherId] = useState("");
   const [isBatchApplying, setIsBatchApplying] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(true);
+
+  // Live cohort student count for selected batch grade and section
+  const batchCohortLearnerCount = useMemo(() => {
+    const sec = (isBatchCustomSection ? batchCustomSectionText : batchSection).trim().toLowerCase();
+    if (!sec) return 0;
+    return learners.filter(
+      (l) => l.gradeLevel === Number(batchGrade) && (l.section || "").trim().toLowerCase() === sec
+    ).length;
+  }, [learners, batchGrade, batchSection, isBatchCustomSection, batchCustomSectionText]);
+
+  // Helper to format teacher subject specialization tag
+  const getTeacherSubjectTag = (t: TeacherOption) => {
+    if (t.assignedSubject === "Reading" || t.specialization === "reading") return " [Reading Specialist]";
+    if (t.assignedSubject === "Math") return " [Math Specialist]";
+    if (t.assignedSubject === "Science") return " [Science Specialist]";
+    if (t.assignedSubject === "All") return " [All Subjects]";
+    return t.assignedSubject ? ` [${t.assignedSubject}]` : "";
+  };
+
+  // Filter teachers by subject specialization for Batch Assignment
+  const readingTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) =>
+        t.assignedSubject === "Reading" ||
+        t.assignedSubject === "All" ||
+        t.specialization === "reading"
+    );
+  }, [teachers]);
+
+  const mathTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) => t.assignedSubject === "Math" || t.assignedSubject === "All"
+    );
+  }, [teachers]);
+
+  const scienceTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) => t.assignedSubject === "Science" || t.assignedSubject === "All"
+    );
+  }, [teachers]);
 
   // Inline assignment updating states (learnerId -> boolean)
   const [updatingLearnerId, setUpdatingLearnerId] = useState<string | null>(null);
@@ -194,15 +242,15 @@ function CoordinatorLearnersContent() {
 
   // Synchronize batchSection whenever batchAvailableSections changes
   useEffect(() => {
-    if (batchAvailableSections.length > 0 && !batchAvailableSections.includes(batchSection)) {
+    if (!isBatchCustomSection && batchAvailableSections.length > 0 && !batchAvailableSections.includes(batchSection)) {
       setBatchSection(batchAvailableSections[0]);
     }
-  }, [batchAvailableSections, batchSection]);
+  }, [batchAvailableSections, batchSection, isBatchCustomSection]);
 
   const handleBatchGradeChange = (newGrade: string) => {
     setBatchGrade(newGrade);
     const valid = gradeSectionsMap[newGrade];
-    if (valid && valid.length > 0) {
+    if (valid && valid.length > 0 && !isBatchCustomSection) {
       setBatchSection(valid[0]);
     }
   };
@@ -289,11 +337,21 @@ function CoordinatorLearnersContent() {
     }
   };
 
-  // ── 4. Batch Section Assignment ──
+  // ── 4. Batch Section Assignment (3 Subject Remedial Teachers) ──
   const handleApplyBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!batchTeacherId) {
-      setFeedbackMessage({ text: "Please select a target teacher for batch assignment.", type: "error" });
+    const finalBatchSection = (isBatchCustomSection ? batchCustomSectionText : batchSection).trim();
+    if (!finalBatchSection) {
+      setFeedbackMessage({ text: "Please enter or select a valid section.", type: "error" });
+      return;
+    }
+
+    const hasAnySelection = batchReadingTeacherId || batchMathTeacherId || batchScienceTeacherId;
+    if (!hasAnySelection) {
+      setFeedbackMessage({
+        text: "Please select at least one subject remedial teacher to assign or unassign.",
+        type: "error",
+      });
       return;
     }
 
@@ -306,8 +364,15 @@ function CoordinatorLearnersContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           gradeLevel: Number(batchGrade),
-          section: batchSection.trim(),
-          teacherId: batchTeacherId === "unassigned" ? null : batchTeacherId,
+          section: finalBatchSection,
+          assignedTeachers: {
+            reading: batchReadingTeacherId || undefined,
+            math: batchMathTeacherId || undefined,
+            science: batchScienceTeacherId || undefined,
+          },
+          readingTeacherId: batchReadingTeacherId || undefined,
+          mathTeacherId: batchMathTeacherId || undefined,
+          scienceTeacherId: batchScienceTeacherId || undefined,
         }),
       });
 
@@ -316,9 +381,8 @@ function CoordinatorLearnersContent() {
         throw new Error(json.error || "Failed to execute batch assignment.");
       }
 
-      const teacherObj = teachers.find((t) => t.id === batchTeacherId);
       setFeedbackMessage({
-        text: `Success: Assigned ${json.updatedCount} Grade ${batchGrade} - ${batchSection} students to ${teacherObj?.name || "Teacher"}.`,
+        text: `Success: Updated ARAL subject teacher assignments for ${json.updatedCount} Grade ${batchGrade} - ${finalBatchSection} learners.`,
         type: "success",
       });
 
@@ -349,6 +413,19 @@ function CoordinatorLearnersContent() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setIsBatchOpen(true);
+                const el = document.getElementById("batch-assignment-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.98]"
+            >
+              <UserCheck className="h-4 w-4 text-red-800" />
+              <span>Batch Assign Section</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}
@@ -433,103 +510,287 @@ function CoordinatorLearnersContent() {
         )}
 
         {/* ── BATCH ASSIGNMENT BY SECTION TOOL ── */}
-        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-50 text-red-800">
-              <UserCheck className="h-4 w-4" />
+        <section
+          id="batch-assignment-section"
+          className="mb-6 rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden transition-all duration-200"
+        >
+          {/* Header & Collapse Toggle */}
+          <div
+            onClick={() => setIsBatchOpen((prev) => !prev)}
+            className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4 cursor-pointer hover:bg-slate-100/60 transition-colors select-none"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-800">
+                <UserCheck className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-900">Batch Assignment by Section</h2>
+                  <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-red-800 border border-red-200">
+                    RA 12028 Cohort Tool
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Allocate an entire section to designated ARAL subject remedial teachers in one click.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Batch Assignment by Section</h2>
-              <p className="text-xs text-slate-500">
-                Quickly allocate an entire cohort or section to a designated ARAL teacher in one click.
-              </p>
+
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-white border border-slate-200/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+                <span className="text-slate-400">Target Cohort:</span>
+                <span className="font-bold text-red-800">
+                  Grade {batchGrade} &bull; {isBatchCustomSection ? (batchCustomSectionText || "Custom") : batchSection}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                  {batchCohortLearnerCount} {batchCohortLearnerCount === 1 ? "student" : "students"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-700 transition-colors"
+                aria-label={isBatchOpen ? "Collapse panel" : "Expand panel"}
+              >
+                {isBatchOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
-          <form onSubmit={handleApplyBatch} className="flex flex-wrap items-end gap-3 pt-2">
-            <div className="w-36">
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Grade
-              </label>
-              <div className="relative">
-                <select
-                  value={batchGrade}
-                  onChange={(e) => handleBatchGradeChange(e.target.value)}
-                  className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                >
-                  {sortedGrades.map((g) => (
-                    <option key={`grade-${g}`} value={String(g)}>
-                      Grade {g}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              </div>
-            </div>
+          {/* Collapsible Content */}
+          {isBatchOpen && (
+            <form onSubmit={handleApplyBatch} className="p-6 space-y-5 animate-in fade-in-50 duration-150">
+              {/* Cohort Selector Row */}
+              <div className="flex flex-wrap items-center gap-3.5 pb-4 border-b border-slate-100">
+                <div className="w-36">
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Grade Level
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={batchGrade}
+                      onChange={(e) => handleBatchGradeChange(e.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                    >
+                      {sortedGrades.map((g) => (
+                        <option key={`grade-${g}`} value={String(g)}>
+                          Grade {g}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
 
-            <div className="w-44">
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Section
-              </label>
-              <div className="relative">
-                <select
-                  value={batchSection}
-                  onChange={(e) => setBatchSection(e.target.value)}
-                  className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                >
-                  {batchAvailableSections.map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              </div>
-            </div>
+                <div className="w-56">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Section
+                    </label>
+                    {isBatchCustomSection ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsBatchCustomSection(false)}
+                        className="text-[10px] font-semibold text-red-800 hover:underline"
+                      >
+                        Select from list
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBatchCustomSection(true);
+                          setBatchCustomSectionText("");
+                        }}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-red-800"
+                      >
+                        + Custom section
+                      </button>
+                    )}
+                  </div>
+                  {isBatchCustomSection ? (
+                    <input
+                      type="text"
+                      required
+                      value={batchCustomSectionText}
+                      onChange={(e) => setBatchCustomSectionText(e.target.value)}
+                      placeholder="Enter custom section..."
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 placeholder:text-slate-400"
+                    />
+                  ) : (
+                    <div className="relative">
+                      <select
+                        value={batchSection}
+                        onChange={(e) => {
+                          if (e.target.value === "__custom__") {
+                            setIsBatchCustomSection(true);
+                            setBatchCustomSectionText("");
+                          } else {
+                            setBatchSection(e.target.value);
+                          }
+                        }}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                      >
+                        {batchAvailableSections.map((sec) => (
+                          <option key={sec} value={sec}>
+                            {sec}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Enter Custom Section...</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  )}
+                </div>
 
-            <div className="min-w-[220px] flex-1">
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Assign to Teacher
-              </label>
-              <div className="relative">
-                <select
-                  value={batchTeacherId}
-                  onChange={(e) => setBatchTeacherId(e.target.value)}
-                  required
-                  className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                >
-                  <option value="" disabled>
-                    — Select Destination Teacher —
-                  </option>
-                  <option value="unassigned">— Remove Assignment (Set Unassigned) —</option>
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.studentCount ?? 0} currently assigned)
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                {/* Cohort Live Counter Pill */}
+                <div className="flex items-center mt-auto h-10 px-4 rounded-xl bg-slate-50 border border-slate-200/70 text-xs text-slate-600 gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Matched:</span>
+                  <span className="font-bold text-red-800">
+                    {batchCohortLearnerCount} {batchCohortLearnerCount === 1 ? "student" : "students"}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    in Grade {batchGrade} &bull; {isBatchCustomSection ? (batchCustomSectionText || "...") : batchSection}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isBatchApplying || !batchTeacherId}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
-            >
-              {isBatchApplying ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Applying...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="h-3.5 w-3.5 text-white" />
-                  <span>Apply Batch Assignment</span>
-                </>
-              )}
-            </button>
-          </form>
+              {/* 3 Dedicated ARAL Subject Remedial Teacher Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Reading Remedial Teacher */}
+                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-rose-300">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-rose-100 text-xs">📖</span>
+                      <span>Reading Remedial Teacher</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/70 px-2 py-0.5 rounded-full">
+                      Reading
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={batchReadingTeacherId}
+                      onChange={(e) => setBatchReadingTeacherId(e.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                    >
+                      <option value="">— Keep Current Reading Teacher —</option>
+                      <option value="unassigned">— Set Unassigned (Remove Teacher) —</option>
+                      {readingTeachers.map((t) => (
+                        <option key={`batch-read-${t.id}`} value={t.id}>
+                          {t.name}{getTeacherSubjectTag(t)} ({t.studentCount ?? 0} assigned)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* 2. Mathematics Teacher */}
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-blue-300">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-blue-100 text-xs">📐</span>
+                      <span>Mathematics Teacher</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full">
+                      Numeracy
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={batchMathTeacherId}
+                      onChange={(e) => setBatchMathTeacherId(e.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                    >
+                      <option value="">— Keep Current Math Teacher —</option>
+                      <option value="unassigned">— Set Unassigned (Remove Teacher) —</option>
+                      {mathTeachers.map((t) => (
+                        <option key={`batch-math-${t.id}`} value={t.id}>
+                          {t.name}{getTeacherSubjectTag(t)} ({t.studentCount ?? 0} assigned)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* 3. Science Teacher */}
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-emerald-300">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-emerald-100 text-xs">🔬</span>
+                      <span>Science Remedial Teacher</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                      Science
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={batchScienceTeacherId}
+                      onChange={(e) => setBatchScienceTeacherId(e.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                    >
+                      <option value="">— Keep Current Science Teacher —</option>
+                      <option value="unassigned">— Set Unassigned (Remove Teacher) —</option>
+                      {scienceTeachers.map((t) => (
+                        <option key={`batch-sci-${t.id}`} value={t.id}>
+                          {t.name}{getTeacherSubjectTag(t)} ({t.studentCount ?? 0} assigned)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Actions Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <p className="text-[11px] text-slate-500">
+                  * Subjects left as <span className="font-semibold text-slate-700">"Keep Current"</span> will retain existing assigned teachers.
+                </p>
+
+                <div className="flex items-center gap-2.5">
+                  {(batchReadingTeacherId || batchMathTeacherId || batchScienceTeacherId) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBatchReadingTeacherId("");
+                        setBatchMathTeacherId("");
+                        setBatchScienceTeacherId("");
+                      }}
+                      className="h-10 rounded-xl px-4 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      Reset Selections
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={
+                      isBatchApplying ||
+                      (!batchReadingTeacherId && !batchMathTeacherId && !batchScienceTeacherId) ||
+                      (isBatchCustomSection && !batchCustomSectionText.trim())
+                    }
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isBatchApplying ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Applying Batch Assignment...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-white" />
+                        <span>Apply Batch Assignment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
         </section>
 
         {/* ── FILTER & SEARCH BAR ── */}
@@ -630,7 +891,7 @@ function CoordinatorLearnersContent() {
                   <option value="unassigned">No Teacher Assigned</option>
                   {teachers.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name}
+                      {t.name}{getTeacherSubjectTag(t)}
                     </option>
                   ))}
                 </select>
@@ -812,7 +1073,7 @@ function CoordinatorLearnersContent() {
                                 </option>
                                 {teachers.map((t) => (
                                   <option key={t.id} value={t.id}>
-                                    {t.name}
+                                    {t.name}{getTeacherSubjectTag(t)}
                                   </option>
                                 ))}
                               </select>

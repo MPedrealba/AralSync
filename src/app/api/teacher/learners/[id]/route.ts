@@ -40,7 +40,16 @@ export async function GET(
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
     }
 
-    if (record.assignedTeacherId && record.assignedTeacherId.toString() !== actor.id) {
+    const isAssigned =
+      !record.assignedTeacherId ||
+      record.assignedTeacherId.toString() === actor.id ||
+      record.assignedTeachers?.reading?.toString() === actor.id ||
+      record.assignedTeachers?.math?.toString() === actor.id ||
+      record.assignedTeachers?.science?.toString() === actor.id ||
+      actor.role === 'admin' ||
+      actor.role === 'coordinator';
+
+    if (!isAssigned) {
       return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
@@ -54,16 +63,67 @@ export async function GET(
 
     const omrAssessments = assessments
       .filter((a: any) => a.type === 'OMR')
-      .map((a: any) => ({
-        id: a._id.toString(),
-        date: a.date,
-        title: a.title || 'OMR Scan',
-        subject: a.subject || 'Math',
-        score: a.score,
-        mastery: a.masteryLevel,
-        omrSheetUrl: a.omrSheetUrl || null,
-        detectedAnswers: a.detectedAnswers || [],
-      }));
+      .map((a: any) => {
+        const title = (a.title || '').toLowerCase();
+        const category = a.assessmentCategory || (
+          title.includes('pre-test') || title.includes('pretest') || title.includes('baseline')
+            ? 'pre-test'
+            : title.includes('post-test') || title.includes('posttest') || title.includes('endline')
+            ? 'post-test'
+            : title.includes('exam')
+            ? 'exam'
+            : 'quiz'
+        );
+        return {
+          id: a._id.toString(),
+          date: a.date,
+          title: a.title || 'OMR Scan',
+          subject: a.subject || 'Math',
+          score: a.score,
+          mastery: a.masteryLevel,
+          category,
+          assessmentCategory: category,
+          omrSheetUrl: a.omrSheetUrl || null,
+          detectedAnswers: a.detectedAnswers || [],
+        };
+      });
+
+    // Calculate Pre-Test vs Post-Test Growth & Learning Recovery
+    const preAssessments = omrAssessments.filter((a) => a.category === 'pre-test');
+    const postAssessments = omrAssessments.filter((a) => a.category === 'post-test');
+
+    const prePostGrowth = {
+      hasData: preAssessments.length > 0 || postAssessments.length > 0,
+      baselineScore: preAssessments.length > 0 ? preAssessments[preAssessments.length - 1].score : null,
+      postTestScore: postAssessments.length > 0 ? postAssessments[0].score : null,
+      gainDelta: null as number | null,
+      gainStatus: 'no_data' as 'improved' | 'declined' | 'maintained' | 'no_data' | 'pending_post',
+      preTestDate: preAssessments.length > 0 ? preAssessments[preAssessments.length - 1].date : null,
+      postTestDate: postAssessments.length > 0 ? postAssessments[0].date : null,
+      bySubject: {} as Record<string, { baseline: number | null; postTest: number | null; delta: number | null; status: string }>,
+    };
+
+    if (prePostGrowth.baselineScore != null && prePostGrowth.postTestScore != null) {
+      prePostGrowth.gainDelta = Math.round(prePostGrowth.postTestScore - prePostGrowth.baselineScore);
+      prePostGrowth.gainStatus = prePostGrowth.gainDelta > 0 ? 'improved' : prePostGrowth.gainDelta < 0 ? 'declined' : 'maintained';
+    } else if (prePostGrowth.baselineScore != null && prePostGrowth.postTestScore == null) {
+      prePostGrowth.gainStatus = 'pending_post';
+    }
+
+    ['Math', 'Reading', 'Science'].forEach((subj) => {
+      const subPre = omrAssessments.filter((a) => a.subject === subj && a.category === 'pre-test');
+      const subPost = omrAssessments.filter((a) => a.subject === subj && a.category === 'post-test');
+      const bScore = subPre.length > 0 ? subPre[subPre.length - 1].score : null;
+      const pScore = subPost.length > 0 ? subPost[0].score : null;
+      const delta = bScore != null && pScore != null ? Math.round(pScore - bScore) : null;
+      const status = delta != null ? (delta > 0 ? 'improved' : delta < 0 ? 'declined' : 'maintained') : bScore != null ? 'pending_post' : 'not_started';
+      prePostGrowth.bySubject[subj] = {
+        baseline: bScore,
+        postTest: pScore,
+        delta,
+        status,
+      };
+    });
 
     const readingAssessments = assessments
       .filter((a: any) => a.type === 'READING_FLUENCY')
@@ -115,6 +175,7 @@ export async function GET(
         lastAssessmentDate: record.lastReadingAssessmentDate || null,
       },
       omrAssessments,
+      prePostGrowth,
       readingAssessments,
       comprehensionAssessments,
       interventions: interventions.map((i: any) => ({
@@ -164,7 +225,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
     }
 
-    if (record.assignedTeacherId && record.assignedTeacherId.toString() !== actor.id) {
+    const isAuthorized =
+      !record.assignedTeacherId ||
+      record.assignedTeacherId.toString() === actor.id ||
+      record.assignedTeachers?.reading?.toString() === actor.id ||
+      record.assignedTeachers?.math?.toString() === actor.id ||
+      record.assignedTeachers?.science?.toString() === actor.id ||
+      actor.role === 'admin' ||
+      actor.role === 'coordinator';
+
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 

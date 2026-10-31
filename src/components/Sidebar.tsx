@@ -19,6 +19,7 @@ import {
   Target,
   Lightbulb,
   FileText,
+  FileSpreadsheet,
   X,
 } from "lucide-react";
 import { useMobileNav } from "@/components/MobileNavContext";
@@ -55,10 +56,10 @@ const allNavSections = [
     ],
   },
   {
-    label: "INTERVENTIONS",
+    label: "INTERVENTIONS & GRADES",
     items: [
-      { name: "Interventions", href: "/dashboard/interventions", icon: BookMarked },
-      { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb },
+      { name: "Interventions & Tasks", href: "/dashboard/interventions", icon: BookMarked },
+      { name: "e-Class Record Matrix", href: "/dashboard/interventions?tab=matrix", icon: FileSpreadsheet },
     ],
   },
   {

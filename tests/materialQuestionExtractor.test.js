@@ -249,4 +249,80 @@ describe('AI Learning Material Question Extractor Engine', () => {
     assert.strictEqual(processed.questions[0].answer, 'A) In a den');
     assert.strictEqual(processed.questions[1].answer, 'B) A gold can');
   });
+
+  // 8. Target Item Count Caching & Slicing/Supplementing
+  test('generates count-aware cache keys and correctly adjusts question count to targetCount', () => {
+    const materialId = '6acde2293b451ecc566a3838';
+    const pageNumber = 5;
+
+    // Cache key behavior
+    function getCacheKey(matId, page, targetCount) {
+      return targetCount > 0
+        ? `Q-EXTRACT-${matId}-P${page}-C${targetCount}`
+        : `Q-EXTRACT-${matId}-P${page}`;
+    }
+
+    assert.strictEqual(getCacheKey(materialId, pageNumber, 0), 'Q-EXTRACT-6acde2293b451ecc566a3838-P5');
+    assert.strictEqual(getCacheKey(materialId, pageNumber, 10), 'Q-EXTRACT-6acde2293b451ecc566a3838-P5-C10');
+    assert.strictEqual(getCacheKey(materialId, pageNumber, 25), 'Q-EXTRACT-6acde2293b451ecc566a3838-P5-C25');
+    assert.strictEqual(getCacheKey(materialId, pageNumber, 50), 'Q-EXTRACT-6acde2293b451ecc566a3838-P5-C50');
+
+    // Slicing behavior (extracted items > targetCount)
+    const initialQuestions = Array.from({ length: 8 }, (_, i) => ({
+      number: i + 1,
+      id: `q${i + 1}`,
+      prompt: `Exercise #${i + 1}`,
+      choices: ['A', 'B', 'C', 'D'],
+      correctAnswer: 'A',
+    }));
+
+    function adjustQuestions(questions, targetCount, supplementalPool = []) {
+      let result = [...questions];
+      if (targetCount > 0 && result.length > targetCount) {
+        result = result.slice(0, targetCount);
+      } else if (targetCount > 0 && result.length < targetCount) {
+        const needed = targetCount - result.length;
+        const extra = supplementalPool.slice(0, needed).map((q, idx) => ({
+          prompt: q.prompt || `Supplemental Exercise #${result.length + idx + 1}`,
+          choices: q.choices || ['A', 'B', 'C', 'D'],
+          correctAnswer: q.correctAnswer || 'A',
+        }));
+        while (extra.length < needed) {
+          extra.push({
+            prompt: `Supplemental Exercise #${result.length + extra.length + 1}`,
+            choices: ['A', 'B', 'C', 'D'],
+            correctAnswer: 'A',
+          });
+        }
+        result.push(...extra);
+      }
+
+      return result.map((q, idx) => ({
+        ...q,
+        number: idx + 1,
+        id: `q${idx + 1}`,
+      }));
+    }
+
+    // Slice 8 items to 5
+    const sliced = adjustQuestions(initialQuestions, 5);
+    assert.strictEqual(sliced.length, 5);
+    assert.strictEqual(sliced[0].number, 1);
+    assert.strictEqual(sliced[4].number, 5);
+    assert.strictEqual(sliced[4].id, 'q5');
+
+    // Supplement 8 items to 10
+    const supplemented = adjustQuestions(initialQuestions, 10, [
+      { prompt: 'Extra 1', choices: ['1', '2', '3', '4'], correctAnswer: 'B' },
+      { prompt: 'Extra 2', choices: ['5', '6', '7', '8'], correctAnswer: 'C' },
+    ]);
+    assert.strictEqual(supplemented.length, 10);
+    assert.strictEqual(supplemented[7].number, 8);
+    assert.strictEqual(supplemented[8].prompt, 'Extra 1');
+    assert.strictEqual(supplemented[8].number, 9);
+    assert.strictEqual(supplemented[8].id, 'q9');
+    assert.strictEqual(supplemented[9].prompt, 'Extra 2');
+    assert.strictEqual(supplemented[9].number, 10);
+    assert.strictEqual(supplemented[9].id, 'q10');
+  });
 });

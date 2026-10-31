@@ -127,6 +127,12 @@ export default function CoordinatorUserManagementPage() {
   // Delete confirmation
   const [deleting, setDeleting] = useState<UserRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [confirmTeacherDelete, setConfirmTeacherDelete] = useState(false);
+
+  const openDelete = (u: UserRow) => {
+    setConfirmTeacherDelete(false);
+    setDeleting(u);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -307,6 +313,7 @@ export default function CoordinatorUserManagementPage() {
 
   const handleDelete = async () => {
     if (!deleting) return;
+    if (deleting.roleKey === "teacher" && !confirmTeacherDelete) return;
     setDeleteBusy(true);
     try {
       const res = await fetch(`/api/coordinator/user-management?id=${deleting.id}`, { method: "DELETE" });
@@ -314,14 +321,17 @@ export default function CoordinatorUserManagementPage() {
       if (json.success) {
         setFeedback({ text: `Account for ${deleting.name} was permanently removed.`, type: "success" });
         setDeleting(null);
+        setConfirmTeacherDelete(false);
         load();
       } else {
         setFeedback({ text: json.error || "Failed to delete user.", type: "error" });
         setDeleting(null);
+        setConfirmTeacherDelete(false);
       }
     } catch {
       setFeedback({ text: "Something went wrong.", type: "error" });
       setDeleting(null);
+      setConfirmTeacherDelete(false);
     } finally {
       setDeleteBusy(false);
     }
@@ -741,7 +751,7 @@ export default function CoordinatorUserManagementPage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setDeleting(u)}
+                                  onClick={() => openDelete(u)}
                                   className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50 transition-colors"
                                   title="Delete Account"
                                 >
@@ -912,7 +922,7 @@ export default function CoordinatorUserManagementPage() {
                             {/* Delete */}
                             <button
                               type="button"
-                              onClick={() => setDeleting(u)}
+                              onClick={() => openDelete(u)}
                               className="rounded-xl border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50 transition-colors"
                               title="Delete Account & Record"
                             >
@@ -1057,8 +1067,8 @@ export default function CoordinatorUserManagementPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98] disabled:opacity-50"
+                    disabled={saving || !name.trim() || !username.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     <span>Create Staff Account</span>
@@ -1206,8 +1216,8 @@ export default function CoordinatorUserManagementPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={editingSave}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98] disabled:opacity-50"
+                    disabled={editingSave || !editForm.name.trim() || !editForm.username.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {editingSave && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     <span>Save Changes</span>
@@ -1257,7 +1267,7 @@ export default function CoordinatorUserManagementPage() {
                   type="button"
                   onClick={handleResetStudentPassword}
                   disabled={resettingBusy}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-800 transition-all active:scale-[0.98] disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-800 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {resettingBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span>Reset to LRN</span>
@@ -1270,15 +1280,42 @@ export default function CoordinatorUserManagementPage() {
         {/* ── DELETE MODAL ── */}
         {deleting && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={() => setDeleting(null)} />
-            <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150 border border-slate-200">
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
+              onClick={() => {
+                setDeleting(null);
+                setConfirmTeacherDelete(false);
+              }}
+            />
+            <div
+              className={`relative w-full ${
+                deleting.roleKey === "teacher" ? "max-w-lg" : "max-w-md"
+              } rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150 border border-slate-200`}
+            >
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700 border border-rose-200">
-                  <Trash2 className="h-5 w-5" />
+                  {deleting.roleKey === "teacher" ? (
+                    <AlertTriangle className="h-5 w-5 text-rose-700" />
+                  ) : (
+                    <Trash2 className="h-5 w-5" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Delete Account</h3>
-                  <p className="text-xs text-slate-500">Irreversible action</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      {deleting.roleKey === "teacher" ? "Delete Teacher Account" : "Delete Account"}
+                    </h3>
+                    {deleting.roleKey === "teacher" && (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-800">
+                        Major Action
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {deleting.roleKey === "teacher"
+                      ? "High-impact action & cohort unassignment"
+                      : "Irreversible action"}
+                  </p>
                 </div>
               </div>
 
@@ -1292,10 +1329,56 @@ export default function CoordinatorUserManagementPage() {
                 )}
               </p>
 
+              {/* Major Action Warning Pop-up Content for Teachers */}
+              {deleting.roleKey === "teacher" && (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3.5 text-xs text-rose-950 space-y-2">
+                    <div className="flex items-center gap-1.5 font-bold text-rose-900">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-rose-700" />
+                      <span>DepEd ARAL Intervention System Impact</span>
+                    </div>
+                    <ul className="list-disc pl-5 space-y-1.5 text-slate-700 leading-relaxed text-[11px]">
+                      <li>
+                        <strong className="text-rose-900">Immediate Cohort Unassignment:</strong> All active
+                        learners assigned to this teacher across{" "}
+                        <span className="font-semibold text-slate-900">Reading, Mathematics, and Science</span>{" "}
+                        remedial cohorts will be unassigned.
+                      </li>
+                      <li>
+                        <strong className="text-rose-900">Data Integrity Maintained:</strong> Student diagnostic
+                        assessments (Phil-IRI) and intervention task histories remain in the database, but will
+                        require immediate cohort re-assignment in the Learner Hub under RA 12028.
+                      </li>
+                      <li>
+                        <strong className="text-rose-900">Revoked Privileges:</strong> Teacher portal access and
+                        session grading capabilities will be permanently deactivated.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Safety Confirmation Checkbox */}
+                  <label className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/90 p-3 cursor-pointer select-none hover:bg-slate-100/70 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={confirmTeacherDelete}
+                      onChange={(e) => setConfirmTeacherDelete(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-700 font-medium leading-snug">
+                      I understand the consequences: Active learners will be unassigned and require immediate
+                      cohort reassignment under RA 12028.
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <div className="mt-6 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setDeleting(null)}
+                  onClick={() => {
+                    setDeleting(null);
+                    setConfirmTeacherDelete(false);
+                  }}
                   className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancel
@@ -1303,8 +1386,8 @@ export default function CoordinatorUserManagementPage() {
                 <button
                   type="button"
                   onClick={handleDelete}
-                  disabled={deleteBusy}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-800 transition-all active:scale-[0.98] disabled:opacity-50"
+                  disabled={deleteBusy || (deleting.roleKey === "teacher" && !confirmTeacherDelete)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-800 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {deleteBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span>Delete Permanently</span>

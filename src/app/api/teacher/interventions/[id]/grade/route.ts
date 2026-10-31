@@ -28,8 +28,26 @@ export async function PATCH(
       return fail('Intervention not found', 404);
     }
 
-    if (gradeScore !== undefined) {
-      intervention.gradeScore = gradeScore;
+    // Enforce mandatory grade score validation rule
+    const isScoreEmpty =
+      gradeScore === undefined ||
+      gradeScore === null ||
+      (typeof gradeScore === 'string' && gradeScore.trim() === '');
+
+    if (!isScoreEmpty) {
+      const numericScore = Number(gradeScore);
+      const maxAllowed = intervention.maxPoints != null ? intervention.maxPoints : 100;
+      if (isNaN(numericScore) || numericScore < 0 || numericScore > maxAllowed) {
+        return fail(
+          `Grade score must be a valid number between 0 and ${maxAllowed}.`,
+          400
+        );
+      }
+      intervention.gradeScore = numericScore;
+    } else {
+      if (intervention.gradeScore === null || intervention.gradeScore === undefined) {
+        return fail('A valid numeric grade score is required to grade this task.', 400);
+      }
     }
 
     if (teacherRemarks !== undefined) {

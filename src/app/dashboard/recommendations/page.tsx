@@ -25,10 +25,13 @@ import {
   Loader2,
   ChevronRight,
   Filter,
+  RotateCw,
+  Sparkles,
+  GraduationCap,
 } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
-const tabs = ["Modules", "Activities", "Quizzes", "Videos", "Student Submissions"] as const;
+const tabs = ["Modules", "Activities", "Quizzes", "Videos"] as const;
 type Tab = (typeof tabs)[number];
 
 interface RecItem {
@@ -37,15 +40,18 @@ interface RecItem {
   description: string;
   subject: string;
   kind: string;
-  meta: { items?: number; lessons?: number; duration?: string; level?: string };
+  meta: { items?: number; lessons?: number; duration?: string; level?: string; proficiencyTier?: string };
   workbookUrl?: string | null;
   tutorGuideUrl?: string | null;
   keyStage?: string | null;
   programLevel?: string | null;
+  proficiencyTier?: string | null;
+  source?: string | null;
   targetGrades?: number[];
   pageStart?: number | null;
   pageEnd?: number | null;
   sessionInfo?: string | null;
+  isDynamic?: boolean;
 }
 
 interface StudentItem {
@@ -54,47 +60,11 @@ interface StudentItem {
   gradeLevel?: number;
   section?: string;
   lrn?: string;
+  riskLevel?: string;
+  masteryStatus?: string;
+  readingLevel?: string;
+  combinedReadingLevel?: string;
 }
-
-interface SubmissionItem {
-  id: string;
-  title: string;
-  learner: string;
-  studentId: string;
-  gradeSection: string;
-  category: string;
-  type: string;
-  status: "Not Started" | "In Progress" | "Submitted" | "Reviewed" | "Completed";
-  reviewed: boolean;
-  created: string;
-  instructions?: string;
-  dueDate?: string | null;
-  submissionText?: string;
-  submissionFileUrl?: string | null;
-  submittedAt?: string | null;
-  teacherRemarks?: string;
-  gradeScore?: string | number | null;
-  workbookUrl?: string | null;
-  keyStage?: string | null;
-  pageStart?: number | null;
-  pageEnd?: number | null;
-  sessionInfo?: string | null;
-}
-
-const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
-  Completed: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  Reviewed: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
-  Submitted: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  "In Progress": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  "Not Started": { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200" },
-};
-
-const fmtDate = (d?: string | null) => {
-  if (!d) return "—";
-  const date = new Date(d);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-};
 
 export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Modules");
@@ -105,9 +75,7 @@ export default function RecommendationsPage() {
     modules: RecItem[];
   } | null>(null);
   const [students, setStudents] = useState<StudentItem[]>([]);
-  const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   // "Assign Activity" Modal state
@@ -134,19 +102,30 @@ export default function RecommendationsPage() {
   const [assignError, setAssignError] = useState("");
 
   // "Review & Grade" Drawer/Modal state
-  const [reviewingSubmission, setReviewingSubmission] = useState<SubmissionItem | null>(null);
-  const [gradeInput, setGradeInput] = useState<string>("");
-  const [remarksInput, setRemarksInput] = useState<string>("");
-  const [gradingStatus, setGradingStatus] = useState<"Reviewed" | "Completed">("Reviewed");
-  const [gradingSaving, setGradingSaving] = useState(false);
-  const [gradingError, setGradingError] = useState("");
-
   const [assignedSubject, setAssignedSubject] = useState("All");
 
-  // Submissions list filters
-  const [subStatusFilter, setSubStatusFilter] = useState<string>("All");
-  const [subSubjectFilter, setSubSubjectFilter] = useState<string>("All");
-  const [subSearch, setSubSearch] = useState("");
+  // Catalog filters & dynamic scanner
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogTierFilter, setCatalogTierFilter] = useState("All");
+  const [catalogStudentFilter, setCatalogStudentFilter] = useState("");
+  const [syncingMaterials, setSyncingMaterials] = useState(false);
+
+  const handleRescanMaterials = async () => {
+    setSyncingMaterials(true);
+    try {
+      const res = await fetch("/api/teacher/recommendations?sync=true");
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data) {
+        setData(json.data);
+        setMessage("Dynamically scanned active learning materials and updated recommendations catalog.");
+        setTimeout(() => setMessage(""), 5000);
+      }
+    } catch (err) {
+      console.error("Failed to rescan materials:", err);
+    } finally {
+      setSyncingMaterials(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -163,7 +142,6 @@ export default function RecommendationsPage() {
         const sub = meJson.data.assignedSubject;
         setAssignedSubject(sub);
         if (sub !== "All") {
-          setSubSubjectFilter(sub);
           setAssignForm((prev) => ({ ...prev, subject: sub }));
         }
       }
@@ -177,6 +155,10 @@ export default function RecommendationsPage() {
             gradeLevel: s.gradeLevel,
             section: s.section,
             lrn: s.lrn,
+            riskLevel: s.riskLevel,
+            masteryStatus: s.masteryStatus,
+            readingLevel: s.readingLevel,
+            combinedReadingLevel: s.combinedReadingLevel,
           }))
         );
       }
@@ -187,24 +169,8 @@ export default function RecommendationsPage() {
     }
   };
 
-  const loadSubmissions = async () => {
-    setSubmissionsLoading(true);
-    try {
-      const res = await fetch("/api/teacher/interventions");
-      const json = await parseJsonResponse(res);
-      if (json.success && Array.isArray(json.data)) {
-        setSubmissions(json.data);
-      }
-    } catch (e) {
-      console.error("Failed to load submissions:", e);
-    } finally {
-      setSubmissionsLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadData();
-    loadSubmissions();
   }, []);
 
   // Distinct sections list for section assignment
@@ -215,6 +181,7 @@ export default function RecommendationsPage() {
   // Open modal prefilled from a recommendation
   const openAssignModalForRec = (item?: RecItem) => {
     const effectiveSubject = assignedSubject !== "All" ? assignedSubject : (item?.subject || "Reading");
+    const preselectedStudents = catalogStudentFilter ? [catalogStudentFilter] : [];
     if (item) {
       setAssignForm({
         title: item.title,
@@ -223,7 +190,7 @@ export default function RecommendationsPage() {
         instructions: item.description || "",
         dueDate: "",
         targetMode: "selected",
-        selectedStudents: [],
+        selectedStudents: preselectedStudents,
         selectedSection: sections[0] || "",
         recommendationId: item.id,
         workbookUrl: item.workbookUrl || "",
@@ -241,7 +208,7 @@ export default function RecommendationsPage() {
         instructions: "",
         dueDate: "",
         targetMode: "selected",
-        selectedStudents: [],
+        selectedStudents: preselectedStudents,
         selectedSection: sections[0] || "",
         recommendationId: "",
         workbookUrl: "",
@@ -309,7 +276,6 @@ export default function RecommendationsPage() {
       if (json.success) {
         setMessage(json.data?.message || `Assigned "${assignForm.title}" successfully.`);
         setShowAssignModal(false);
-        loadSubmissions();
         setTimeout(() => setMessage(""), 5000);
       } else {
         setAssignError(json.error || "Assignment failed.");
@@ -321,97 +287,96 @@ export default function RecommendationsPage() {
     }
   };
 
-  // Open Review & Grade Drawer
-  const openReviewModal = (sub: SubmissionItem) => {
-    setReviewingSubmission(sub);
-    setGradeInput(sub.gradeScore !== null && sub.gradeScore !== undefined ? String(sub.gradeScore) : "");
-    setRemarksInput(sub.teacherRemarks || "");
-    setGradingStatus(sub.status === "Completed" ? "Completed" : "Reviewed");
-    setGradingError("");
-  };
+  const selectedStudentProfile = students.find((s) => s.id === catalogStudentFilter);
 
-  // Submit Grade & Remarks
-  const handleSaveGrade = async (targetStatus?: "Reviewed" | "Completed") => {
-    if (!reviewingSubmission) return;
-    setGradingSaving(true);
-    setGradingError("");
-
-    try {
-      const finalStatus = targetStatus || gradingStatus;
-      const res = await fetch(`/api/teacher/interventions/${reviewingSubmission.id}/grade`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gradeScore: gradeInput.trim() || undefined,
-          teacherRemarks: remarksInput.trim(),
-          status: finalStatus,
-        }),
-      });
-
-      const json = await parseJsonResponse(res);
-      if (json.success) {
-        // Update local submissions list
-        setSubmissions((prev) =>
-          prev.map((s) =>
-            s.id === reviewingSubmission.id
-              ? {
-                  ...s,
-                  status: finalStatus,
-                  reviewed: true,
-                  gradeScore: gradeInput.trim() || null,
-                  teacherRemarks: remarksInput.trim(),
-                }
-              : s
-          )
-        );
-        setReviewingSubmission(null);
-        setMessage(`Grade and feedback saved for ${reviewingSubmission.learner}.`);
-        setTimeout(() => setMessage(""), 4000);
-      } else {
-        setGradingError(json.error || "Failed to save grade.");
+  const filterCatalogItems = (items: RecItem[]) => {
+    return items.filter((item) => {
+      if (catalogSearch.trim()) {
+        const q = catalogSearch.toLowerCase();
+        const mTitle = item.title.toLowerCase().includes(q);
+        const mDesc = item.description?.toLowerCase().includes(q);
+        const mSource = item.source?.toLowerCase().includes(q);
+        const mSession = item.sessionInfo?.toLowerCase().includes(q);
+        if (!mTitle && !mDesc && !mSource && !mSession) return false;
       }
-    } catch {
-      setGradingError("Failed to save grade.");
-    } finally {
-      setGradingSaving(false);
-    }
+
+      if (catalogTierFilter !== "All") {
+        const tier = item.proficiencyTier || (item.programLevel === "Basic" ? "Beginning" : "Developing");
+        if (catalogTierFilter === "Beginning / Frustration") {
+          if (tier !== "Beginning" && tier !== "Frustration" && item.programLevel !== "Basic") return false;
+        } else if (catalogTierFilter === "Developing / Instructional") {
+          if (tier !== "Developing" && tier !== "Instructional") return false;
+        } else if (catalogTierFilter === "Proficient / Independent") {
+          if (tier !== "Proficient" && tier !== "Independent") return false;
+        }
+      }
+
+      if (selectedStudentProfile) {
+        if (
+          selectedStudentProfile.gradeLevel &&
+          item.targetGrades &&
+          item.targetGrades.length > 0 &&
+          !item.targetGrades.includes(selectedStudentProfile.gradeLevel)
+        ) {
+          return false;
+        }
+
+        const isStruggling =
+          selectedStudentProfile.riskLevel === "High Risk" ||
+          selectedStudentProfile.readingLevel === "Non-Reader" ||
+          selectedStudentProfile.readingLevel === "Frustration" ||
+          selectedStudentProfile.masteryStatus === "Beginning";
+
+        const isProficient =
+          selectedStudentProfile.riskLevel === "Low Risk" ||
+          selectedStudentProfile.readingLevel === "Independent" ||
+          selectedStudentProfile.masteryStatus === "Proficient";
+
+        const itemTier = item.proficiencyTier || (item.programLevel === "Basic" ? "Beginning" : "Developing");
+
+        if (isStruggling) {
+          if (itemTier !== "Beginning" && itemTier !== "Frustration" && item.programLevel !== "Basic") {
+            return false;
+          }
+        } else if (isProficient) {
+          if (itemTier !== "Proficient" && itemTier !== "Independent") {
+            return false;
+          }
+        } else {
+          if (itemTier !== "Developing" && itemTier !== "Instructional") {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
   };
+
+  const rawVideos = data?.videos ?? [];
+  const rawQuizzes = data?.quizzes ?? [];
+  const rawActivities = data?.activities ?? [];
+  const rawModules = data?.modules ?? [];
 
   const itemsByTab: Record<string, RecItem[]> = {
-    Videos: data?.videos ?? [],
-    Quizzes: data?.quizzes ?? [],
-    Activities: data?.activities ?? [],
-    Modules: data?.modules ?? [],
+    Videos: filterCatalogItems(rawVideos),
+    Quizzes: filterCatalogItems(rawQuizzes),
+    Activities: filterCatalogItems(rawActivities),
+    Modules: filterCatalogItems(rawModules),
   };
-
-  const pendingSubmissionsCount = submissions.filter((s) => s.status === "Submitted").length;
-
-  // Filter submissions list
-  const filteredSubmissions = submissions.filter((s) => {
-    if (subStatusFilter !== "All" && s.status !== subStatusFilter) return false;
-    if (subSubjectFilter !== "All" && !s.category.toLowerCase().includes(subSubjectFilter.toLowerCase())) return false;
-    if (subSearch) {
-      const q = subSearch.toLowerCase();
-      const matchLearner = s.learner.toLowerCase().includes(q);
-      const matchTitle = s.title.toLowerCase().includes(q);
-      const matchSection = s.gradeSection.toLowerCase().includes(q);
-      if (!matchLearner && !matchTitle && !matchSection) return false;
-    }
-    return true;
-  });
 
   return (
     <>
-      <Header title="Recommendations &amp; Assignments" />
+      <Header title="Learning Material Recommendations" />
       <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-6">
         {/* Top Header & Actions */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-              ARAL Activity Assignment &amp; Submission Manager
+              ARAL Learning Recommendations &amp; Material Catalog
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Assign targeted modules, review student submissions, and provide scores with DepEd ARAL feedback.
+              Explore targeted DepEd ARAL modules, activities, quizzes, and learning materials to assign for remediation.
             </p>
           </div>
           <div className="flex items-center gap-2.5">
@@ -451,196 +416,105 @@ export default function RecommendationsPage() {
                 }`}
               >
                 <span>{tab}</span>
-                {tab === "Student Submissions" && pendingSubmissionsCount > 0 && (
-                  <span
-                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                      activeTab === tab ? "bg-white text-red-800" : "bg-red-800 text-white"
-                    }`}
-                  >
-                    {pendingSubmissionsCount}
-                  </span>
-                )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* ━━━ TAB CONTENT: STUDENT SUBMISSIONS TABLE ━━━ */}
-        {activeTab === "Student Submissions" && (
-          <div className="space-y-4">
-            {/* Filters bar */}
+        {/* ━━━ TAB CONTENT: RECOMMENDATIONS CATALOG (MODULES, ACTIVITIES, ETC.) ━━━ */}
+        {/* Dynamic Recommendation Filters & Scanner Bar */}
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[200px]">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
                   <input
                     type="text"
-                    value={subSearch}
-                    onChange={(e) => setSubSearch(e.target.value)}
-                    placeholder="Search learner or activity…"
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Search material, topic, session…"
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-red-800"
                   />
                 </div>
+
+                {/* Filter by Learner (Dynamically match proficiency) */}
                 <select
-                  value={subStatusFilter}
-                  onChange={(e) => setSubStatusFilter(e.target.value)}
-                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800"
+                  value={catalogStudentFilter}
+                  onChange={(e) => setCatalogStudentFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 cursor-pointer"
                 >
-                  <option value="All">All Statuses</option>
-                  <option value="Submitted">Submitted (Pending Review)</option>
-                  <option value="Reviewed">Reviewed</option>
-                  <option value="Completed">Completed</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Not Started">Not Started</option>
+                  <option value="">Filter by Learner (All)</option>
+                  {students.map((stu) => (
+                    <option key={stu.id} value={stu.id}>
+                      {stu.name} {stu.gradeLevel ? `(Gr. ${stu.gradeLevel})` : ""}
+                    </option>
+                  ))}
                 </select>
-                {assignedSubject === "All" ? (
-                  <select
-                    value={subSubjectFilter}
-                    onChange={(e) => setSubSubjectFilter(e.target.value)}
-                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800"
-                  >
-                    <option value="All">All Subjects</option>
-                    <option value="Reading">Reading</option>
-                    <option value="Math">Math</option>
-                    <option value="Science">Science</option>
-                  </select>
-                ) : (
-                  <div className="flex h-9 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-700">
-                    Subject: {assignedSubject}
-                  </div>
-                )}
+
+                {/* Filter by Proficiency Tier */}
+                <select
+                  value={catalogTierFilter}
+                  onChange={(e) => setCatalogTierFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 cursor-pointer"
+                >
+                  <option value="All">All Proficiency Tiers</option>
+                  <option value="Beginning / Frustration">Beginning / Frustration (Tier 1)</option>
+                  <option value="Developing / Instructional">Developing / Instructional (Tier 2)</option>
+                  <option value="Proficient / Independent">Proficient / Independent (Tier 3)</option>
+                </select>
               </div>
 
-              <div className="text-xs text-slate-500 font-medium">
-                Showing <strong className="text-slate-800">{filteredSubmissions.length}</strong> of {submissions.length} submission(s)
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleRescanMaterials}
+                  disabled={syncingMaterials}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all active:scale-[0.98] cursor-pointer"
+                  title="Dynamically re-scan coordinator uploaded materials and sync catalog"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 text-red-800 ${syncingMaterials ? "animate-spin" : ""}`} />
+                  <span>{syncingMaterials ? "Scanning..." : "Scan Uploaded Materials"}</span>
+                </button>
+
+                <div className="text-xs text-slate-500 font-medium">
+                  Showing <strong className="text-slate-800">{itemsByTab[activeTab]?.length || 0}</strong> {activeTab.toLowerCase()}
+                </div>
               </div>
             </div>
 
-            {/* Submissions Table Container */}
-            {submissionsLoading ? (
-              <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-white">
-                <Loader2 className="h-7 w-7 animate-spin text-red-800" />
-              </div>
-            ) : filteredSubmissions.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-xs text-slate-400">
-                No activity submissions match the selected filters.
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase text-[11px] text-slate-600 tracking-wider">
-                        <th className="py-3 px-4">Learner</th>
-                        <th className="py-3 px-4">Activity Title</th>
-                        <th className="py-3 px-4">Subject &amp; Type</th>
-                        <th className="py-3 px-4">Due Date</th>
-                        <th className="py-3 px-4">Submitted Date</th>
-                        <th className="py-3 px-4">Attached Work</th>
-                        <th className="py-3 px-4">Status &amp; Score</th>
-                        <th className="py-3 px-4 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-normal text-slate-700">
-                      {filteredSubmissions.map((sub) => {
-                        const st = statusConfig[sub.status] || statusConfig["Not Started"];
-                        return (
-                          <tr key={sub.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-3.5 px-4 font-semibold text-slate-900">
-                              <div>{sub.learner}</div>
-                              <div className="text-[11px] text-slate-400 font-normal">{sub.gradeSection || "DepEd Learner"}</div>
-                            </td>
-                            <td className="py-3.5 px-4 font-medium text-slate-900 max-w-[220px] truncate" title={sub.title}>
-                              {sub.title}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                                {sub.category} • {sub.type}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
-                              {fmtDate(sub.dueDate)}
-                            </td>
-                            <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
-                              {sub.submittedAt ? fmtDate(sub.submittedAt) : <span className="text-slate-400 italic">Not submitted</span>}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              {sub.submissionFileUrl ? (
-                                <a
-                                  href={sub.submissionFileUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
-                                >
-                                  <Paperclip className="h-3 w-3" />
-                                  <span>View File</span>
-                                </a>
-                              ) : sub.submissionText ? (
-                                <span className="text-[11px] text-slate-500 italic max-w-[120px] truncate block" title={sub.submissionText}>
-                                  &ldquo;{sub.submissionText}&rdquo;
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="flex flex-col gap-1 items-start">
-                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${st.bg} ${st.text} ${st.border}`}>
-                                  {sub.status === "Submitted" ? "Pending Review" : sub.status}
-                                </span>
-                                {sub.gradeScore !== null && sub.gradeScore !== undefined && (
-                                  <span className="text-[10px] font-bold text-slate-700">
-                                    Score: {sub.gradeScore}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => openReviewModal(sub)}
-                                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] cursor-pointer"
-                                  title="View what the student submitted"
-                                >
-                                  <Eye className="h-3.5 w-3.5 text-slate-500" />
-                                  <span>View</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openReviewModal(sub)}
-                                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] cursor-pointer ${
-                                    sub.status === "Submitted"
-                                      ? "bg-red-800 text-white hover:bg-red-900"
-                                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                                  }`}
-                                >
-                                  <Award className="h-3.5 w-3.5" />
-                                  <span>{sub.status === "Submitted" ? "Grade" : "Score"}</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            {/* If a learner is chosen, show their proficiency match banner */}
+            {selectedStudentProfile && (
+              <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-2.5 text-xs text-indigo-900 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-indigo-700 shrink-0" />
+                  <span>
+                    Recommendations dynamically tailored for <strong>{selectedStudentProfile.name}</strong>{" "}
+                    (Grade {selectedStudentProfile.gradeLevel || 7} • {selectedStudentProfile.section || "General"})
+                    {" • "}
+                    Assessed Level:{" "}
+                    <strong className="underline">
+                      {selectedStudentProfile.readingLevel && selectedStudentProfile.readingLevel !== "Not Assessed"
+                        ? selectedStudentProfile.readingLevel
+                        : selectedStudentProfile.masteryStatus || selectedStudentProfile.riskLevel || "Core Tier"}
+                    </strong>
+                  </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setCatalogStudentFilter("")}
+                  className="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer"
+                >
+                  Clear Learner Filter
+                </button>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ━━━ TAB CONTENT: RECOMMENDATIONS CATALOG (MODULES, ACTIVITIES, ETC.) ━━━ */}
-        {activeTab !== "Student Submissions" && (
-          <>
             {loading ? (
               <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-white">
                 <Loader2 className="h-8 w-8 animate-spin text-red-800" />
               </div>
             ) : itemsByTab[activeTab]?.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-xs text-slate-400">
-                No {activeTab.toLowerCase()} in the library yet.
+                No {activeTab.toLowerCase()} match the selected proficiency filters.
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -649,19 +523,38 @@ export default function RecommendationsPage() {
                     key={item.id}
                     className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:border-slate-300"
                   >
-                    <div className="mb-3 flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                        {activeTab === "Videos" && <Play className="h-5 w-5 text-red-800" />}
-                        {activeTab === "Quizzes" && <FileText className="h-5 w-5 text-red-800" />}
-                        {activeTab === "Activities" && <Puzzle className="h-5 w-5 text-red-800" />}
-                        {activeTab === "Modules" && <BookOpen className="h-5 w-5 text-red-800" />}
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700 shrink-0">
+                        {activeTab === "Videos" && <Play className="h-4 w-4 text-red-800" />}
+                        {activeTab === "Quizzes" && <FileText className="h-4 w-4 text-red-800" />}
+                        {activeTab === "Activities" && <Puzzle className="h-4 w-4 text-red-800" />}
+                        {activeTab === "Modules" && <BookOpen className="h-4 w-4 text-red-800" />}
                       </div>
                       <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
                         {item.subject}
                       </span>
+
+                      {/* Dynamic Proficiency Tier Badge */}
+                      {(item.proficiencyTier === "Beginning" || item.proficiencyTier === "Frustration" || item.programLevel === "Basic") && (
+                        <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200">
+                          Tier 1 • Remediation
+                        </span>
+                      )}
+                      {(item.proficiencyTier === "Developing" || item.proficiencyTier === "Instructional") && (
+                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                          Tier 2 • Core Practice
+                        </span>
+                      )}
+                      {(item.proficiencyTier === "Proficient" || item.proficiencyTier === "Independent") && (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                          Tier 3 • Advanced Mastery
+                        </span>
+                      )}
+
                       {item.keyStage && (
-                        <span className="rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
-                          ARAL {item.keyStage} {item.programLevel ? `• ${item.programLevel}` : ""}
+                        <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
+                          ARAL {item.keyStage}
+                          {item.targetGrades && item.targetGrades.length > 0 ? ` • Gr. ${item.targetGrades.join(", ")}` : ""}
                         </span>
                       )}
                       {item.sessionInfo && (
@@ -676,6 +569,11 @@ export default function RecommendationsPage() {
                       )}
                     </div>
                     <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+                    {item.source && (
+                      <p className="mt-1 text-[11px] font-medium text-slate-500">
+                        Source: <span className="text-slate-700">{item.source}</span>
+                      </p>
+                    )}
                     <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500">
                       {item.description}
                     </p>
@@ -726,8 +624,6 @@ export default function RecommendationsPage() {
                 ))}
               </div>
             )}
-          </>
-        )}
       </main>
 
       {/* ━━━ MODAL: ASSIGN ACTIVITY WITH STUDENT SELECTOR ━━━ */}
@@ -960,218 +856,6 @@ export default function RecommendationsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ━━━ DRAWER / MODAL: REVIEW & GRADE SUBMISSION ━━━ */}
-      {reviewingSubmission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs">
-          <div className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 m-3 sm:m-auto">
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 py-3.5 sm:py-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusConfig[reviewingSubmission.status]?.bg} ${statusConfig[reviewingSubmission.status]?.text} ${statusConfig[reviewingSubmission.status]?.border}`}>
-                    {reviewingSubmission.status}
-                  </span>
-                  <span className="text-xs text-slate-500">• {reviewingSubmission.category}</span>
-                </div>
-                <h2 className="text-base font-bold text-slate-900 mt-1">{reviewingSubmission.title}</h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  Learner: <strong className="text-slate-800">{reviewingSubmission.learner}</strong> ({reviewingSubmission.gradeSection || "DepEd Learner"})
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReviewingSubmission(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
-              {gradingError && (
-                <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{gradingError}</span>
-                </div>
-              )}
-
-              {/* Instructions given to learner */}
-              {reviewingSubmission.instructions && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
-                    Assigned Task Instructions:
-                  </span>
-                  <p className="text-xs text-slate-700 leading-relaxed">{reviewingSubmission.instructions}</p>
-                </div>
-              )}
-
-              {/* ARAL Workbook Reference */}
-              {reviewingSubmission.workbookUrl && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 flex items-center justify-between gap-3">
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-0.5">
-                      ARAL Workbook Reference
-                    </span>
-                    <div className="text-xs text-slate-800 font-semibold flex items-center gap-2">
-                      <span>{reviewingSubmission.sessionInfo || "Workbook Activity"}</span>
-                      {reviewingSubmission.pageStart && (
-                        <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
-                          pp. {reviewingSubmission.pageStart}–{reviewingSubmission.pageEnd || reviewingSubmission.pageStart}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <a
-                    href={`${reviewingSubmission.workbookUrl}${reviewingSubmission.pageStart ? `#page=${reviewingSubmission.pageStart}` : ""}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors shadow-2xs shrink-0"
-                  >
-                    <BookOpen className="h-3.5 w-3.5 text-red-800" />
-                    <span>Open Workbook Page</span>
-                  </a>
-                </div>
-              )}
-
-              {/* Student's Submission Content */}
-              <div className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 uppercase tracking-wide">
-                    <FileText className="h-4 w-4 text-blue-700" />
-                    <span>Student Response</span>
-                  </span>
-                  {reviewingSubmission.submittedAt && (
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      Submitted on {fmtDate(reviewingSubmission.submittedAt)}
-                    </span>
-                  )}
-                </div>
-
-                {reviewingSubmission.submissionText ? (
-                  <div className="rounded-xl border border-blue-100 bg-white p-3.5 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap">
-                    {reviewingSubmission.submissionText}
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-500 italic">No written reflection or text response provided.</div>
-                )}
-
-                {/* Uploaded File Link / Preview */}
-                {reviewingSubmission.submissionFileUrl && (
-                  <div className="pt-2 border-t border-blue-100 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Paperclip className="h-4 w-4 text-blue-600" />
-                        <span className="text-xs font-semibold text-slate-800">Completed Worksheet / File</span>
-                      </div>
-                      <a
-                        href={reviewingSubmission.submissionFileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-2xs"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        <span>Open Document / Image in New Tab</span>
-                      </a>
-                    </div>
-
-                    {/* Inline preview for image submissions */}
-                    {/\.(png|jpe?g|webp|gif)$/i.test(reviewingSubmission.submissionFileUrl) && (
-                      <div className="mt-2 rounded-xl overflow-hidden border border-blue-200 bg-white p-2 flex flex-col items-center">
-                        <img
-                          src={reviewingSubmission.submissionFileUrl}
-                          alt="Student Work Preview"
-                          className="max-h-80 w-auto object-contain rounded-lg"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Teacher Grading & Feedback Section */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  <Award className="h-4 w-4 text-red-800" />
-                  <span>Teacher Assessment &amp; Feedback</span>
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Score / Grade (e.g., 95/100, 10/10, Satisfactory)
-                    </label>
-                    <input
-                      type="text"
-                      value={gradeInput}
-                      onChange={(e) => setGradeInput(e.target.value)}
-                      placeholder="e.g. 95/100"
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none focus:border-red-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Completion Status
-                    </label>
-                    <select
-                      value={gradingStatus}
-                      onChange={(e) => setGradingStatus(e.target.value as any)}
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                    >
-                      <option value="Reviewed">Reviewed (Feedback Provided)</option>
-                      <option value="Completed">Completed (Passed / Finished)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Teacher Feedback &amp; Remarks (Visible to Student)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={remarksInput}
-                    onChange={(e) => setRemarksInput(e.target.value)}
-                    placeholder="Provide constructive feedback, praise, or areas for improvement..."
-                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-900 outline-none focus:border-red-800 leading-relaxed"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Drawer Footer Actions */}
-            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setReviewingSubmission(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                Close
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={gradingSaving}
-                  onClick={() => handleSaveGrade("Reviewed")}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-2xs"
-                >
-                  Save Feedback
-                </button>
-                <button
-                  type="button"
-                  disabled={gradingSaving}
-                  onClick={() => handleSaveGrade("Completed")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
-                >
-                  {gradingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  <span>Approve &amp; Complete</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

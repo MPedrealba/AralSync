@@ -264,6 +264,24 @@ export async function DELETE(req: NextRequest) {
 
     if (user.role === 'student') {
       await LearnerRecord.deleteOne({ studentId: user._id });
+    } else if (user.role === 'teacher') {
+      // Unassign teacher from any learners across legacy assignedTeacherId and subject-specific cohorts
+      await LearnerRecord.updateMany(
+        { assignedTeacherId: user._id },
+        { $set: { assignedTeacherId: null, assignedTeacherName: null } }
+      );
+      await LearnerRecord.updateMany(
+        { 'assignedTeachers.reading': user._id },
+        { $set: { 'assignedTeachers.reading': null, readingTeacherName: null } }
+      );
+      await LearnerRecord.updateMany(
+        { 'assignedTeachers.math': user._id },
+        { $set: { 'assignedTeachers.math': null, mathTeacherName: null } }
+      );
+      await LearnerRecord.updateMany(
+        { 'assignedTeachers.science': user._id },
+        { $set: { 'assignedTeachers.science': null, scienceTeacherName: null } }
+      );
     }
 
     return ok({ id: String(user._id) });

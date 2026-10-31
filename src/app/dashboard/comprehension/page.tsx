@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getSubjectBubbleSheet, getStampedBubbleSheetUrl } from "@/lib/bubbleSheet";
 import {
   Search,
   CheckCircle2,
@@ -22,11 +24,31 @@ import {
   Layers,
   ArrowRight,
   Filter,
+  Printer,
+  FileDown,
+  Globe,
+  Upload,
+  Camera,
+  Play,
+  Eye,
+  Check,
+  Send,
+  HelpCircle,
+  Laptop,
+  ArrowLeft,
+  RefreshCw,
+  X,
+  Trash2,
+  Award,
+  FileText,
+  ScanLine,
+  PenLine,
+  Download,
 } from "lucide-react";
 
 /* ━━━ TYPES ━━━ */
-type Tab = "New Check" | "Results History";
-type Step = "setup" | "reading" | "quiz" | "results";
+const tabs = ["Results/History", "Generate Questions", "Comprehension Library"] as const;
+type Tab = (typeof tabs)[number];
 type SubskillDomain = "Literal" | "Inferential" | "Vocabulary" | "Critical";
 
 interface Question {
@@ -72,77 +94,131 @@ interface CompRow {
   passageTitle: string | null;
   wpm?: number | null;
   durationSec?: number | null;
+  deliveryMode?: string;
   subskills: { name: string; status: string; score: number }[];
   status?: string;
   date: string;
 }
 
-/* ━━━ FALLBACK SAMPLE DATA ━━━ */
-const SAMPLE_PASSAGE = `Plants make their own food through a process called photosynthesis. They use sunlight, water from the soil, and carbon dioxide from the air. Inside the leaves, a green substance called chlorophyll captures the sunlight. This energy is then used to combine water and carbon dioxide to produce glucose, which is food for the plant.
+interface AnswerKeyRow {
+  id: string;
+  title: string;
+  subject: string;
+  assessmentType?: "quiz" | "exam";
+  topic?: string;
+  topics?: string[];
+  items: number;
+  answers?: (string | null)[];
+  modes?: string[];
+  writtenItems?: any[];
+  questions?: Array<{
+    id?: number;
+    number?: number;
+    index?: number;
+    question?: string;
+    prompt?: string;
+    options?: string[];
+    choices?: string[];
+    category?: SubskillDomain;
+    correctIndex?: number;
+    correctAnswer?: string;
+    answer?: string;
+  }>;
+  passageTitle?: string;
+  passageText?: string;
+  isOnline?: boolean;
+  timeLimitMinutes?: number;
+  dueDate?: string | null;
+  targetGrade?: number | null;
+  targetSection?: string;
+  created: string;
+}
 
-During this process, plants also release oxygen into the air. This oxygen is what humans and animals breathe. Without photosynthesis, there would be very little oxygen on Earth.
-
-Plants are essential because they are the primary source of food and oxygen for most living things on Earth.`;
-
+/* ━━━ HELPERS ━━━ */
 const fmtShort = (d: string) => {
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-const fmtTimer = (s: number) =>
-  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+const getMasteryColor = (level: string) => {
+  switch (level) {
+    case "Independent":
+    case "Proficient":
+      return "border-emerald-300 bg-emerald-50 text-emerald-800";
+    case "Instructional":
+    case "Approaching":
+      return "border-amber-300 bg-amber-50 text-amber-800";
+    case "Frustration":
+    case "Developing":
+    case "Beginning":
+    default:
+      return "border-rose-300 bg-rose-50 text-rose-800";
+  }
+};
+
+const getDomainBadge = (category: SubskillDomain) => {
+  switch (category) {
+    case "Literal":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "Inferential":
+      return "border-purple-200 bg-purple-50 text-purple-700";
+    case "Vocabulary":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "Critical":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+};
+
+const SAMPLE_PASSAGE = `Photosynthesis is the fundamental biological process by which green plants, algae, and certain bacteria convert light energy into chemical energy stored in glucose molecules. During this complex reaction, carbon dioxide from the surrounding atmosphere and water absorbed by roots from the soil are transformed in the presence of sunlight captured by green chlorophyll pigments located inside chloroplasts.
+
+The process unfolds in two interconnected stages: the light-dependent reactions, which take place on the thylakoid membranes, and the light-independent Calvin cycle, which occurs in the stroma. As a direct consequence, oxygen is produced and released into the atmosphere as a vital byproduct, supplying the necessary gas that sustains aerobic life on Earth. Without photosynthesis, terrestrial and marine food webs would collapse, and atmospheric oxygen levels would rapidly deplete.`;
 
 /**
- * Generates up to 40 authentic Phil-IRI 2024 Secondary Benchmark questions
- * evenly distributed across the 4 reading comprehension domains:
- * - Items 1–10: Literal Comprehension (direct facts, setting, details, sequence)
- * - Items 11–20: Inferential Comprehension (cause-and-effect, motive, deduction, prediction)
- * - Items 21–30: Vocabulary & Word Analysis (context clues, morphology, synonyms, antonyms)
- * - Items 31–40: Critical & Evaluative Reading (author's craft, fact vs. opinion, theme synthesis)
+ * Generates benchmark questions adhering to the 40-item Phil-IRI Secondary standard:
+ * 10 Literal (Items 1-10)
+ * 10 Inferential (Items 11-20)
+ * 10 Vocabulary (Items 21-30)
+ * 10 Critical / Evaluative (Items 31-40)
  */
-function generateBenchmarkQuestions(text: string, title: string, targetCount = 40): Question[] {
-  const cleanTitle = (title || "the reading selection").trim();
-  const sentences = (text || "")
+function generateBenchmarkQuestions(
+  passageText: string,
+  passageTitle: string,
+  targetCount = 40
+): Question[] {
+  const sentences = passageText
     .split(/(?<=[.?!])\s+/)
-    .map((s) => s.trim().replace(/\s+/g, " "))
+    .map((s) => s.trim())
     .filter((s) => s.length > 15);
 
-  const words = (text || "")
-    .replace(/[^\w\s-]/g, "")
+  const words = passageText
+    .replace(/[^a-zA-Z\s]/g, "")
     .split(/\s+/)
-    .filter(
-      (w) =>
-        w.length >= 4 &&
-        !/^(that|this|with|from|have|were|been|they|them|their|what|when|where|which|there)$/i.test(w)
-    );
+    .filter((w) => w.length > 5);
 
-  const uniqueWords = Array.from(new Set(words));
-  const s1 = sentences[0] || `The passage describes the essential principles concerning ${cleanTitle}.`;
-  const s2 = sentences[1] || "Important physical and environmental interactions take place as described.";
-  const s3 = sentences[2] || "Key elements adapt and react to fulfill their natural or narrative function.";
-  const s4 = sentences[3] || "Understanding these underlying connections is critical for accurate comprehension.";
-  const sLast =
-    sentences[sentences.length - 1] ||
-    `The overall outcome underscores the lasting significance of ${cleanTitle}.`;
+  const cleanTitle = passageTitle?.trim() || "the selection";
+  const s1 = sentences[0] || "Photosynthesis transforms solar energy into chemical energy.";
+  const s2 = sentences[1] || "The reaction requires sunlight, chlorophyll, carbon dioxide, and water.";
+  const s3 = sentences[2] || "Oxygen is released as a vital byproduct into the surrounding atmosphere.";
+  const sLast = sentences[sentences.length - 1] || "Without this process, life on Earth would cease to exist.";
 
-  const w1 = uniqueWords[0] || "process";
-  const w2 = uniqueWords[1] || "energy";
-  const w3 = uniqueWords[2] || "substance";
-  const w4 = uniqueWords[3] || "essential";
-  const w5 = uniqueWords[4] || "primary";
+  const w1 = words[0] || "process";
+  const w2 = words[1] || "energy";
+  const w3 = words[2] || "chlorophyll";
+  const w4 = words[3] || "byproduct";
+  const w5 = words[4] || "essential";
 
-  const shorten = (str: string, len = 65) => (str.length > len ? str.slice(0, len).trim() + "..." : str);
+  const shorten = (str: string, max = 80) => (str.length > max ? `${str.slice(0, max)}…` : str);
 
   // 10 Literal Comprehension Questions
   const literalTemplates = [
     {
-      q: `What is the primary topic or main subject discussed in "${cleanTitle}"?`,
-      correct: `The core principles, events, and factual details associated with ${cleanTitle}`,
+      q: `What is the primary topic or phenomenon discussed throughout "${cleanTitle}"?`,
+      correct: shorten(s1, 95),
       distractors: [
-        "An unrelated historical anecdote about a distant country",
-        "A fictional advertisement promoting industrial machinery",
-        "A casual debate regarding personal leisure activities",
+        "The complete excavation of deep subterranean mineral deposits",
+        "A historical narrative describing medieval European architecture",
+        "The mechanical operation of internal combustion steam engines",
       ],
     },
     {
@@ -397,70 +473,70 @@ function generateBenchmarkQuestions(text: string, title: string, targetCount = 4
       ],
     },
     {
-      q: "What tone is established through the author's deliberate selection of vocabulary and phrasing?",
-      correct: "An objective, informative, and lucid tone that promotes clarity and comprehension",
+      q: `Which phrase best captures the meaning of "${w4}" as an environmental or narrative outcome?`,
+      correct: "A consequential product generated alongside the primary action or function",
       distractors: [
-        "An aggressive, combative tone designed to intimidate the reader",
-        "A sarcastic and mocking tone ridiculing the importance of the subject",
-        "A hysterical and alarmist tone forecasting imminent societal collapse",
+        "A deliberate counterfeit meant to deceive observers",
+        "A useless defect discarded immediately during manufacturing",
+        "An untestable metaphysical theory without physical manifestation",
       ],
     },
     {
-      q: `Which phrase could replace "${shorten(s4, 45)}" without altering the author's original meaning?`,
-      correct: "A clear restatement that faithfully preserves the underlying logical relationship",
+      q: `Based on contextual clues, how does "${w2}" function in relation to "${w1}"?`,
+      correct: "It serves as the driving resource that powers the ongoing sequence",
       distractors: [
-        "A contrary statement that invalidates the author's central premise",
-        "An ambiguous proverb concerning distant travel and fortune",
-        "A rhetorical inquiry casting doubt on whether the phenomenon is authentic",
+        "It functions as an inert observer with no participatory role",
+        "It actively neutralizes and terminates all ongoing actions",
+        "It was mistakenly inserted by an outside translator",
       ],
     },
   ];
 
-  // 10 Critical & Evaluative Reading Questions
+  // 10 Critical & Evaluative Questions
   const criticalTemplates = [
     {
-      q: `What is the author's primary purpose in composing "${cleanTitle}"?`,
-      correct: "To inform and enlighten readers regarding vital mechanisms and relationships in an organized manner",
+      q: `What is the primary rhetorical purpose of the author in writing "${cleanTitle}"?`,
+      correct: "To inform and educate readers regarding the scientific or thematic principles governing the process",
       distractors: [
-        "To satirize contemporary corporate commerce through witty caricatures",
-        "To solicit immediate financial investments in a private venture",
-        "To weave an amusing myth filled with fictional supernatural heroes",
+        "To entertain readers with an embellished fictional adventure story",
+        "To persuade readers to buy commercial farming products",
+        "To satirize and mock modern educational researchers",
       ],
     },
     {
-      q: "Which pair of descriptors most accurately depicts the tone and mood of the selection?",
-      correct: "Instructive and balanced, prioritizing clarity and factual accuracy",
+      q: "Which statement best represents an objective FACT directly substantiated by the text rather than an OPINION?",
+      correct: shorten(s2, 100),
       distractors: [
-        "Melodramatic and anxious, dwelling upon catastrophe",
-        "Cynical and contemptuous, ridiculing intellectual curiosity",
-        "Flippant and comical, treating serious principles with irreverence",
+        "The selection is the most breathtaking scientific masterpiece ever composed in history",
+        "Every student who reads this selection will effortlessly achieve a perfect score",
+        "Studying natural phenomena is far more enjoyable than any other human endeavor",
       ],
     },
     {
-      q: "Which statement concerning the passage represents a verifiable fact rather than a subjective opinion?",
-      correct: "Statements that detail observable physical processes and measurable interdependent outcomes",
+      q: "How effectively does the author utilize cause-and-effect structure to convey the central ideas?",
+      correct: "Effectively, by systematically delineating how specific inputs directly yield necessary outputs",
       distractors: [
-        '"This selection is without question the most captivating text ever composed"',
-        '"All students should devote their whole careers solely to this single topic"',
-        '"The subject matter is infinitely more exciting than any other field of study"',
+        "Ineffectively, by jumping between unrelated timelines without transitional markers",
+        "Poorly, because the author never mentions what happens after the opening sentence",
+        "Inadequately, because the claims directly contradict the stated premises",
       ],
     },
     {
-      q: `How effectively does the author substantiate the claims made about ${cleanTitle}?`,
-      correct: "By offering orderly step-by-step explanations anchored in clear causal relationships",
+      q: "If an investigator sought to corroborate the claims in this selection, which source would provide the most credible evidence?",
+      correct: "Peer-reviewed scientific journals and verified empirical experimental data",
       distractors: [
-        "By relying exclusively on superstitious folklore and unsupported rumors",
-        "By citing celebrity testimonials who have no subject-matter expertise",
-        "By threatening harsh disciplinary action against anyone who questions the text",
+        "Unverified social media gossip blogs and sponsored advertisements",
+        "Anonymous message board forums discussing supernatural legends",
+        "Historical fiction romance novels written in the eighteenth century",
       ],
     },
     {
-      q: "From what perspective is the passage written, and how does it support reader understanding?",
-      correct: "From an objective educational viewpoint that organizes information coherently for the reader",
+      q: "What tone does the author maintain throughout the entire reading selection?",
+      correct: "Objective, informative, instructional, and matter-of-fact",
       distractors: [
-        "From an adversarial viewpoint aiming to demean opposing researchers",
-        "From a commercial perspective aimed at selling proprietary consumer merchandise",
-        "From a purely whimsical perspective indifferent to scientific facts",
+        "Hysterical, alarmed, and panicky",
+        "Hostile, sarcastic, and combative",
+        "Whimsical, nonsensical, and childish",
       ],
     },
     {
@@ -607,14 +683,33 @@ function compileComprehensionQuestions(
 
 const SAMPLE_QUESTIONS: Question[] = generateBenchmarkQuestions(SAMPLE_PASSAGE, "Photosynthesis", 40);
 
-/* ━━━ MAIN PAGE COMPONENT ━━━ */
-export default function ComprehensionCheckPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("New Check");
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MAIN COMPREHENSION PAGE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+export default function ComprehensionPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("Results/History");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
 
-  const handleSaved = () => {
+  // Active key state for modal grading or viewing
+  const [activeKey, setActiveKey] = useState<AnswerKeyRow | null>(null);
+  const [gradingModalKey, setGradingModalKey] = useState<AnswerKeyRow | null>(null);
+  const [showGradingModal, setShowGradingModal] = useState(false);
+  const [viewingExamKey, setViewingExamKey] = useState<AnswerKeyRow | null>(null);
+
+  const handleSavedAssessment = () => {
     setHistoryRefreshKey((k) => k + 1);
-    setActiveTab("Results History");
+    setActiveTab("Results/History");
+  };
+
+  const handleOpenGrading = (key?: AnswerKeyRow | null) => {
+    setGradingModalKey(key || activeKey || null);
+    setShowGradingModal(true);
+  };
+
+  const handleKeyGenerated = (key: AnswerKeyRow) => {
+    setActiveKey(key);
+    setLibraryRefreshKey((k) => k + 1);
   };
 
   return (
@@ -625,17 +720,20 @@ export default function ComprehensionCheckPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-              Comprehension Quick Check
+              Comprehension Assessment Hub
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Administer Phil-IRI silent reading comprehension assessments using official Key Stage 3 passages or custom texts.
+              Review diagnostic results, compile 40-item Phil-IRI questionnaires, manage your Comprehension Library, and grade via online CBT or mobile/webcam OMR sheets.
             </p>
           </div>
+          <span className="rounded-full border border-red-200 bg-red-50 px-3.5 py-1 text-xs font-bold text-red-800">
+            Phil-IRI 2024 Secondary Benchmark
+          </span>
         </div>
 
         {/* Tabs */}
         <div className="mb-4 sm:mb-6 flex gap-1 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-1 shadow-xs w-full sm:w-fit overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
-          {(["New Check", "Results History"] as Tab[]).map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -650,1324 +748,98 @@ export default function ComprehensionCheckPage() {
           ))}
         </div>
 
-        {activeTab === "New Check" && <NewCheckFlow onSaved={handleSaved} />}
-        {activeTab === "Results History" && <ResultsHistoryTab key={historyRefreshKey} />}
+        {/* Tab 1: Results / History */}
+        {activeTab === "Results/History" && (
+          <ResultsHistoryTab
+            key={historyRefreshKey}
+            onOpenGrading={() => handleOpenGrading()}
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
+        )}
+
+        {/* Tab 2: Generate Questions */}
+        {activeTab === "Generate Questions" && (
+          <QuestionnaireTab
+            onKeyGenerated={handleKeyGenerated}
+            onSavedAssessment={handleSavedAssessment}
+            onViewLibrary={() => setActiveTab("Comprehension Library")}
+          />
+        )}
+
+        {/* Tab 3: Comprehension Library */}
+        {activeTab === "Comprehension Library" && (
+          <ComprehensionLibraryTab
+            key={libraryRefreshKey}
+            onOpenGrading={handleOpenGrading}
+            onOpenViewer={(key) => setViewingExamKey(key)}
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
+        )}
       </main>
+
+      {/* OMR Grading Modal */}
+      {showGradingModal && (
+        <GradeOMRModal
+          initialKey={gradingModalKey}
+          onClose={() => setShowGradingModal(false)}
+          onSavedAssessment={() => {
+            setShowGradingModal(false);
+            handleSavedAssessment();
+          }}
+        />
+      )}
+
+      {/* View & Print Test Paper Modal from Library */}
+      {viewingExamKey && (
+        <PrintTestPaperModal
+          title={viewingExamKey.title}
+          passageTitle={viewingExamKey.passageTitle || viewingExamKey.title}
+          passageText={viewingExamKey.passageText || SAMPLE_PASSAGE}
+          questions={
+            Array.isArray(viewingExamKey.questions) && viewingExamKey.questions.length > 0
+              ? viewingExamKey.questions.map((q, idx) => ({
+                  id: q.id ?? idx + 1,
+                  question: q.question || q.prompt || `Question ${idx + 1}`,
+                  options: q.options || q.choices || ["Option A", "Option B", "Option C", "Option D"],
+                  correctIndex:
+                    q.correctIndex ??
+                    (q.correctAnswer
+                      ? ["A", "B", "C", "D"].indexOf(q.correctAnswer.toUpperCase())
+                      : (viewingExamKey.answers && ["A", "B", "C", "D"].indexOf(String(viewingExamKey.answers[idx]).toUpperCase())) ?? 0),
+                  category: q.category || (idx < 10 ? "Literal" : idx < 20 ? "Inferential" : idx < 30 ? "Vocabulary" : "Critical"),
+                }))
+              : compileComprehensionQuestions(
+                  [],
+                  viewingExamKey.passageText || SAMPLE_PASSAGE,
+                  viewingExamKey.passageTitle || viewingExamKey.title,
+                  viewingExamKey.items || 40
+                )
+          }
+          targetGrade={String(viewingExamKey.targetGrade || 7)}
+          onClose={() => setViewingExamKey(null)}
+        />
+      )}
     </>
   );
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TAB 1: NEW CHECK — Multi-step flow
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function NewCheckFlow({ onSaved }: { onSaved?: () => void }) {
-  const [step, setStep] = useState<Step>("setup");
-
-  /* Assessment Configuration */
-  const [targetCount, setTargetCount] = useState<number>(40);
-
-  /* Passages and Learners State */
-  const [passages, setPassages] = useState<PassageOption[]>([]);
-  const [learners, setLearners] = useState<LearnerOption[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
-
-  /* Class Roster Selection */
-  const [studentId, setStudentId] = useState("");
-  const [selectedGrade, setSelectedGrade] = useState("");
-  const [selectedSection, setSelectedSection] = useState("");
-
-  /* Passage & Question State */
-  const [passageTitle, setPassageTitle] = useState("Photosynthesis");
-  const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
-  const [isCustomPassage, setIsCustomPassage] = useState(false);
-  const [rawPassageQuestions, setRawPassageQuestions] = useState<any[]>([]);
-  const [questions, setQuestions] = useState<Question[]>(SAMPLE_QUESTIONS);
-
-  /* Timer & Reading Speed State */
-  const [elapsedSec, setElapsedSec] = useState(0);
-  const [readingDurationSec, setReadingDurationSec] = useState(0);
-  const [wpm, setWpm] = useState(0);
-
-  /* Quiz State */
-  const [currentQ, setCurrentQ] = useState(0);
-  const [answers, setAnswers] = useState<(number | null)[]>(new Array(40).fill(null));
-
-  /* Results Filter State */
-  const [resultsFilter, setResultsFilter] = useState<"all" | "correct" | "incorrect">("all");
-  const [resultsDomainFilter, setResultsDomainFilter] = useState<"All" | SubskillDomain>("All");
-
-  /* Save / Feedback State */
-  const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [formError, setFormError] = useState("");
-
-  /* ── 1. Fetch Passages & Learners on Mount ── */
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      setLoadingData(true);
-      try {
-        const [passagesRes, learnersRes] = await Promise.all([
-          fetch("/api/teacher/reading/passages?keyStage=KS3"),
-          fetch("/api/teacher/learners"),
-        ]);
-
-        const passagesJson = await parseJsonResponse(passagesRes);
-        const learnersJson = await parseJsonResponse(learnersRes);
-
-        if (isMounted) {
-          if (passagesJson.success && Array.isArray(passagesJson.data) && passagesJson.data.length > 0) {
-            setPassages(passagesJson.data);
-            const first = passagesJson.data[0];
-            setPassageTitle(first.title);
-            setPassageText(first.text || "");
-            setIsCustomPassage(false);
-            setRawPassageQuestions(first.questions || []);
-
-            const compiled = compileComprehensionQuestions(
-              first.questions || [],
-              first.text || "",
-              first.title,
-              targetCount
-            );
-            setQuestions(compiled);
-            setAnswers(new Array(compiled.length).fill(null));
-          } else {
-            const compiled = compileComprehensionQuestions([], SAMPLE_PASSAGE, "Photosynthesis", targetCount);
-            setQuestions(compiled);
-            setAnswers(new Array(compiled.length).fill(null));
-          }
-
-          if (learnersJson.success && Array.isArray(learnersJson.data)) {
-            const mapped = learnersJson.data
-              .filter((l: any) => l.studentId)
-              .map((l: any) => ({
-                studentId: l.studentId,
-                name: l.name,
-                gradeLevel: l.gradeLevel,
-                section: l.section,
-              }));
-            setLearners(mapped);
-            if (mapped.length > 0) {
-              setStudentId(mapped[0].studentId);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load comprehension initial data:", err);
-      } finally {
-        if (isMounted) setLoadingData(false);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  /* ── 2. Derive Available Grades and Sections ── */
-  const availableGrades = useMemo(() => {
-    const set = new Set<number>();
-    learners.forEach((l) => {
-      if (l.gradeLevel) set.add(l.gradeLevel);
-    });
-    return Array.from(set).sort((a, b) => a - b);
-  }, [learners]);
-
-  const availableSections = useMemo(() => {
-    const set = new Set<string>();
-    learners
-      .filter((l) => !selectedGrade || String(l.gradeLevel) === selectedGrade)
-      .forEach((l) => {
-        if (l.section) set.add(l.section);
-      });
-    return Array.from(set).sort();
-  }, [learners, selectedGrade]);
-
-  useEffect(() => {
-    if (selectedSection && !availableSections.includes(selectedSection)) {
-      setSelectedSection("");
-    }
-  }, [availableSections, selectedSection]);
-
-  const filteredLearners = useMemo(() => {
-    return learners.filter((l) => {
-      if (selectedGrade && String(l.gradeLevel) !== selectedGrade) return false;
-      if (selectedSection && l.section !== selectedSection) return false;
-      return true;
-    });
-  }, [learners, selectedGrade, selectedSection]);
-
-  useEffect(() => {
-    if (filteredLearners.length > 0) {
-      const exists = filteredLearners.some((l) => l.studentId === studentId);
-      if (!exists) {
-        setStudentId(filteredLearners[0].studentId);
-      }
-    } else {
-      setStudentId("");
-    }
-  }, [filteredLearners, studentId]);
-
-  const selectedLearner = learners.find((l) => l.studentId === studentId);
-  const learnerName = selectedLearner ? selectedLearner.name : "Selected Learner";
-
-  /* ── 3. Handle Assessment Target Count Change ── */
-  const handleTargetCountChange = (newCount: number) => {
-    setTargetCount(newCount);
-    const compiled = compileComprehensionQuestions(
-      isCustomPassage ? [] : rawPassageQuestions,
-      passageText,
-      passageTitle,
-      newCount
-    );
-    setQuestions(compiled);
-    setAnswers(new Array(compiled.length).fill(null));
-    setCurrentQ(0);
-  };
-
-  /* ── 4. Handle Passage Selection Change ── */
-  const handlePassageSelect = (title: string) => {
-    if (title === "Custom Reading Passage") {
-      setIsCustomPassage(true);
-      setPassageTitle("Custom Reading Passage");
-      setPassageText("");
-      setRawPassageQuestions([]);
-      const compiled = compileComprehensionQuestions([], "", "Custom Reading Passage", targetCount);
-      setQuestions(compiled);
-      setAnswers(new Array(compiled.length).fill(null));
-      setCurrentQ(0);
-      return;
-    }
-
-    const p = passages.find((x) => x.title === title);
-    if (p) {
-      setIsCustomPassage(false);
-      setPassageTitle(p.title);
-      setPassageText(p.text || "");
-      setRawPassageQuestions(p.questions || []);
-      const compiled = compileComprehensionQuestions(p.questions || [], p.text || "", p.title, targetCount);
-      setQuestions(compiled);
-      setAnswers(new Array(compiled.length).fill(null));
-      setCurrentQ(0);
-    }
-  };
-
-  /* ── 5. Generate AI Questions for Custom Passage ── */
-  const handleGenerateCustomQuestions = () => {
-    if (!passageText.trim()) {
-      setFormError("Please enter or paste a reading passage first.");
-      return;
-    }
-    setFormError("");
-    const compiled = compileComprehensionQuestions(
-      [],
-      passageText,
-      passageTitle || "Custom Reading Selection",
-      targetCount
-    );
-    setQuestions(compiled);
-    setAnswers(new Array(compiled.length).fill(null));
-    setCurrentQ(0);
-  };
-
-  /* ── 6. Start Reading & Timer ── */
-  const handleStartReading = () => {
-    if (!studentId) {
-      setFormError("Please select a student from the class roster.");
-      return;
-    }
-    if (!passageText.trim()) {
-      setFormError("Please provide a reading passage.");
-      return;
-    }
-    if (questions.length === 0) {
-      handleGenerateCustomQuestions();
-    }
-    setFormError("");
-    setElapsedSec(0);
-    setStep("reading");
-  };
-
-  /* Reading Timer Effect */
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (step === "reading") {
-      interval = setInterval(() => {
-        setElapsedSec((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [step]);
-
-  /* ── 7. Finish Reading & Transition to 40-Item Quiz ── */
-  const handleFinishReading = () => {
-    const wordCount = passageText.split(/\s+/).filter(Boolean).length;
-    const finalDuration = Math.max(elapsedSec, 1);
-    const calculatedWpm = Math.round((wordCount / finalDuration) * 60);
-
-    setReadingDurationSec(finalDuration);
-    setWpm(calculatedWpm);
-    setCurrentQ(0);
-    setAnswers(new Array(questions.length).fill(null));
-    setStep("quiz");
-  };
-
-  /* ── 8. Quiz Answer Selection ── */
-  const handleSelectOption = (oi: number) => {
-    const newAnswers = [...answers];
-    newAnswers[currentQ] = oi;
-    setAnswers(newAnswers);
-  };
-
-  /* ── 9. Scoring & Phil-IRI Mastery Calculations ── */
-  const totalQuestions = questions.length;
-  const answeredCount = answers.filter((a) => a !== null && a !== undefined).length;
-
-  const scoredItems = answers.reduce<number>((acc, ans, i) => {
-    const q = questions[i];
-    if (!q || ans === null) return acc;
-    const isCorrect =
-      ans === q.correctIndex || (q.options[ans] && q.options[ans].trim() === q.answer?.trim());
-    return acc + (isCorrect ? 1 : 0);
-  }, 0);
-
-  const percentage = totalQuestions > 0 ? Math.round((scoredItems / totalQuestions) * 100) : 0;
-
-  // Phil-IRI Comprehension Mastery Level Cutoffs:
-  // 80% to 100% -> Independent
-  // 59% to 79% -> Instructional
-  // 58% and below -> Frustration
-  const philIriLevel: "Independent" | "Instructional" | "Frustration" =
-    percentage >= 80 ? "Independent" : percentage >= 59 ? "Instructional" : "Frustration";
-
-  // Phil-IRI 2024 Core Subskills Breakdown
-  const subskillsData = useMemo(() => {
-    const categories: Array<{
-      key: SubskillDomain;
-      name: string;
-      rangeDesc: string;
-      desc: string;
-    }> = [
-      {
-        key: "Literal",
-        name: "Literal Comprehension",
-        rangeDesc: "Items 1–10",
-        desc: "Direct factual recall, setting, main characters, and sequence",
-      },
-      {
-        key: "Inferential",
-        name: "Inferential Comprehension",
-        rangeDesc: "Items 11–20",
-        desc: "Cause & effect, motives, implicit conclusions, and predictions",
-      },
-      {
-        key: "Vocabulary",
-        name: "Vocabulary & Word Analysis",
-        rangeDesc: "Items 21–30",
-        desc: "Context clues, morphology, synonyms, antonyms, and phrasing",
-      },
-      {
-        key: "Critical",
-        name: "Critical & Evaluative Reading",
-        rangeDesc: "Items 31–40",
-        desc: "Author's craft, fact vs. opinion, theme, and real-world transfer",
-      },
-    ];
-
-    return categories.map((cat) => {
-      const catQuestions = questions.filter((q) => q.category === cat.key);
-      const total = catQuestions.length;
-      let correct = 0;
-      catQuestions.forEach((q) => {
-        const idx = questions.findIndex((x) => x.id === q.id);
-        const ans = answers[idx];
-        if (
-          ans !== null &&
-          (ans === q.correctIndex || (q.options[ans] && q.options[ans].trim() === q.answer?.trim()))
-        ) {
-          correct++;
-        }
-      });
-      const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-      const status: "Independent" | "Instructional" | "Frustration" =
-        pct >= 80 ? "Independent" : pct >= 59 ? "Instructional" : "Frustration";
-
-      return {
-        key: cat.key,
-        name: cat.name,
-        rangeDesc: cat.rangeDesc,
-        desc: cat.desc,
-        total,
-        correct,
-        percentage: pct,
-        status,
-      };
-    });
-  }, [questions, answers]);
-
-  /* ── 10. Save Assessment to Database ── */
-  const handleSaveAssessment = async () => {
-    if (!studentId) {
-      setSaveError("No student selected. Cannot save assessment.");
-      return;
-    }
-
-    setSaving(true);
-    setSaveError("");
-    setSaveSuccess(false);
-
-    try {
-      const payload = {
-        studentId,
-        type: "COMPREHENSION",
-        subject: "Reading",
-        title: `Comprehension Check: ${passageTitle || "Reading Selection"}`,
-        passageTitle: passageTitle || "Reading Selection",
-        score: percentage,
-        totalItems: totalQuestions,
-        scoredItems,
-        wpm: wpm || undefined,
-        durationSec: readingDurationSec || undefined,
-        masteryLevel: philIriLevel,
-        status: "approved",
-        subskills: subskillsData.map((s) => ({
-          name: s.name,
-          status: s.status,
-          score: s.percentage,
-        })),
-      };
-
-      const res = await fetch("/api/teacher/assessments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await parseJsonResponse(res);
-      if (json.success) {
-        setSaveSuccess(true);
-        setTimeout(() => {
-          onSaved?.();
-        }, 1200);
-      } else {
-        throw new Error(json.error || "Failed to save comprehension assessment.");
-      }
-    } catch (err: any) {
-      setSaveError(err.message || "Failed to save comprehension assessment.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReset = () => {
-    setStep("setup");
-    setCurrentQ(0);
-    setAnswers(new Array(questions.length).fill(null));
-    setElapsedSec(0);
-    setReadingDurationSec(0);
-    setWpm(0);
-    setSaveSuccess(false);
-    setSaveError("");
-    setFormError("");
-    setResultsFilter("all");
-    setResultsDomainFilter("All");
-  };
-
-  const getDomainBadge = (cat: SubskillDomain) => {
-    switch (cat) {
-      case "Literal":
-        return "border-blue-200 bg-blue-50 text-blue-700";
-      case "Inferential":
-        return "border-purple-200 bg-purple-50 text-purple-700";
-      case "Vocabulary":
-        return "border-emerald-200 bg-emerald-50 text-emerald-700";
-      case "Critical":
-        return "border-amber-200 bg-amber-50 text-amber-700";
-    }
-  };
-
-  const getMasteryColor = (level: string) => {
-    switch (level) {
-      case "Independent":
-      case "Proficient":
-        return "border-emerald-200 bg-emerald-50 text-emerald-800";
-      case "Instructional":
-      case "Approaching":
-        return "border-amber-200 bg-amber-50 text-amber-800";
-      default:
-        return "border-rose-200 bg-rose-50 text-rose-800";
-    }
-  };
-
-  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     STEP: SETUP VIEW
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-  if (step === "setup") {
-    const wordCount = passageText.split(/\s+/).filter(Boolean).length;
-
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              Set Up Comprehension Quick Check
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Administer a Phil-IRI silent reading comprehension assessment using Key Stage 3 materials with full 40-item diagnostic mastery scoring.
-            </p>
-          </div>
-          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-800">
-            Phil-IRI 2024
-          </span>
-        </div>
-
-        {formError && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{formError}</span>
-          </div>
-        )}
-
-        <div className="mt-6 space-y-4">
-          {/* Class Roster Filter Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Grade Level
-              </label>
-              <select
-                value={selectedGrade}
-                onChange={(e) => setSelectedGrade(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-              >
-                <option value="">All Secondary Grades (KS3)</option>
-                {availableGrades.map((g) => (
-                  <option key={g} value={String(g)}>
-                    Grade {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Section
-              </label>
-              <select
-                value={selectedSection}
-                onChange={(e) => setSelectedSection(e.target.value)}
-                disabled={availableSections.length === 0}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:bg-slate-50 disabled:text-slate-400"
-              >
-                <option value="">All Sections</option>
-                {availableSections.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Student Selector */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Learner Name
-              </label>
-              <span className="text-[10px] text-slate-400 font-semibold">
-                {filteredLearners.length} student{filteredLearners.length === 1 ? "" : "s"} available
-              </span>
-            </div>
-            <select
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-            >
-              <option value="">Select a student...</option>
-              {filteredLearners.map((l) => (
-                <option key={l.studentId} value={l.studentId}>
-                  {l.name} {l.gradeLevel ? `(Grade ${l.gradeLevel} - ${l.section})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Assessment Target Count Selector */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Assessment Item Count (Phil-IRI 2024 Standard)
-              </label>
-              <span className="text-[10px] text-red-800 font-bold">
-                Default: 40 Items
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {[
-                {
-                  count: 40,
-                  label: "40 Items",
-                  badge: "Standard",
-                  desc: "Phil-IRI 2024 Secondary Benchmark (10 per subskill)",
-                },
-                {
-                  count: 20,
-                  label: "20 Items",
-                  badge: "Mid-Check",
-                  desc: "Balanced mid-session reading assessment (5 per subskill)",
-                },
-                {
-                  count: 10,
-                  label: "10 Items",
-                  badge: "Quick Check",
-                  desc: "Micro diagnostic check across core dimensions",
-                },
-              ].map((tier) => (
-                <button
-                  key={tier.count}
-                  type="button"
-                  onClick={() => handleTargetCountChange(tier.count)}
-                  className={`rounded-xl border p-3 text-left transition-all ${
-                    targetCount === tier.count
-                      ? "border-red-800 bg-red-50/80 ring-1 ring-red-800/20 shadow-xs"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs font-bold ${
-                        targetCount === tier.count ? "text-red-900" : "text-slate-800"
-                      }`}
-                    >
-                      {tier.label}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        targetCount === tier.count
-                          ? "bg-red-800 text-white"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {tier.badge}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500 leading-snug">{tier.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Dynamic Passage Selector */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Reading Passage Selection
-              </label>
-              <span className="text-[10px] text-slate-400 font-semibold">
-                Key Stage 3 (Grades 7–10)
-              </span>
-            </div>
-            <select
-              value={isCustomPassage ? "Custom Reading Passage" : passageTitle}
-              onChange={(e) => handlePassageSelect(e.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-            >
-              <option value="Custom Reading Passage">Custom passage…</option>
-              {passages.map((p) => (
-                <option key={p.id} value={p.title}>
-                  {p.title} {p.gradeLevel ? `(Grade ${p.gradeLevel})` : ""}{" "}
-                  {p.questionCount ? `• ${p.questionCount} Questions extracted` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Passage Text Area */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Passage Content
-              </label>
-              <span className="text-[10px] font-semibold text-slate-500">
-                {questions.length} Questions Configured ({targetCount} Items Total)
-              </span>
-            </div>
-            <textarea
-              rows={6}
-              value={passageText}
-              onChange={(e) => {
-                setPassageText(e.target.value);
-                if (!isCustomPassage) setIsCustomPassage(true);
-              }}
-              placeholder="Paste or type the reading passage here..."
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3.5 font-serif text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-            />
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
-              <span>{wordCount} words</span>
-              <span>Recommended: 100–350 words</span>
-            </div>
-          </div>
-
-          {/* Subskill Coverage Preview Pill */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 mb-1.5">
-              <Layers className="h-4 w-4 text-red-800" />
-              <span>Phil-IRI Assessment Framework (4 Domains &bull; {targetCount} Total Items)</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-              <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-2 text-blue-900 font-medium">
-                <p className="font-bold">Literal Comprehension</p>
-                <p className="text-[10px] text-blue-700">10 Items &bull; Facts &amp; Recall</p>
-              </div>
-              <div className="rounded-lg border border-purple-200 bg-purple-50/80 p-2 text-purple-900 font-medium">
-                <p className="font-bold">Inferential Reading</p>
-                <p className="text-[10px] text-purple-700">10 Items &bull; Cause &amp; Motive</p>
-              </div>
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-2 text-emerald-900 font-medium">
-                <p className="font-bold">Vocabulary &amp; Analysis</p>
-                <p className="text-[10px] text-emerald-700">10 Items &bull; Context Clues</p>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-2 text-amber-900 font-medium">
-                <p className="font-bold">Critical &amp; Evaluative</p>
-                <p className="text-[10px] text-amber-700">10 Items &bull; Craft &amp; Theme</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleStartReading}
-            disabled={!studentId || !passageText.trim() || loadingData}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <BookOpen className="h-4 w-4" />
-            <span>Begin Silent Reading ({targetCount} Items)</span>
-          </button>
-
-          {isCustomPassage && (
-            <button
-              type="button"
-              onClick={handleGenerateCustomQuestions}
-              className="inline-flex h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-xs font-semibold text-red-800 shadow-xs transition-colors hover:bg-red-100 active:scale-[0.98]"
-            >
-              <Sparkles className="h-4 w-4 text-red-700" />
-              <span>Regenerate 40 Questions</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              if (navigator.clipboard) {
-                navigator.clipboard
-                  .readText()
-                  .then((clip) => {
-                    if (clip) {
-                      setPassageText(clip);
-                      setIsCustomPassage(true);
-                      setPassageTitle("Custom Reading Passage");
-                      const compiled = compileComprehensionQuestions([], clip, "Custom Reading Passage", targetCount);
-                      setQuestions(compiled);
-                      setAnswers(new Array(compiled.length).fill(null));
-                    }
-                  })
-                  .catch(() => {});
-              }
-            }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50"
-          >
-            <ClipboardPaste className="h-4 w-4 text-slate-500" />
-            <span>Paste from Clipboard</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     STEP: READING VIEW (with live timer & WPM)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-  if (step === "reading") {
-    const wordCount = passageText.split(/\s+/).filter(Boolean).length;
-    const currentWpm = Math.round((wordCount / Math.max(elapsedSec, 1)) * 60);
-
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              {passageTitle || "Silent Reading Selection"}
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Learner: <span className="font-semibold text-slate-800">{learnerName}</span> &bull; {totalQuestions} Items Prepared (10 Literal &bull; 10 Inferential &bull; 10 Vocabulary &bull; 10 Critical)
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Live Reading Timer */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/80 px-3 py-1.5 text-xs font-mono font-bold text-red-800 shadow-xs">
-              <Timer className="h-4 w-4 animate-pulse text-red-800" />
-              <span>{fmtTimer(elapsedSec)}</span>
-            </div>
-
-            <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-              {wordCount} words {elapsedSec > 3 ? `(~${currentWpm} WPM)` : ""}
-            </span>
-          </div>
-        </div>
-
-        {/* Reader Banner */}
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-800">
-          <strong>Instruction:</strong> Have the learner read the selection silently. When they finish reading, click &quot;Begin Comprehension Questions&quot; to calculate reading speed and administer the 40-item Phil-IRI diagnostic.
-        </div>
-
-        {/* Reader Card */}
-        <div className="my-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
-          <div className="font-serif text-lg leading-relaxed text-slate-800 space-y-4">
-            {passageText.split("\n\n").map((para, i) => (
-              <p key={i}>{para}</p>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-2">
-          <button
-            type="button"
-            onClick={handleFinishReading}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            <span>Begin Comprehension Questions ({totalQuestions} Items)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStep("setup")}
-            className="text-xs font-medium text-slate-400 hover:text-slate-600"
-          >
-            Back to Setup
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     STEP: QUIZ VIEW (with 40-item Navigator Grid)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-  if (step === "quiz") {
-    const q = questions[currentQ];
-    if (!q) {
-      return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">
-          No questions available.
-          <button onClick={() => setStep("setup")} className="ml-2 underline text-red-800">
-            Return to Setup
-          </button>
-        </div>
-      );
-    }
-
-    const currentAnswer = answers[currentQ];
-
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
-        {/* Top Header */}
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-900">
-              Question {currentQ + 1} of {totalQuestions}
-            </span>
-            <span
-              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getDomainBadge(
-                q.category
-              )}`}
-            >
-              {q.category} Comprehension
-            </span>
-          </div>
-          <span className="text-xs font-semibold text-slate-700">{learnerName}</span>
-        </div>
-
-        {/* 40-Item Question Navigator Grid */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 shadow-xs">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Question Navigator
-              </span>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                {answeredCount}/{totalQuestions} Answered
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-500">
-              {totalQuestions - answeredCount === 0
-                ? "All items answered!"
-                : `${totalQuestions - answeredCount} item${totalQuestions - answeredCount === 1 ? "" : "s"} remaining`}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-10 sm:grid-cols-20 gap-1.5">
-            {questions.map((item, idx) => {
-              const isAnswered = answers[idx] !== null && answers[idx] !== undefined;
-              const isCurrent = idx === currentQ;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setCurrentQ(idx)}
-                  className={`h-7 w-full rounded-md text-[11px] font-bold transition-all ${
-                    isCurrent
-                      ? "bg-red-800 text-white ring-2 ring-red-400 shadow-xs"
-                      : isAnswered
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                  }`}
-                  title={`Question ${idx + 1} (${item.category}): ${isAnswered ? "Answered" : "Unanswered"}`}
-                >
-                  {idx + 1}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-emerald-600 transition-all duration-300"
-              style={{ width: `${totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Question Prompt */}
-        <div className="mb-4">
-          <p className="text-sm font-semibold leading-relaxed text-slate-900">{q.question}</p>
-        </div>
-
-        {/* Multiple Choice Options */}
-        <div className="space-y-2.5">
-          {q.options.map((option, oi) => {
-            const isSelected = currentAnswer === oi;
-            return (
-              <button
-                key={oi}
-                type="button"
-                onClick={() => handleSelectOption(oi)}
-                className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-xs font-medium transition-all ${
-                  isSelected
-                    ? "border-red-800 bg-red-50 text-red-900 font-semibold ring-1 ring-red-800/20 shadow-xs"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
-                    isSelected
-                      ? "border-red-800 bg-red-800 text-white"
-                      : "border-slate-300 text-slate-400"
-                  }`}
-                >
-                  {String.fromCharCode(65 + oi)}
-                </span>
-                <span className="leading-snug">{option}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Navigation & Submission Controls */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCurrentQ((prev) => Math.max(0, prev - 1))}
-              disabled={currentQ === 0}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span>Previous</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (currentQ < totalQuestions - 1) {
-                  setCurrentQ((prev) => prev + 1);
-                } else {
-                  setStep("results");
-                }
-              }}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-red-800 px-5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98]"
-            >
-              <span>{currentQ < totalQuestions - 1 ? "Next Question" : "Complete Assessment"}</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">
-              Speed: <span className="font-semibold text-slate-700">{wpm} WPM</span> &bull; Time:{" "}
-              <span className="font-semibold text-slate-700">{readingDurationSec}s</span>
-            </span>
-
-            {answeredCount > 0 && currentQ < totalQuestions - 1 && (
-              <button
-                type="button"
-                onClick={() => setStep("results")}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              >
-                Review &amp; Finish ({answeredCount}/{totalQuestions})
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     STEP: RESULTS VIEW (with 4 Phil-IRI Subskill Breakdown Cards)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-  const levelBadgeClass = getMasteryColor(philIriLevel);
-
-  const filteredQuestions = questions.filter((q, idx) => {
-    const ans = answers[idx];
-    const isCorrect =
-      ans === q.correctIndex || (ans !== null && q.options[ans] && q.options[ans].trim() === q.answer?.trim());
-
-    if (resultsFilter === "correct" && !isCorrect) return false;
-    if (resultsFilter === "incorrect" && isCorrect) return false;
-    if (resultsDomainFilter !== "All" && q.category !== resultsDomainFilter) return false;
-
-    return true;
-  });
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl">
-      <div className="flex flex-col items-center py-3">
-        <CheckCircle2 className="mb-1.5 h-10 w-10 text-emerald-600" />
-        <h3 className="text-lg font-bold text-slate-900">Comprehension Check Complete!</h3>
-        <p className="text-xs text-slate-500">
-          Learner: <span className="font-semibold text-slate-800">{learnerName}</span> &bull;{" "}
-          {passageTitle} &bull; Phil-IRI 2024 Secondary Benchmark ({totalQuestions} Items)
-        </p>
-
-        {/* Circular Percentage Gauge */}
-        <div className="relative my-4 flex h-32 w-32 items-center justify-center">
-          <svg className="absolute inset-0 h-full w-full -rotate-90">
-            <circle cx="64" cy="64" r="56" fill="none" stroke="#f1f5f9" strokeWidth="8" />
-            <circle
-              cx="64"
-              cy="64"
-              r="56"
-              fill="none"
-              stroke={percentage >= 80 ? "#059669" : percentage >= 59 ? "#d97706" : "#e11d48"}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={`${(percentage / 100) * 352} 352`}
-            />
-          </svg>
-          <div className="text-center">
-            <span className="text-3xl font-black text-slate-900">{percentage}%</span>
-            <p className="text-[10px] text-slate-400 font-semibold">{scoredItems}/{totalQuestions}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Phil-IRI 2024 Measured Metric Pills */}
-      <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Phil-IRI Level
-          </p>
-          <span
-            className={`mt-1 inline-block rounded-full border px-2.5 py-0.5 text-xs font-bold ${levelBadgeClass}`}
-          >
-            {philIriLevel}
-          </span>
-        </div>
-
-        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Reading Speed
-          </p>
-          <p className="mt-1 text-base font-black text-slate-900">
-            {wpm} <span className="text-xs font-normal text-slate-500">WPM</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Reading Time
-          </p>
-          <p className="mt-1 text-base font-black text-slate-900">
-            {readingDurationSec} <span className="text-xs font-normal text-slate-500">sec</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Accuracy
-          </p>
-          <p className="mt-1 text-base font-black text-slate-900">
-            {scoredItems}/{totalQuestions}
-          </p>
-        </div>
-      </div>
-
-      {/* 4 Phil-IRI Subskill Breakdown Cards */}
-      <div className="mb-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Phil-IRI 2024 Subskills Breakdown (4 Domains)
-          </h4>
-          <span className="text-[11px] text-slate-400">
-            Mastery Cutoff: &ge;80% Independent &bull; 59–79% Instructional &bull; &le;58% Frustration
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {subskillsData.map((sub) => {
-            const statusClass = getMasteryColor(sub.status);
-            const barBg =
-              sub.status === "Independent"
-                ? "bg-emerald-500"
-                : sub.status === "Instructional"
-                ? "bg-amber-500"
-                : "bg-rose-500";
-
-            return (
-              <div
-                key={sub.key}
-                className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <h5 className="text-xs font-bold text-slate-900">{sub.name}</h5>
-                    <p className="text-[10px] text-slate-400">{sub.rangeDesc}</p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass}`}
-                  >
-                    {sub.status}
-                  </span>
-                </div>
-
-                <div className="my-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 text-[11px]">{sub.desc}</span>
-                  <span className="font-bold text-slate-900">
-                    {sub.correct}/{sub.total} ({sub.percentage}%)
-                  </span>
-                </div>
-
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${barBg}`}
-                    style={{ width: `${sub.percentage}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {saveSuccess && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span>Assessment saved successfully to database! Learner profile metrics synchronized.</span>
-        </div>
-      )}
-
-      {saveError && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{saveError}</span>
-        </div>
-      )}
-
-      {/* Item-by-Item Review Section with Filter Tabs */}
-      <div className="border-t border-slate-100 pt-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Item-by-Item Review ({filteredQuestions.length} Items)
-          </h4>
-
-          {/* Correct / Incorrect Filter Tabs */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setResultsFilter("all")}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                resultsFilter === "all"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              All ({totalQuestions})
-            </button>
-            <button
-              type="button"
-              onClick={() => setResultsFilter("correct")}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                resultsFilter === "correct"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-slate-500 hover:text-emerald-700"
-              }`}
-            >
-              Correct ({scoredItems})
-            </button>
-            <button
-              type="button"
-              onClick={() => setResultsFilter("incorrect")}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                resultsFilter === "incorrect"
-                  ? "bg-rose-600 text-white shadow-xs"
-                  : "text-slate-500 hover:text-rose-700"
-              }`}
-            >
-              Incorrect ({totalQuestions - scoredItems})
-            </button>
-          </div>
-        </div>
-
-        {/* Subskill Domain Filter Pills */}
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          {(["All", "Literal", "Inferential", "Vocabulary", "Critical"] as Array<"All" | SubskillDomain>).map(
-            (domain) => (
-              <button
-                key={domain}
-                type="button"
-                onClick={() => setResultsDomainFilter(domain)}
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
-                  resultsDomainFilter === domain
-                    ? "bg-slate-800 text-white shadow-xs"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {domain === "All" ? "All Domains" : domain}
-              </button>
-            )
-          )}
-        </div>
-
-        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
-          {filteredQuestions.map((q) => {
-            const origIndex = questions.findIndex((x) => x.id === q.id);
-            const userAnswerIdx = answers[origIndex];
-            const isCorrect =
-              userAnswerIdx === q.correctIndex ||
-              (userAnswerIdx !== null &&
-                q.options[userAnswerIdx] &&
-                q.options[userAnswerIdx].trim() === q.answer?.trim());
-
-            return (
-              <div
-                key={q.id}
-                className={`flex items-start gap-3 rounded-xl border p-3.5 ${
-                  isCorrect
-                    ? "border-emerald-200 bg-emerald-50/60"
-                    : "border-rose-200 bg-rose-50/60"
-                }`}
-              >
-                {isCorrect ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                ) : (
-                  <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-                )}
-
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[11px] font-bold text-slate-900">
-                      Item {origIndex + 1}
-                    </span>
-                    <span
-                      className={`rounded-full border px-2 py-0.2 text-[9px] font-bold ${getDomainBadge(
-                        q.category
-                      )}`}
-                    >
-                      {q.category}
-                    </span>
-                  </div>
-
-                  <p className="text-xs font-medium text-slate-800">{q.question}</p>
-
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                    <span className="text-slate-600">
-                      Learner:{" "}
-                      <span
-                        className={`font-semibold ${
-                          isCorrect ? "text-emerald-700" : "text-rose-700"
-                        }`}
-                      >
-                        {userAnswerIdx !== null && q.options[userAnswerIdx]
-                          ? `${String.fromCharCode(65 + userAnswerIdx)}. ${q.options[userAnswerIdx]}`
-                          : "Unanswered"}
-                      </span>
-                    </span>
-
-                    {!isCorrect && (
-                      <span className="text-slate-600">
-                        Correct:{" "}
-                        <span className="font-semibold text-emerald-700">
-                          {String.fromCharCode(65 + q.correctIndex)}. {q.options[q.correctIndex] || q.answer}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSaveAssessment}
-          disabled={saving || saveSuccess}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          <span>
-            {saving ? "Saving Assessment..." : saveSuccess ? "Saved to Database" : "Save History"}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:bg-slate-50"
-        >
-          <RotateCcw className="h-4 w-4 text-slate-500" />
-          <span>New Check</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TAB 2: RESULTS HISTORY (wired to API)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function ResultsHistoryTab() {
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TAB 1: RESULTS / HISTORY & ANALYTICS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function ResultsHistoryTab({
+  onOpenGrading,
+  onNavigate,
+}: {
+  onOpenGrading: () => void;
+  onNavigate: (tab: Tab) => void;
+}) {
   const [results, setResults] = useState<CompRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [deliveryFilter, setDeliveryFilter] = useState<string>("");
+  const [levelFilter, setLevelFilter] = useState<string>("");
+  const [gradeFilter, setGradeFilter] = useState<string>("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = async () => {
@@ -1977,9 +849,9 @@ function ResultsHistoryTab() {
       const res = await fetch("/api/teacher/assessments?type=COMPREHENSION");
       const json = await parseJsonResponse(res);
       if (json.success) setResults(json.data);
-      else setError(json.error || "Failed to load results.");
+      else setError(json.error || "Failed to load comprehension records.");
     } catch {
-      setError("Failed to load results.");
+      setError("Failed to load comprehension records.");
     } finally {
       setLoading(false);
     }
@@ -1994,9 +866,7 @@ function ResultsHistoryTab() {
       });
       const json = await parseJsonResponse(res);
       if (json.success) {
-        setResults((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status } : r))
-        );
+        setResults((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
       }
     } catch (e) {
       console.error(e);
@@ -2007,50 +877,144 @@ function ResultsHistoryTab() {
     load();
   }, []);
 
-  const filtered = results.filter((r) =>
-    search
-      ? r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-        (r.passageTitle || "").toLowerCase().includes(search.toLowerCase())
-      : true
-  );
+  const filtered = results.filter((r) => {
+    const term = search.toLowerCase().trim();
+    const matchesSearch = term
+      ? r.studentName.toLowerCase().includes(term) ||
+        (r.passageTitle || "").toLowerCase().includes(term) ||
+        r.gradeSection.toLowerCase().includes(term)
+      : true;
 
-  const masteryColor = (level: string) => {
-    switch (level) {
-      case "Independent":
-      case "Proficient":
-        return "border-emerald-200 bg-emerald-50 text-emerald-700";
-      case "Instructional":
-      case "Approaching":
-        return "border-amber-200 bg-amber-50 text-amber-700";
-      case "Developing":
-        return "border-orange-200 bg-orange-50 text-orange-700";
-      default:
-        return "border-rose-200 bg-rose-50 text-rose-700";
-    }
-  };
+    const matchesDelivery = deliveryFilter
+      ? deliveryFilter === "online"
+        ? r.deliveryMode === "online"
+        : r.deliveryMode !== "online"
+      : true;
+
+    const matchesLevel = levelFilter ? r.masteryLevel === levelFilter : true;
+    const matchesGrade = gradeFilter ? r.gradeSection.includes(gradeFilter) : true;
+
+    return matchesSearch && matchesDelivery && matchesLevel && matchesGrade;
+  });
+
+  // Analytics KPIs
+  const totalCount = results.length;
+  const avgScore = totalCount ? Math.round(results.reduce((acc, r) => acc + (r.score || 0), 0) / totalCount) : 0;
+  const wpmResults = results.filter((r) => r.wpm && r.wpm > 0);
+  const avgWpm = wpmResults.length ? Math.round(wpmResults.reduce((acc, r) => acc + (r.wpm || 0), 0) / wpmResults.length) : 0;
+  const independentCount = results.filter((r) => r.masteryLevel === "Independent" || r.score >= 80).length;
+  const independentPct = totalCount ? Math.round((independentCount / totalCount) * 100) : 0;
 
   return (
     <div>
-      {/* Search Filter */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by student name or passage title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-          />
+      {/* KPI Stats Grid */}
+      <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Assessed</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-900">{totalCount}</span>
+            <span className="text-xs text-slate-400">Learners</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Class Average</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-900">{avgScore}%</span>
+            <span className="text-xs text-emerald-600 font-semibold">Phil-IRI</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Silent Reading Speed</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-900">{avgWpm || "—"}</span>
+            <span className="text-xs text-slate-400">Words / Min</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Independent Readers</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-emerald-700">{independentPct}%</span>
+            <span className="text-xs text-slate-400">({independentCount} of {totalCount})</span>
+          </div>
         </div>
       </div>
 
+      {/* Search & Filter Toolbar */}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search assessments by student name, passage title, or section..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+          />
+        </div>
+
+        <select
+          value={deliveryFilter}
+          onChange={(e) => setDeliveryFilter(e.target.value)}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+        >
+          <option value="">All Formats (Online &amp; OMR)</option>
+          <option value="online">Online CBT Only (🌐)</option>
+          <option value="omr">Face-to-Face OMR Only (📄)</option>
+        </select>
+
+        <select
+          value={levelFilter}
+          onChange={(e) => setLevelFilter(e.target.value)}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+        >
+          <option value="">All Phil-IRI Levels</option>
+          <option value="Independent">Independent (80% - 100%)</option>
+          <option value="Instructional">Instructional (59% - 79%)</option>
+          <option value="Frustration">Frustration (≤ 58%)</option>
+        </select>
+
+        <select
+          value={gradeFilter}
+          onChange={(e) => setGradeFilter(e.target.value)}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+        >
+          <option value="">All Grades</option>
+          <option value="Grade 7">Grade 7</option>
+          <option value="Grade 8">Grade 8</option>
+          <option value="Grade 9">Grade 9</option>
+          <option value="Grade 10">Grade 10</option>
+        </select>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            onClick={onOpenGrading}
+            className="h-10 inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-4 text-xs font-bold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all"
+          >
+            <ScanLine className="h-4 w-4" />
+            <span>Grade OMR Sheet</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate("Generate Questions")}
+            className="h-10 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-[0.98] transition-all"
+          >
+            <PenLine className="h-4 w-4 text-slate-500" />
+            <span>+ Generate Questions</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Results Feed */}
       {loading ? (
-        <div className="flex h-48 items-center justify-center">
+        <div className="flex h-48 items-center justify-center rounded-2xl border border-slate-100 bg-white">
           <Loader2 className="h-6 w-6 animate-spin text-red-800" />
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-12 text-xs text-rose-700">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-200 bg-white py-12 text-xs text-rose-700">
           <AlertCircle className="h-5 w-5" />
           <p>{error}</p>
           <button
@@ -2061,15 +1025,30 @@ function ResultsHistoryTab() {
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">
-          No comprehension checks recorded yet.
+        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center shadow-xs">
+          <BookOpen className="mx-auto h-10 w-10 text-slate-300 mb-2" />
+          <p className="text-sm font-semibold text-slate-700">No comprehension assessments recorded yet.</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Generate a 40-item questionnaire or grade student bubble sheets to populate your results history.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              onClick={() => onNavigate("Generate Questions")}
+              className="rounded-xl bg-red-800 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900"
+            >
+              Generate Questionnaire
+            </button>
+            <button
+              onClick={onOpenGrading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Grade Bubble Sheet
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((entry) => {
-            const pct = entry.totalItems
-              ? Math.round((entry.score / entry.totalItems) * 100)
-              : entry.score || 0;
             const isExpanded = expanded === entry.id;
 
             return (
@@ -2079,14 +1058,23 @@ function ResultsHistoryTab() {
                   className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-slate-300 cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xs font-extrabold text-slate-700">
                       {entry.studentName.split(" ").map((n) => n[0]).join("")}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {entry.studentName}
-                      </p>
-                      <p className="text-xs text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-slate-900">{entry.studentName}</p>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold ${
+                            entry.deliveryMode === "online"
+                              ? "bg-blue-100 text-blue-800 border border-blue-200"
+                              : "bg-slate-100 text-slate-700 border border-slate-200"
+                          }`}
+                        >
+                          {entry.deliveryMode === "online" ? "🌐 Online CBT" : "📄 Face-to-Face (OMR)"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
                         {entry.gradeSection} &bull; <span suppressHydrationWarning>{fmtShort(entry.date)}</span>
                         {entry.passageTitle ? ` &bull; ${entry.passageTitle}` : ""}
                         {entry.wpm ? ` &bull; ${entry.wpm} WPM` : ""}
@@ -2096,8 +1084,8 @@ function ResultsHistoryTab() {
 
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-base font-bold text-slate-900">{entry.score}%</p>
-                      <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${masteryColor(entry.masteryLevel)}`}>
+                      <p className="text-base font-black text-slate-900">{entry.score}%</p>
+                      <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getMasteryColor(entry.masteryLevel)}`}>
                         {entry.masteryLevel || "Assessed"}
                       </span>
                     </div>
@@ -2107,50 +1095,48 @@ function ResultsHistoryTab() {
                   </div>
                 </button>
 
-                {/* Expanded details & validation */}
                 {isExpanded && (
-                  <div className="mx-4 mb-3 rounded-b-xl border border-t-0 border-gray-100 bg-gray-50 p-5 space-y-4">
-                    {/* Performance metrics */}
+                  <div className="mx-4 mb-3 rounded-b-xl border border-t-0 border-gray-100 bg-gray-50/80 p-5 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                      <div className="rounded-xl border border-slate-200 bg-white p-2.5">
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Score</p>
-                        <p className="text-sm font-extrabold text-slate-800">{entry.score}%</p>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Raw Score</p>
+                        <p className="text-sm font-extrabold text-slate-800">{entry.score}% ({Math.round(((entry.score || 0) / 100) * (entry.totalItems || 40))}/{entry.totalItems || 40})</p>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-2.5">
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
                         <p className="text-[10px] uppercase font-bold text-slate-400">Phil-IRI Level</p>
                         <p className="text-sm font-extrabold text-slate-800">{entry.masteryLevel || "—"}</p>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-2.5">
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Silent Speed</p>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Reading Speed</p>
                         <p className="text-sm font-extrabold text-slate-800">{entry.wpm ? `${entry.wpm} WPM` : "—"}</p>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-2.5">
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Duration</p>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Reading Duration</p>
                         <p className="text-sm font-extrabold text-slate-800">{entry.durationSec ? `${entry.durationSec}s` : "—"}</p>
                       </div>
                     </div>
 
                     {entry.subskills && entry.subskills.length > 0 && (
-                      <div>
-                        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          Subskills Breakdown
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-600">
+                          Phil-IRI Subskills Domain Breakdown
                         </h4>
-                        <div className="space-y-2.5">
+                        <div className="space-y-3">
                           {entry.subskills.map((s, i) => (
                             <div key={i}>
                               <div className="mb-1 flex items-center justify-between">
-                                <span className="text-sm text-gray-700">{s.name}</span>
+                                <span className="text-xs font-semibold text-slate-700">{s.name} Comprehension</span>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium text-gray-500">{s.score}%</span>
-                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${masteryColor(s.status)}`}>
+                                  <span className="text-xs font-bold text-slate-600">{s.score}%</span>
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${getMasteryColor(s.status)}`}>
                                     {s.status}
                                   </span>
                                 </div>
                               </div>
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${
-                                    s.score >= 75 ? "bg-emerald-500" : s.score >= 60 ? "bg-amber-500" : "bg-red-500"
+                                    s.score >= 80 ? "bg-emerald-500" : s.score >= 59 ? "bg-amber-500" : "bg-rose-500"
                                   }`}
                                   style={{ width: `${s.score}%` }}
                                 />
@@ -2161,20 +1147,19 @@ function ResultsHistoryTab() {
                       </div>
                     )}
 
-                    {/* Teacher Validation (Phase B) */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200/60 pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-500">Phil-IRI Status:</span>
+                        <span className="text-xs font-semibold text-slate-500">Phil-IRI Record Status:</span>
                         <span
-                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                             entry.status === "approved"
-                              ? "bg-emerald-100 text-emerald-700"
+                              ? "bg-emerald-100 text-emerald-800"
                               : entry.status === "flagged"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-gray-100 text-gray-600"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-200 text-slate-700"
                           }`}
                         >
-                          {entry.status === "approved" ? "Approved" : entry.status === "flagged" ? "Flagged" : "Pending"}
+                          {entry.status === "approved" ? "Approved" : entry.status === "flagged" ? "Flagged" : "Pending Verification"}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2183,7 +1168,7 @@ function ResultsHistoryTab() {
                             await validateEntry(entry.id, "approved");
                           }}
                           disabled={entry.status === "approved"}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40"
+                          className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-40 transition-colors"
                         >
                           Approve Result
                         </button>
@@ -2192,7 +1177,7 @@ function ResultsHistoryTab() {
                             await validateEntry(entry.id, "flagged");
                           }}
                           disabled={entry.status === "flagged"}
-                          className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-600 disabled:opacity-40"
+                          className="rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-600 disabled:opacity-40 transition-colors"
                         >
                           Flag Result
                         </button>
@@ -2205,6 +1190,2138 @@ function ResultsHistoryTab() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TAB 2: GENERATE QUESTIONS & COMPILER WORKSTATION
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function QuestionnaireTab({
+  onKeyGenerated,
+  onSavedAssessment,
+  onViewLibrary,
+}: {
+  onKeyGenerated: (key: AnswerKeyRow) => void;
+  onSavedAssessment: () => void;
+  onViewLibrary: () => void;
+}) {
+  const [passages, setPassages] = useState<PassageOption[]>([]);
+  const [learners, setLearners] = useState<LearnerOption[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Setup state
+  const [targetCount, setTargetCount] = useState<number>(40);
+  const [targetGrade, setTargetGrade] = useState("7");
+  const [targetSection, setTargetSection] = useState("");
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(45);
+  const [dueDate, setDueDate] = useState("");
+
+  const [selectedPassageTitle, setSelectedPassageTitle] = useState("Photosynthesis");
+  const [passageTitle, setPassageTitle] = useState("Photosynthesis");
+  const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
+  const [isCustomPassage, setIsCustomPassage] = useState(false);
+  const [assessmentTitle, setAssessmentTitle] = useState("Phil-IRI Reading Diagnostic — Photosynthesis");
+  const [assessmentType, setAssessmentType] = useState<"pre-test" | "post-test" | "exam">("pre-test");
+
+  const [questions, setQuestions] = useState<Question[]>(SAMPLE_QUESTIONS);
+
+  // Modals & views
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showWorkstation, setShowWorkstation] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishToast, setPublishToast] = useState<string | null>(null);
+
+  // Derive available sections based on target grade
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    learners
+      .filter((l) => !targetGrade || String(l.gradeLevel) === targetGrade)
+      .forEach((l) => {
+        if (l.section && l.section.trim()) set.add(l.section.trim());
+      });
+    return Array.from(set).sort();
+  }, [learners, targetGrade]);
+
+  // Reset targetSection if no longer valid under targetGrade
+  useEffect(() => {
+    if (targetSection && !availableSections.includes(targetSection)) {
+      setTargetSection("");
+    }
+  }, [availableSections, targetSection]);
+
+  // Fetch passages and learners
+  useEffect(() => {
+    (async () => {
+      setLoadingData(true);
+      try {
+        const [passagesRes, learnersRes] = await Promise.all([
+          fetch("/api/teacher/reading/passages?keyStage=KS3"),
+          fetch("/api/teacher/learners"),
+        ]);
+        const passagesJson = await parseJsonResponse(passagesRes);
+        const learnersJson = await parseJsonResponse(learnersRes);
+
+        if (passagesJson.success && Array.isArray(passagesJson.data)) {
+          setPassages(passagesJson.data);
+          if (passagesJson.data.length > 0) {
+            const first = passagesJson.data[0];
+            setSelectedPassageTitle(first.title);
+            setPassageTitle(first.title);
+            setPassageText(first.text);
+            setAssessmentTitle(`Phil-IRI Reading Diagnostic — ${first.title}`);
+            const compiled = compileComprehensionQuestions(
+              first.questions || [],
+              first.text,
+              first.title,
+              40
+            );
+            setQuestions(compiled);
+          }
+        }
+
+        if (learnersJson.success && Array.isArray(learnersJson.data)) {
+          const mapped = learnersJson.data
+            .filter((l: any) => l.studentId)
+            .map((l: any) => ({
+              studentId: l.studentId,
+              name: l.name,
+              gradeLevel: l.gradeLevel,
+              section: l.section,
+            }));
+          setLearners(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to fetch passage bank data:", err);
+      } finally {
+        setLoadingData(false);
+      }
+    })();
+  }, []);
+
+  const handleSelectPassage = (title: string) => {
+    setSelectedPassageTitle(title);
+    if (title === "Custom Reading Passage") {
+      setIsCustomPassage(true);
+      setPassageTitle("Custom Reading Passage");
+      setAssessmentTitle("Phil-IRI Reading Assessment — Custom Selection");
+      return;
+    }
+
+    setIsCustomPassage(false);
+    const found = passages.find((p) => p.title === title);
+    if (found) {
+      setPassageTitle(found.title);
+      setPassageText(found.text);
+      setAssessmentTitle(`Phil-IRI Reading Diagnostic — ${found.title}`);
+      if (found.gradeLevel) setTargetGrade(String(found.gradeLevel));
+      const compiled = compileComprehensionQuestions(
+        found.questions || [],
+        found.text,
+        found.title,
+        targetCount
+      );
+      setQuestions(compiled);
+    }
+  };
+
+  const handleTargetCountChange = (count: number) => {
+    setTargetCount(count);
+    const activePassage = passages.find((p) => p.title === selectedPassageTitle);
+    const compiled = compileComprehensionQuestions(
+      activePassage?.questions || [],
+      passageText,
+      passageTitle,
+      count
+    );
+    setQuestions(compiled);
+  };
+
+  // Save to AnswerKeys (Online CBT or Library)
+  const handleSaveOrPublish = async (makeOnline = false) => {
+    setPublishing(true);
+    try {
+      const answersLetters = questions.map((q) => String.fromCharCode(65 + q.correctIndex));
+      const payload = {
+        title: assessmentTitle.trim() || `Reading Diagnostic: ${passageTitle}`,
+        subject: "Reading",
+        assessmentType,
+        assessmentCategory: assessmentType,
+        items: questions.length,
+        totalItems: questions.length,
+        answers: answersLetters,
+        questions: questions.map((q, idx) => ({
+          id: q.id,
+          number: idx + 1,
+          question: q.question,
+          prompt: q.question,
+          options: q.options,
+          choices: q.options,
+          category: q.category,
+          correctIndex: q.correctIndex,
+          correctAnswer: String.fromCharCode(65 + q.correctIndex),
+          answer: String.fromCharCode(65 + q.correctIndex),
+        })),
+        passageTitle,
+        passageText,
+        isOnline: makeOnline,
+        timeLimitMinutes: Number(timeLimitMinutes) || 0,
+        dueDate: dueDate || null,
+        targetGrade: Number(targetGrade) || 7,
+        targetSection: targetSection.trim() || undefined,
+      };
+
+      const res = await fetch("/api/teacher/answer-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data) {
+        onKeyGenerated({
+          ...json.data,
+          questions: payload.questions,
+          answers: answersLetters,
+        });
+
+        setPublishToast(
+          makeOnline
+            ? `Assessment successfully published to Online CBT! Students in Grade ${targetGrade} can now access and take this test via the Student Portal.`
+            : `Assessment successfully saved to Comprehension Library! You can now print test booklets, OMR bubble sheets, or grade student sheets from the Comprehension Library tab.`
+        );
+      } else {
+        alert(json.error || "Failed to save questionnaire.");
+      }
+    } catch {
+      alert("Network error saving questionnaire.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const bubbleSheetUrl = getStampedBubbleSheetUrl({
+    subject: "Reading",
+    title: assessmentTitle,
+    items: questions.length,
+    gradeLevel: Number(targetGrade) || 7,
+    download: true,
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Toast Notification */}
+      {publishToast && (
+        <div className="flex items-center justify-between rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <span>{publishToast}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onViewLibrary}
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-800 transition-colors"
+            >
+              View in Library
+            </button>
+            <button onClick={() => setPublishToast(null)} className="text-emerald-700 hover:text-emerald-900 p-1">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Setup Card: Coordinator Passage Bank & Blueprint Config */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-red-800" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+              1. Reading Material &amp; Blueprint Configuration
+            </h3>
+          </div>
+          <span className="text-xs text-slate-400">
+            Coordinator-Uploaded Materials &bull; Key Stage 3
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Passage Selector */}
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Select Reading Selection
+            </label>
+            <select
+              value={selectedPassageTitle}
+              onChange={(e) => handleSelectPassage(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            >
+              <option value="Custom Reading Passage">Custom reading passage…</option>
+              {passages.map((p) => (
+                <option key={p.id} value={p.title}>
+                  {p.title} {p.gradeLevel ? `(Grade ${p.gradeLevel})` : ""}{" "}
+                  {p.questionCount ? `• ${p.questionCount} extracted items` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Target Item Count */}
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Assessment Item Standard
+            </label>
+            <select
+              value={targetCount}
+              onChange={(e) => handleTargetCountChange(Number(e.target.value))}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            >
+              <option value={40}>40 Items (Phil-IRI 2024 Standard)</option>
+              <option value={20}>20 Items (Mid-Check Assessment)</option>
+              <option value={10}>10 Items (Quick Diagnostic)</option>
+            </select>
+          </div>
+
+          {/* Assessment Scope / Purpose */}
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Assessment Scope / Purpose
+            </label>
+            <select
+              value={assessmentType}
+              onChange={(e) => {
+                const type = e.target.value as "pre-test" | "post-test" | "exam";
+                setAssessmentType(type);
+                if (type === "pre-test") {
+                  setAssessmentTitle(`Phil-IRI Diagnostic Pre-Test — ${passageTitle}`);
+                } else if (type === "post-test") {
+                  setAssessmentTitle(`Phil-IRI Learning Recovery Post-Test — ${passageTitle}`);
+                } else {
+                  setAssessmentTitle(`Phil-IRI Comprehensive Exam — ${passageTitle}`);
+                }
+              }}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+            >
+              <option value="pre-test">📋 Pre-Test (Diagnostic Entry)</option>
+              <option value="post-test">📈 Post-Test (Learning Recovery Endline)</option>
+              <option value="exam">🏆 Comprehensive Periodical Exam</option>
+            </select>
+          </div>
+
+          {/* Assessment Title */}
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Assessment Title (Printed on Booklet &amp; Student CBT)
+            </label>
+            <input
+              type="text"
+              value={assessmentTitle}
+              onChange={(e) => setAssessmentTitle(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-900 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            />
+          </div>
+
+          {/* Target Grade & Section */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Target Grade
+              </label>
+              <select
+                value={targetGrade}
+                onChange={(e) => setTargetGrade(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              >
+                <option value="7">Grade 7</option>
+                <option value="8">Grade 8</option>
+                <option value="9">Grade 9</option>
+                <option value="10">Grade 10</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Target Section
+              </label>
+              <select
+                value={targetSection}
+                onChange={(e) => setTargetSection(e.target.value)}
+                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">All sections ({availableSections.length} available)</option>
+                {availableSections.map((sec) => (
+                  <option key={sec} value={sec}>
+                    {sec}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Time limit & Due date for CBT */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                CBT Time Limit
+              </label>
+              <select
+                value={timeLimitMinutes}
+                onChange={(e) => setTimeLimitMinutes(Number(e.target.value) || 0)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              >
+                <option value={0}>Untimed (No Limit)</option>
+                <option value={15}>15 Minutes</option>
+                <option value={30}>30 Minutes</option>
+                <option value={45}>45 Minutes</option>
+                <option value={60}>60 Minutes</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Due Date &amp; Deadline
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Passage Content Accordion/Textarea */}
+        <div className="mt-4">
+          <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Reading Selection Passage Text
+          </label>
+          <textarea
+            rows={5}
+            value={passageText}
+            onChange={(e) => {
+              setPassageText(e.target.value);
+              if (!isCustomPassage) setIsCustomPassage(true);
+            }}
+            className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3 font-serif text-xs leading-relaxed text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            placeholder="Reading passage text..."
+          />
+        </div>
+      </div>
+
+      {/* 2. Quick Action Command Center (Print, OMR Sheet, Online CBT, Save to Library) */}
+      <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/70 via-white to-amber-50/50 p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-red-800 bg-red-100 px-2 py-0.5 rounded-full">
+              Administration Command Center
+            </span>
+            <h4 className="text-base font-extrabold text-slate-900 mt-1">
+              {questions.length}-Item Questionnaire Compiled &amp; Standardized
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Administer face-to-face via printed booklet and OMR bubble sheet, deliver online via student CBT portal, or save into your Comprehension Library.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Print Test Paper */}
+            <button
+              type="button"
+              onClick={() => setShowPrintModal(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-bold text-slate-800 shadow-xs hover:bg-slate-50 active:scale-[0.98] transition-all"
+            >
+              <Printer className="h-4 w-4 text-slate-600" />
+              <span>Print Test Paper</span>
+            </button>
+
+            {/* 2. Download OMR Bubble Sheet */}
+            <a
+              href={bubbleSheetUrl}
+              target="_blank"
+              rel="noreferrer"
+              download="Phil-IRI-40-Item-Reading-OMR-Sheet.pdf"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100 active:scale-[0.98] transition-all"
+            >
+              <FileDown className="h-4 w-4 text-emerald-700" />
+              <span>Print OMR Sheet</span>
+            </a>
+
+            {/* 3. Publish to Online CBT */}
+            <button
+              type="button"
+              onClick={() => handleSaveOrPublish(true)}
+              disabled={publishing}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 text-xs font-bold text-blue-900 shadow-xs hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin text-blue-800" /> : <Globe className="h-4 w-4 text-blue-700" />}
+              <span>Publish to Online CBT</span>
+            </button>
+
+            {/* 4. Save to Comprehension Library */}
+            <button
+              type="button"
+              onClick={() => handleSaveOrPublish(false)}
+              disabled={publishing}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-4 text-xs font-bold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save to Library</span>
+            </button>
+
+            {/* 5. Administer On-Screen (1-on-1) */}
+            <button
+              type="button"
+              onClick={() => setShowWorkstation(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-slate-800 px-4 text-xs font-bold text-white shadow-xs hover:bg-slate-900 active:scale-[0.98] transition-all"
+            >
+              <Play className="h-4 w-4 text-amber-400" />
+              <span>Administer On-Screen</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Four-Domain Phil-IRI Blueprint Breakdown Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-blue-200 bg-white p-3.5 shadow-xs">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Part I: Literal</p>
+          <p className="text-base font-extrabold text-slate-900 mt-0.5">10 Items</p>
+          <p className="text-[11px] text-slate-500 mt-1">Direct recall, explicitly stated facts &amp; details</p>
+        </div>
+        <div className="rounded-xl border border-purple-200 bg-white p-3.5 shadow-xs">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Part II: Inferential</p>
+          <p className="text-base font-extrabold text-slate-900 mt-0.5">10 Items</p>
+          <p className="text-[11px] text-slate-500 mt-1">Cause &amp; effect, implied conclusions &amp; motives</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-white p-3.5 shadow-xs">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Part III: Vocabulary</p>
+          <p className="text-base font-extrabold text-slate-900 mt-0.5">10 Items</p>
+          <p className="text-[11px] text-slate-500 mt-1">Context clues, affixes, synonyms &amp; antonyms</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-white p-3.5 shadow-xs">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Part IV: Critical</p>
+          <p className="text-base font-extrabold text-slate-900 mt-0.5">10 Items</p>
+          <p className="text-[11px] text-slate-500 mt-1">Author craft, fact vs. opinion, theme &amp; transfer</p>
+        </div>
+      </div>
+
+      {/* 4. Complete Questionnaire Items Review List */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-xs">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+          <h4 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+            Questionnaire Item Bank ({questions.length} Questions)
+          </h4>
+          <span className="text-xs text-slate-500">
+            Pre-configured with answer keys for OMR scanning and automated CBT grading
+          </span>
+        </div>
+
+        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+          {questions.map((q, idx) => (
+            <div key={q.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-800 text-[10px] font-bold text-white">
+                    {idx + 1}
+                  </span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${getDomainBadge(q.category)}`}>
+                    {q.category} Comprehension
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700">
+                  Key: {String.fromCharCode(65 + q.correctIndex)}
+                </span>
+              </div>
+
+              <p className="text-xs font-semibold text-slate-900 mb-3">{q.question}</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {q.options.map((opt, oi) => (
+                  <div
+                    key={oi}
+                    className={`flex items-center gap-2 rounded-lg border p-2 ${
+                      oi === q.correctIndex
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-900 font-semibold"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                        oi === q.correctIndex
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {String.fromCharCode(65 + oi)}
+                    </span>
+                    <span className="leading-snug">{opt}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Printable Test Paper Modal */}
+      {showPrintModal && (
+        <PrintTestPaperModal
+          title={assessmentTitle}
+          passageTitle={passageTitle}
+          passageText={passageText}
+          questions={questions}
+          targetGrade={targetGrade}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
+
+      {/* Live On-Screen Workstation */}
+      {showWorkstation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+            <OnScreenWorkstation
+              passageTitle={passageTitle}
+              passageText={passageText}
+              questions={questions}
+              learners={learners}
+              onExit={() => setShowWorkstation(false)}
+              onSavedAssessment={() => {
+                setShowWorkstation(false);
+                onSavedAssessment();
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TAB 3: COMPREHENSION LIBRARY (EXAM LIBRARY MIRROR)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function ComprehensionLibraryTab({
+  onOpenGrading,
+  onOpenViewer,
+  onNavigate,
+}: {
+  onOpenGrading: (key: AnswerKeyRow) => void;
+  onOpenViewer: (key: AnswerKeyRow) => void;
+  onNavigate: (tab: Tab) => void;
+}) {
+  const [keys, setKeys] = useState<AnswerKeyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [deliveryFilter, setDeliveryFilter] = useState<string>("");
+  const [gradeFilter, setGradeFilter] = useState<string>("");
+
+  // Deletion state
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState<{ ok: boolean; text: string; blockedId?: string } | null>(null);
+
+  // Online Settings Modal state
+  const [onlineModalKey, setOnlineModalKey] = useState<AnswerKeyRow | null>(null);
+  const [isOnlineToggle, setIsOnlineToggle] = useState(false);
+  const [timeLimitInput, setTimeLimitInput] = useState(0);
+  const [targetSectionInput, setTargetSectionInput] = useState("");
+  const [targetGradeInput, setTargetGradeInput] = useState<number | null>(null);
+  const [dueDateInput, setDueDateInput] = useState("");
+  const [savingOnline, setSavingOnline] = useState(false);
+  const [onlineSuccessToast, setOnlineSuccessToast] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/teacher/answer-keys?subject=Reading");
+      const json = await parseJsonResponse(res);
+      if (json.success && Array.isArray(json.data)) {
+        setKeys(json.data);
+      } else {
+        setError(json.error || "Failed to load comprehension library.");
+      }
+    } catch {
+      setError("Failed to load comprehension library.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const openOnlineModal = (ak: AnswerKeyRow) => {
+    setOnlineModalKey(ak);
+    setIsOnlineToggle(Boolean(ak.isOnline));
+    setTimeLimitInput(Number(ak.timeLimitMinutes) || 0);
+    setTargetSectionInput(ak.targetSection || "");
+    setTargetGradeInput(ak.targetGrade ?? null);
+    setDueDateInput(ak.dueDate ? ak.dueDate.slice(0, 10) : "");
+  };
+
+  const handleSaveOnlineSettings = async () => {
+    if (!onlineModalKey) return;
+    setSavingOnline(true);
+    try {
+      const res = await fetch(`/api/teacher/answer-keys/${onlineModalKey.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isOnline: isOnlineToggle,
+          timeLimitMinutes: timeLimitInput,
+          targetSection: targetSectionInput,
+          targetGrade: targetGradeInput,
+          dueDate: dueDateInput ? new Date(dueDateInput) : null,
+        }),
+      });
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setKeys((prev) =>
+          prev.map((k) =>
+            k.id === onlineModalKey.id
+              ? {
+                  ...k,
+                  isOnline: isOnlineToggle,
+                  timeLimitMinutes: timeLimitInput,
+                  targetSection: targetSectionInput,
+                  targetGrade: targetGradeInput,
+                  dueDate: dueDateInput || null,
+                }
+              : k
+          )
+        );
+        setOnlineSuccessToast(
+          isOnlineToggle
+            ? `"${onlineModalKey.title}" is now published online for students!`
+            : `"${onlineModalKey.title}" set to Paper Only (OMR).`
+        );
+        setTimeout(() => setOnlineSuccessToast(null), 4000);
+        setOnlineModalKey(null);
+      } else {
+        alert(json.error || "Failed to update online exam settings.");
+      }
+    } catch {
+      alert("Network error updating online exam settings.");
+    } finally {
+      setSavingOnline(false);
+    }
+  };
+
+  const handleDelete = async (id: string, force = false) => {
+    setDeletingId(id);
+    setDeleteMsg(null);
+    try {
+      const url = `/api/teacher/answer-keys/${id}${force ? "?force=true" : ""}`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setKeys((prev) => prev.filter((k) => k.id !== id));
+        const detached = json.data?.detached ?? 0;
+        setDeleteMsg({
+          ok: true,
+          text: `Questionnaire deleted${detached > 0 ? ` — ${detached} linked assessment(s) unlinked` : ""}.`,
+        });
+      } else if (res.status === 409 && json.blocked) {
+        setDeleteMsg({
+          ok: false,
+          text: json.error || "Cannot delete — this questionnaire was used to score past student assessments.",
+          blockedId: id,
+        });
+      } else {
+        setDeleteMsg({ ok: false, text: json.error || "Failed to delete the questionnaire." });
+      }
+    } catch {
+      setDeleteMsg({ ok: false, text: "Failed to delete the questionnaire." });
+    } finally {
+      setDeletingId(null);
+      setConfirmId(null);
+    }
+  };
+
+  const filteredKeys = keys.filter((ak) => {
+    const term = search.toLowerCase().trim();
+    const matchesSearch = term
+      ? ak.title.toLowerCase().includes(term) ||
+        (ak.passageTitle && ak.passageTitle.toLowerCase().includes(term)) ||
+        (ak.targetSection && ak.targetSection.toLowerCase().includes(term))
+      : true;
+
+    const matchesDelivery = deliveryFilter
+      ? deliveryFilter === "online"
+        ? ak.isOnline
+        : !ak.isOnline
+      : true;
+
+    const matchesGrade = gradeFilter ? ak.targetGrade === Number(gradeFilter) : true;
+
+    return matchesSearch && matchesDelivery && matchesGrade;
+  });
+
+  return (
+    <div>
+      {/* Top Header & Fast Actions */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs text-slate-500 sm:text-sm">
+            Manage your Comprehension Library — review generated questionnaires, adjust CBT online settings, print test papers, and launch OMR bubble sheet grading.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onNavigate("Generate Questions")}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all"
+          >
+            <PenLine className="h-4 w-4" />
+            <span>+ Generate Questions</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search & Filters */}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search comprehension questionnaires by title, passage, or section..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+          />
+        </div>
+
+        <select
+          value={deliveryFilter}
+          onChange={(e) => setDeliveryFilter(e.target.value)}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+        >
+          <option value="">All Formats (Online &amp; Paper)</option>
+          <option value="online">Online CBT Active Only (🌐)</option>
+          <option value="paper">Paper Only / OMR (📄)</option>
+        </select>
+
+        <select
+          value={gradeFilter}
+          onChange={(e) => setGradeFilter(e.target.value)}
+          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 outline-none shadow-2xs focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+        >
+          <option value="">All Grades</option>
+          <option value="7">Grade 7</option>
+          <option value="8">Grade 8</option>
+          <option value="9">Grade 9</option>
+          <option value="10">Grade 10</option>
+        </select>
+      </div>
+
+      {/* Delete / Alert messages */}
+      {deleteMsg && (
+        <div
+          className={`mb-4 flex items-center justify-between rounded-xl border p-3.5 text-xs font-semibold ${
+            deleteMsg.ok
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          <span>{deleteMsg.text}</span>
+          {deleteMsg.blockedId && (
+            <button
+              onClick={() => handleDelete(deleteMsg.blockedId!, true)}
+              disabled={!!deletingId}
+              className="ml-3 inline-flex items-center gap-1 rounded-lg bg-rose-700 px-3 py-1 text-xs font-bold text-white hover:bg-rose-800"
+            >
+              {deletingId === deleteMsg.blockedId ? "Deleting…" : "Force Delete"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {onlineSuccessToast && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span>{onlineSuccessToast}</span>
+          </div>
+          <button onClick={() => setOnlineSuccessToast(null)} className="text-emerald-700 hover:text-emerald-900">
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Questionnaire List */}
+      {loading ? (
+        <div className="flex h-48 items-center justify-center rounded-2xl border border-slate-100 bg-white">
+          <Loader2 className="h-6 w-6 animate-spin text-red-800" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-rose-200 bg-white py-12 text-xs text-rose-700">
+          <AlertCircle className="h-5 w-5" />
+          <p>{error}</p>
+          <button
+            onClick={load}
+            className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+          >
+            Retry
+          </button>
+        </div>
+      ) : keys.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center shadow-xs">
+          <BookOpen className="mx-auto h-10 w-10 text-slate-300 mb-2" />
+          <p className="text-sm font-semibold text-slate-700">Your Comprehension Library is empty.</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Generate and save a 40-item Phil-IRI questionnaire to build your library.
+          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate("Generate Questions")}
+            className="mt-4 rounded-xl bg-red-800 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900"
+          >
+            Compile First Questionnaire
+          </button>
+        </div>
+      ) : filteredKeys.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400 shadow-xs">
+          No comprehension questionnaires match your search or filters.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredKeys.map((ak) => {
+            const hasPassage = Boolean(ak.passageTitle || ak.passageText);
+            const wordCount = ak.passageText ? ak.passageText.trim().split(/\s+/).length : 0;
+
+            return (
+              <div
+                key={ak.id}
+                className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-slate-300 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-900 border border-red-200">
+                      <BookOpen className="h-3 w-3" /> Reading Diagnostic
+                    </span>
+
+                    {ak.isOnline ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200">
+                        <Globe className="h-3 w-3" /> Online CBT Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600 border border-slate-200">
+                        📄 Paper Only (OMR)
+                      </span>
+                    )}
+
+                    <h3 className="text-sm font-bold text-slate-900 truncate">{ak.title}</h3>
+                  </div>
+
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">{ak.items || (ak.answers || []).length} Items</span>
+                    {ak.targetGrade && ` &bull; Grade ${ak.targetGrade}`}
+                    {ak.targetSection && ` (${ak.targetSection})`}
+                    {hasPassage && ak.passageTitle && ` &bull; Selection: "${ak.passageTitle}"`}
+                    {wordCount > 0 && ` (${wordCount} words)`}
+                    {ak.timeLimitMinutes ? ` &bull; ${ak.timeLimitMinutes}m limit` : ""}
+                    {` &bull; `}
+                    <span suppressHydrationWarning>Created {fmtShort(ak.created)}</span>
+                  </p>
+
+                  {/* Answer Key preview badges */}
+                  {ak.answers && ak.answers.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      {ak.answers.slice(0, 10).map((ans, idx) => (
+                        <span
+                          key={idx}
+                          className="flex h-5 min-w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 text-[10px] font-bold text-slate-700"
+                        >
+                          {idx + 1}{String(ans || "—")}
+                        </span>
+                      ))}
+                      {ak.answers.length > 10 && (
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          +{ak.answers.length - 10} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fast Action Buttons */}
+                <div className="flex flex-wrap sm:shrink-0 items-center gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  {/* 1. Online CBT Settings */}
+                  <button
+                    type="button"
+                    onClick={() => openOnlineModal(ak)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold shadow-2xs transition-all active:scale-[0.98] ${
+                      ak.isOnline
+                        ? "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                    title="Configure Online CBT Delivery and Student Access"
+                  >
+                    <Laptop className="h-3.5 w-3.5 text-blue-600" />
+                    <span>{ak.isOnline ? "Online Settings" : "Publish Online"}</span>
+                  </button>
+
+                  {/* 2. View / Reprint Booklet */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenViewer(ak)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98]"
+                    title="View & Reprint DepEd Test Paper Booklet"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-slate-500" />
+                    <span>View / Reprint</span>
+                  </button>
+
+                  {/* 3. Grade with OMR */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenGrading(ak)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-red-900 transition-all active:scale-[0.98]"
+                    title="Grade face-to-face student bubble sheets with camera scanner"
+                  >
+                    <ScanLine className="h-3.5 w-3.5" />
+                    <span>Grade (OMR)</span>
+                  </button>
+
+                  {/* 4. Delete with safety confirm */}
+                  {confirmId === ak.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleDelete(ak.id)}
+                        disabled={deletingId === ak.id}
+                        className="inline-flex items-center gap-1 rounded-xl bg-rose-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-800"
+                      >
+                        {deletingId === ak.id ? "Deleting…" : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(ak.id)}
+                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-2 text-xs font-medium text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      title="Delete questionnaire"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Online CBT Settings Modal */}
+      {onlineModalKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Laptop className="h-5 w-5 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">Online CBT Exam Delivery Settings</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOnlineModalKey(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs font-bold text-slate-800">{onlineModalKey.title}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {onlineModalKey.items} Items &bull; {onlineModalKey.passageTitle || "Reading Passage"}
+                </p>
+              </div>
+
+              {/* Online Activation Toggle */}
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isOnlineToggle}
+                    onChange={(e) => setIsOnlineToggle(e.target.checked)}
+                    className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800">Publish as Online CBT Exam</span>
+                    <p className="text-[11px] text-slate-500">
+                      When enabled, students can take this comprehension test directly in the Student Portal.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Time Limit & Due Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Time Limit
+                  </label>
+                  <select
+                    value={timeLimitInput}
+                    onChange={(e) => setTimeLimitInput(Number(e.target.value) || 0)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  >
+                    <option value={0}>Untimed</option>
+                    <option value={15}>15 Minutes</option>
+                    <option value={30}>30 Minutes</option>
+                    <option value={45}>45 Minutes</option>
+                    <option value={60}>60 Minutes</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Deadline / Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDateInput}
+                    onChange={(e) => setDueDateInput(e.target.value)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {/* Grade & Section */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Target Grade
+                  </label>
+                  <select
+                    value={targetGradeInput ?? ""}
+                    onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
+                    disabled={!isOnlineToggle}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  >
+                    <option value="">All Grades</option>
+                    <option value={7}>Grade 7</option>
+                    <option value={8}>Grade 8</option>
+                    <option value={9}>Grade 9</option>
+                    <option value={10}>Grade 10</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Target Section
+                  </label>
+                  <input
+                    type="text"
+                    value={targetSectionInput}
+                    onChange={(e) => setTargetSectionInput(e.target.value)}
+                    disabled={!isOnlineToggle}
+                    placeholder="All sections"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setOnlineModalKey(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveOnlineSettings}
+                disabled={savingOnline}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-60"
+              >
+                {savingOnline ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                <span>Save CBT Settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MODAL: GRADE FTF OMR SCANNER WORKSTATION
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function GradeOMRModal({
+  initialKey,
+  onClose,
+  onSavedAssessment,
+}: {
+  initialKey: AnswerKeyRow | null;
+  onClose: () => void;
+  onSavedAssessment: () => void;
+}) {
+  const [keys, setKeys] = useState<AnswerKeyRow[]>([]);
+  const [selectedKeyId, setSelectedKeyId] = useState<string>(initialKey?.id || "");
+  const [learners, setLearners] = useState<LearnerOption[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // Scan file & bubble matrix
+  const [sheetFile, setSheetFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [manualAnswers, setManualAnswers] = useState<string[]>(new Array(40).fill(""));
+  const [evaluating, setEvaluating] = useState(false);
+  const [evalError, setEvalError] = useState("");
+  const [evalSuccess, setEvalSuccess] = useState<any | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [keysRes, learnersRes] = await Promise.all([
+          fetch("/api/teacher/answer-keys?subject=Reading"),
+          fetch("/api/teacher/learners"),
+        ]);
+        const keysJson = await parseJsonResponse(keysRes);
+        const learnersJson = await parseJsonResponse(learnersRes);
+
+        if (keysJson.success && Array.isArray(keysJson.data)) {
+          setKeys(keysJson.data);
+          if (!selectedKeyId && keysJson.data.length > 0) {
+            setSelectedKeyId(keysJson.data[0].id);
+          }
+        }
+        if (learnersJson.success && Array.isArray(learnersJson.data)) {
+          const mapped = learnersJson.data
+            .filter((l: any) => l.studentId)
+            .map((l: any) => ({
+              studentId: l.studentId,
+              name: l.name,
+              gradeLevel: l.gradeLevel,
+              section: l.section,
+            }));
+          setLearners(mapped);
+          if (mapped.length > 0) {
+            setSelectedStudentId(mapped[0].studentId);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load OMR setup data:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const activeKey = keys.find((k) => k.id === selectedKeyId) || initialKey;
+
+  const filteredLearners = learners.filter((l) => {
+    const matchGrade = gradeFilter ? String(l.gradeLevel) === gradeFilter : true;
+    const matchSection = sectionFilter ? l.section === sectionFilter : true;
+    return matchGrade && matchSection;
+  });
+
+  const handleFileChange = (file: File | null) => {
+    setSheetFile(file);
+    if (file) {
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(null);
+    }
+  };
+
+  const handleBubbleSelect = (idx: number, letter: string) => {
+    const updated = [...manualAnswers];
+    updated[idx] = updated[idx] === letter ? "" : letter;
+    setManualAnswers(updated);
+  };
+
+  const handleEvaluate = async () => {
+    if (!selectedStudentId) {
+      setEvalError("Please select a student from the class roster.");
+      return;
+    }
+    if (!activeKey) {
+      setEvalError("Please select a Reading questionnaire from the library.");
+      return;
+    }
+
+    setEvaluating(true);
+    setEvalError("");
+    setEvalSuccess(null);
+
+    try {
+      const formData = new FormData();
+      if (sheetFile) {
+        formData.append("file", sheetFile);
+      }
+      formData.append("studentId", selectedStudentId);
+      formData.append("answerKeyId", activeKey.id);
+      formData.append("subject", "Reading");
+      formData.append("title", activeKey.title);
+      formData.append("verifiedAnswers", JSON.stringify(manualAnswers));
+
+      const res = await fetch("/api/teacher/omr", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data) {
+        const d = json.data;
+        const total = d.totalItems || 40;
+        const scored = d.scoredItems ?? d.score ?? 0;
+        const pct = Math.round((scored / total) * 100);
+        const level = pct >= 80 ? "Independent" : pct >= 59 ? "Instructional" : "Frustration";
+
+        setEvalSuccess({
+          score: pct,
+          scoredItems: scored,
+          totalItems: total,
+          masteryLevel: level,
+          studentName: learners.find((l) => l.studentId === selectedStudentId)?.name || "Student",
+        });
+
+        // Callback to refresh history
+        setTimeout(() => {
+          onSavedAssessment();
+        }, 1200);
+      } else {
+        setEvalError(json.error || "OMR grading failed. Please review sheet bubbles.");
+      }
+    } catch {
+      setEvalError("Network error submitting OMR sheet.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="relative flex flex-col w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <ScanLine className="h-5 w-5 text-red-800" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Grade Face-to-Face Bubble Sheet (OMR)</h3>
+              <p className="text-[11px] text-slate-500">
+                Auto-evaluate 40-item printed bubble sheets with camera scanning and instant Phil-IRI mastery sync.
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white p-2 text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* 1. Selection: Answer Key & Learner */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                1. Select Questionnaire / Answer Key
+              </label>
+              <select
+                value={selectedKeyId}
+                onChange={(e) => setSelectedKeyId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
+              >
+                {keys.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.title} ({k.items} Items &bull; {k.passageTitle || "Reading"})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                2. Select Student from Class Roster
+              </label>
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
+              >
+                {filteredLearners.map((l) => (
+                  <option key={l.studentId} value={l.studentId}>
+                    {l.name} &bull; Grade {l.gradeLevel} - {l.section}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 2. File dropzone or camera snap */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 text-center hover:bg-slate-50">
+              <Camera className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+              <p className="text-xs font-bold text-slate-700">Upload or Capture Student OMR Bubble Sheet</p>
+              <p className="text-[11px] text-slate-400 mt-1">JPEG, PNG or Camera capture of the official 40-item sheet</p>
+              <label className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-900 cursor-pointer">
+                <Upload className="h-3.5 w-3.5" />
+                <span>Select Sheet Image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {previewUrl ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-100 p-2 flex flex-col items-center justify-center">
+                <img src={previewUrl} alt="Sheet Preview" className="max-h-40 w-auto rounded object-contain" />
+                <span className="text-[10px] text-slate-500 mt-1 font-semibold">{sheetFile?.name}</span>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-6 flex items-center justify-center text-xs text-slate-400 text-center">
+                Scanned sheet preview will appear here, or you can verify answers manually in the matrix below.
+              </div>
+            )}
+          </div>
+
+          {/* 3. Interactive 40-item verification matrix */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                40-Item Answer Bubble Verification Matrix
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Click any bubble to adjust detected marks
+              </span>
+            </div>
+
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+              {manualAnswers.map((val, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-1 rounded-lg border border-slate-100 bg-slate-50/70 p-1.5">
+                  <span className="text-[10px] font-bold text-slate-500">{idx + 1}</span>
+                  <div className="flex gap-0.5">
+                    {["A", "B", "C", "D"].map((letter) => (
+                      <button
+                        key={letter}
+                        type="button"
+                        onClick={() => handleBubbleSelect(idx, letter)}
+                        className={`h-5 w-5 rounded text-[10px] font-black transition-all ${
+                          val === letter
+                            ? "bg-red-800 text-white shadow-xs"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Error & Success Feedback */}
+          {evalError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+              {evalError}
+            </div>
+          )}
+
+          {evalSuccess && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+              <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-1" />
+              <h4 className="text-sm font-bold text-emerald-950">Grading Evaluated &amp; Persisted!</h4>
+              <p className="text-xs text-emerald-800 mt-1">
+                {evalSuccess.studentName} scored {evalSuccess.score}% ({evalSuccess.scoredItems}/{evalSuccess.totalItems}) &bull;{" "}
+                <span className="font-extrabold">{evalSuccess.masteryLevel}</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleEvaluate}
+            disabled={evaluating || Boolean(evalSuccess)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900 disabled:opacity-50"
+          >
+            {evaluating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            <span>{evaluating ? "Evaluating OMR…" : "Evaluate & Save Result"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MODAL: AUTHENTIC DEPED TEST PAPER PRINT PREVIEW
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function PrintTestPaperModal({
+  title,
+  passageTitle,
+  passageText,
+  questions,
+  targetGrade,
+  onClose,
+}: {
+  title: string;
+  passageTitle: string;
+  passageText: string;
+  questions: Question[];
+  targetGrade: string;
+  onClose: () => void;
+}) {
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-6 print:p-0 print:bg-white print:static backdrop-blur-xs">
+      <div className="relative flex flex-col w-full max-w-4xl max-h-[92vh] rounded-2xl bg-white shadow-2xl print:shadow-none print:max-h-none print:w-full print:rounded-none overflow-hidden">
+        {/* Top Control Bar (Hidden when printing) */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3 print:hidden shrink-0">
+          <div className="flex items-center gap-2">
+            <Printer className="h-4 w-4 text-red-800" />
+            <span className="text-xs font-bold text-slate-800">
+              Printable DepEd Questionnaire Preview ({questions.length} Items)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900 transition-all cursor-pointer"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>Print Questionnaire</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Printable Examination Booklet Body */}
+        <div className="flex-1 overflow-y-auto p-6 sm:p-10 print:p-0 print:overflow-visible font-sans text-slate-900 select-text">
+          {/* Official DepEd School Header */}
+          <div className="text-center flex flex-col items-center justify-center border-b-2 border-slate-900 pb-4">
+            <img
+              src="/aral-logo.png"
+              alt="School Logo"
+              className="h-14 w-14 object-contain mb-1.5 drop-shadow-xs"
+            />
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600 leading-tight">
+              Republic of the Philippines &bull; Department of Education
+            </p>
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600 leading-tight">
+              Region IV-A CALABARZON &bull; Division of Cavite Province
+            </p>
+            <h2 className="text-base sm:text-lg font-black tracking-wide uppercase text-slate-900 mt-1">
+              GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+            </h2>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 mt-0.5">
+              {title}
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Phil-IRI Reading Diagnostic &bull; Grade {targetGrade || 7} &bull; {questions.length} Items Multiple Choice
+            </p>
+          </div>
+
+          {/* Student Information Fields */}
+          <div className="my-4 grid grid-cols-2 gap-x-8 gap-y-2 text-xs font-semibold text-slate-900 border-b border-slate-900 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">NAME:</span>
+              <span className="flex-1 border-b border-slate-500 border-dashed" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">SECTION:</span>
+              <span className="flex-1 border-b border-slate-500 border-dashed" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">DATE:</span>
+              <span className="flex-1 border-b border-slate-500 border-dashed" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">SCORE:</span>
+              <span className="flex-1 border-b border-slate-500 border-dashed text-right font-bold pr-2">
+                /{questions.length}
+              </span>
+            </div>
+          </div>
+
+          {/* General Directions */}
+          <div className="mb-4 text-xs text-slate-800 italic bg-slate-50 p-2.5 rounded border border-slate-200">
+            <span className="font-bold not-italic text-slate-900">General Directions:</span> Read the passage silently and carefully. Choose the letter of the correct answer for each question and blacken the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
+          </div>
+
+          {/* Reading Selection Frame */}
+          {passageText && (
+            <div className="mb-6 rounded-xl border-2 border-slate-800 p-4 sm:p-5 text-xs text-slate-900">
+              <div className="flex items-center justify-between border-b border-slate-300 pb-2 mb-3">
+                <h4 className="text-sm font-extrabold text-slate-900 uppercase">
+                  Reading Selection: {passageTitle}
+                </h4>
+                <span className="text-[10px] font-semibold text-slate-600">
+                  {passageText.trim().split(/\s+/).length} Words
+                </span>
+              </div>
+              <div className="whitespace-pre-line font-serif text-[13px] leading-relaxed text-slate-800">
+                {passageText}
+              </div>
+            </div>
+          )}
+
+          {/* Grouped Question Parts */}
+          <div className="space-y-6">
+            {/* Part I: Literal */}
+            {questions.filter((q) => q.category === "Literal").length > 0 && (
+              <div>
+                <div className="bg-slate-100 px-3 py-1.5 border-l-4 border-slate-900 font-bold text-xs uppercase tracking-wider text-slate-900 mb-3">
+                  Part I: Literal Comprehension (Direct Recall &amp; Explicit Facts)
+                </div>
+                <div className="space-y-4">
+                  {questions
+                    .filter((q) => q.category === "Literal")
+                    .map((q) => {
+                      const overallIdx = questions.indexOf(q);
+                      return (
+                        <div key={q.id} className="text-xs text-slate-900 break-inside-avoid">
+                          <p className="font-semibold mb-1.5 leading-snug">
+                            <span className="font-bold mr-1">{overallIdx + 1}.</span>
+                            {q.question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-4">
+                            {q.options.map((opt, oi) => (
+                              <div key={oi} className="flex items-start gap-1.5">
+                                <span className="font-bold">{String.fromCharCode(65 + oi)}.</span>
+                                <span className="leading-tight">{opt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Part II: Inferential */}
+            {questions.filter((q) => q.category === "Inferential").length > 0 && (
+              <div className="pt-2">
+                <div className="bg-slate-100 px-3 py-1.5 border-l-4 border-slate-900 font-bold text-xs uppercase tracking-wider text-slate-900 mb-3">
+                  Part II: Inferential Comprehension (Reasoning &amp; Implied Outcomes)
+                </div>
+                <div className="space-y-4">
+                  {questions
+                    .filter((q) => q.category === "Inferential")
+                    .map((q) => {
+                      const overallIdx = questions.indexOf(q);
+                      return (
+                        <div key={q.id} className="text-xs text-slate-900 break-inside-avoid">
+                          <p className="font-semibold mb-1.5 leading-snug">
+                            <span className="font-bold mr-1">{overallIdx + 1}.</span>
+                            {q.question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-4">
+                            {q.options.map((opt, oi) => (
+                              <div key={oi} className="flex items-start gap-1.5">
+                                <span className="font-bold">{String.fromCharCode(65 + oi)}.</span>
+                                <span className="leading-tight">{opt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Part III: Vocabulary */}
+            {questions.filter((q) => q.category === "Vocabulary").length > 0 && (
+              <div className="pt-2">
+                <div className="bg-slate-100 px-3 py-1.5 border-l-4 border-slate-900 font-bold text-xs uppercase tracking-wider text-slate-900 mb-3">
+                  Part III: Vocabulary &amp; Word Study (Context Clues &amp; Morphology)
+                </div>
+                <div className="space-y-4">
+                  {questions
+                    .filter((q) => q.category === "Vocabulary")
+                    .map((q) => {
+                      const overallIdx = questions.indexOf(q);
+                      return (
+                        <div key={q.id} className="text-xs text-slate-900 break-inside-avoid">
+                          <p className="font-semibold mb-1.5 leading-snug">
+                            <span className="font-bold mr-1">{overallIdx + 1}.</span>
+                            {q.question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-4">
+                            {q.options.map((opt, oi) => (
+                              <div key={oi} className="flex items-start gap-1.5">
+                                <span className="font-bold">{String.fromCharCode(65 + oi)}.</span>
+                                <span className="leading-tight">{opt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Part IV: Critical */}
+            {questions.filter((q) => q.category === "Critical").length > 0 && (
+              <div className="pt-2">
+                <div className="bg-slate-100 px-3 py-1.5 border-l-4 border-slate-900 font-bold text-xs uppercase tracking-wider text-slate-900 mb-3">
+                  Part IV: Critical &amp; Evaluative (Theme, Purpose &amp; Author Craft)
+                </div>
+                <div className="space-y-4">
+                  {questions
+                    .filter((q) => q.category === "Critical")
+                    .map((q) => {
+                      const overallIdx = questions.indexOf(q);
+                      return (
+                        <div key={q.id} className="text-xs text-slate-900 break-inside-avoid">
+                          <p className="font-semibold mb-1.5 leading-snug">
+                            <span className="font-bold mr-1">{overallIdx + 1}.</span>
+                            {q.question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-4">
+                            {q.options.map((opt, oi) => (
+                              <div key={oi} className="flex items-start gap-1.5">
+                                <span className="font-bold">{String.fromCharCode(65 + oi)}.</span>
+                                <span className="leading-tight">{opt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DepEd End Footer */}
+          <div className="mt-8 pt-4 border-t border-slate-400 text-center text-[10px] text-slate-500 font-medium">
+            *** End of Examination &bull; DepEd Region IV-A CALABARZON Phil-IRI Secondary Diagnostics ***
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .fixed, .fixed * {
+            visibility: visible;
+          }
+          .fixed {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            background: white !important;
+            padding: 0 !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MODAL: LIVE 1-ON-1 ON-SCREEN READING WORKSTATION
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function OnScreenWorkstation({
+  passageTitle,
+  passageText,
+  questions,
+  learners,
+  onExit,
+  onSavedAssessment,
+}: {
+  passageTitle: string;
+  passageText: string;
+  questions: Question[];
+  learners: LearnerOption[];
+  onExit: () => void;
+  onSavedAssessment: () => void;
+}) {
+  const [step, setStep] = useState<"setup" | "reading" | "quiz" | "results">("setup");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState("7");
+  const [selectedSection, setSelectedSection] = useState("");
+
+  const [readingTimer, setReadingTimer] = useState(0);
+  const [isReadingActive, setIsReadingActive] = useState(false);
+
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isReadingActive) {
+      interval = setInterval(() => {
+        setReadingTimer((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isReadingActive]);
+
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    learners
+      .filter((l) => !selectedGrade || String(l.gradeLevel) === selectedGrade)
+      .forEach((l) => {
+        if (l.section && l.section.trim()) set.add(l.section.trim());
+      });
+    return Array.from(set).sort();
+  }, [learners, selectedGrade]);
+
+  // Reset selectedSection if no longer valid under selectedGrade
+  useEffect(() => {
+    if (selectedSection && !availableSections.includes(selectedSection)) {
+      setSelectedSection("");
+    }
+  }, [availableSections, selectedSection]);
+
+  const filteredLearners = useMemo(() => {
+    return learners.filter((l) => {
+      const matchGrade = selectedGrade ? String(l.gradeLevel) === selectedGrade : true;
+      const matchSection = selectedSection ? l.section === selectedSection : true;
+      return matchGrade && matchSection;
+    });
+  }, [learners, selectedGrade, selectedSection]);
+
+  // Reset selectedStudentId if the student is no longer in filteredLearners
+  useEffect(() => {
+    if (selectedStudentId && !filteredLearners.some((l) => l.studentId === selectedStudentId)) {
+      setSelectedStudentId("");
+    }
+  }, [filteredLearners, selectedStudentId]);
+
+  const learner = learners.find((l) => l.studentId === selectedStudentId);
+
+  const handleStartReading = () => {
+    if (!selectedStudentId) {
+      alert("Please select a student from the class roster first.");
+      return;
+    }
+    setReadingTimer(0);
+    setIsReadingActive(true);
+    setStep("reading");
+  };
+
+  const handleFinishReading = () => {
+    setIsReadingActive(false);
+    setStep("quiz");
+  };
+
+  const wordCount = passageText.trim().split(/\s+/).length;
+  const silentWpm = Math.round((wordCount / Math.max(readingTimer, 1)) * 60);
+
+  const handleSelectOption = (optionIndex: number) => {
+    setAnswers((prev) => ({ ...prev, [currentQ]: optionIndex }));
+  };
+
+  const totalQuestions = questions.length;
+  const answeredCount = Object.keys(answers).length;
+
+  let scoredItems = 0;
+  questions.forEach((q, idx) => {
+    if (answers[idx] === q.correctIndex) scoredItems++;
+  });
+  const percentage = totalQuestions > 0 ? Math.round((scoredItems / totalQuestions) * 100) : 0;
+
+  const philIriLevel =
+    percentage >= 80 ? "Independent" : percentage >= 59 ? "Instructional" : "Frustration";
+
+  const handleSave = async () => {
+    if (!learner) return;
+    setSaving(true);
+    try {
+      const payload = {
+        studentId: learner.studentId,
+        type: "COMPREHENSION",
+        title: `Comprehension Check: ${passageTitle}`,
+        passageTitle,
+        score: percentage,
+        totalItems: totalQuestions,
+        scoredItems,
+        wpm: silentWpm,
+        durationSec: readingTimer,
+        masteryLevel: philIriLevel,
+        subject: "Reading",
+        deliveryMode: "on-screen",
+        subskills: [
+          { name: "Literal", status: philIriLevel, score: percentage },
+          { name: "Inferential", status: philIriLevel, score: percentage },
+          { name: "Vocabulary", status: philIriLevel, score: percentage },
+          { name: "Critical", status: philIriLevel, score: percentage },
+        ],
+      };
+
+      const res = await fetch("/api/teacher/assessments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await parseJsonResponse(res);
+      if (json.success) {
+        setSaveSuccess(true);
+        setTimeout(() => {
+          onSavedAssessment();
+        }, 1000);
+      }
+    } catch {
+      alert("Failed to save assessment.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 1. Setup View
+  if (step === "setup") {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-2xl mx-auto">
+        <div className="flex items-center gap-2 mb-4">
+          <Play className="h-5 w-5 text-red-800" />
+          <h3 className="text-base font-bold text-slate-900">Administer 1-on-1 On-Screen Assessment</h3>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Grade Level</label>
+              <select
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800"
+              >
+                <option value="7">Grade 7</option>
+                <option value="8">Grade 8</option>
+                <option value="9">Grade 9</option>
+                <option value="10">Grade 10</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">
+                Section
+              </label>
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">All sections ({availableSections.length} available)</option>
+                {availableSections.map((sec) => (
+                  <option key={sec} value={sec}>
+                    {sec}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500">Learner</label>
+            <select
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800"
+            >
+              <option value="">-- Choose student --</option>
+              {filteredLearners.map((l) => (
+                <option key={l.studentId} value={l.studentId}>
+                  {l.name} ({l.section})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <button onClick={onExit} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
+            Cancel
+          </button>
+          <button
+            onClick={handleStartReading}
+            disabled={!selectedStudentId}
+            className="rounded-xl bg-red-800 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900 disabled:opacity-50"
+          >
+            Start Silent Reading Timer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Reading Stage
+  if (step === "reading") {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl mx-auto space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">{passageTitle}</h3>
+            <p className="text-xs text-slate-500">Student: {learner?.name} &bull; {wordCount} Words</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3.5 py-1.5 border border-red-200 text-red-800 font-mono text-sm font-bold">
+            <Timer className="h-4 w-4" />
+            <span>{readingTimer}s</span>
+          </div>
+        </div>
+
+        <div className="font-serif text-sm sm:text-base leading-relaxed text-slate-800 whitespace-pre-line p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+          {passageText}
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          <button onClick={handleFinishReading} className="rounded-xl bg-red-800 px-6 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-red-900">
+            Finished Reading &rarr; Proceed to Questions
+          </button>
+          <button onClick={onExit} className="text-xs text-slate-400 hover:text-slate-600">
+            Exit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Questions Stage
+  if (step === "quiz") {
+    const q = questions[currentQ];
+    const currentAnswer = answers[currentQ];
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-3xl mx-auto space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <span className="text-xs font-bold text-slate-900">
+            Question {currentQ + 1} of {totalQuestions}
+          </span>
+          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getDomainBadge(q.category)}`}>
+            {q.category} Comprehension
+          </span>
+        </div>
+
+        {/* 40-Item Navigator */}
+        <div className="grid grid-cols-10 sm:grid-cols-20 gap-1 rounded-xl border border-slate-100 bg-slate-50 p-2">
+          {questions.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentQ(idx)}
+              className={`h-6 text-[10px] font-bold rounded ${
+                idx === currentQ
+                  ? "bg-red-800 text-white"
+                  : answers[idx] !== undefined
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white text-slate-600 border border-slate-200"
+              }`}
+            >
+              {idx + 1}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-sm font-bold text-slate-900">{q.question}</p>
+
+        <div className="space-y-2">
+          {q.options.map((opt, oi) => (
+            <button
+              key={oi}
+              onClick={() => handleSelectOption(oi)}
+              className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left text-xs transition-all ${
+                currentAnswer === oi
+                  ? "border-red-800 bg-red-50 text-red-900 font-semibold"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold">
+                {String.fromCharCode(65 + oi)}
+              </span>
+              <span>{opt}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+          <button
+            onClick={() => setCurrentQ((p) => Math.max(0, p - 1))}
+            disabled={currentQ === 0}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 disabled:opacity-30"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => {
+              if (currentQ < totalQuestions - 1) setCurrentQ((p) => p + 1);
+              else setStep("results");
+            }}
+            className="rounded-xl bg-red-800 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900"
+          >
+            {currentQ < totalQuestions - 1 ? "Next Question" : "Complete Assessment"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Results
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs max-w-xl mx-auto text-center space-y-4">
+      <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
+      <h3 className="text-lg font-bold text-slate-900">Comprehension Diagnostic Complete!</h3>
+      <p className="text-xs text-slate-500">{learner?.name} &bull; {passageTitle}</p>
+
+      <div className="py-2">
+        <span className="text-5xl font-black text-slate-900">{percentage}%</span>
+        <p className="text-xs text-slate-400 mt-1">{scoredItems} of {totalQuestions} Items Correct</p>
+        <span className={`inline-block mt-2 rounded-full border px-3 py-0.5 text-xs font-bold ${getMasteryColor(philIriLevel)}`}>
+          Phil-IRI Level: {philIriLevel}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-center gap-3 pt-2">
+        <button
+          onClick={handleSave}
+          disabled={saving || saveSuccess}
+          className="rounded-xl bg-red-800 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-red-900 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : saveSuccess ? "Saved to Profile!" : "Save Assessment Result"}
+        </button>
+        <button onClick={onExit} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700">
+          Exit
+        </button>
+      </div>
     </div>
   );
 }

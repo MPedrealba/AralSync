@@ -36,13 +36,16 @@ export async function POST(req: NextRequest) {
       studentId,
       title: rec.title,
       category: rec.subject || 'Learning',
-      type: TYPE_MAP[rec.kind] || 'Activity',
+      type: (rec.kind && TYPE_MAP[rec.kind]) || 'Activity',
       status: 'Not Started',
       assignedDate: new Date(),
       recommendationRef: rec._id,
       workbookUrl: rec.workbookUrl || null,
       tutorGuideUrl: rec.tutorGuideUrl || null,
       keyStage: rec.keyStage || null,
+      pageStart: rec.pageStart || null,
+      pageEnd: rec.pageEnd || null,
+      sessionInfo: rec.sessionInfo || null,
     });
 
     return ok({

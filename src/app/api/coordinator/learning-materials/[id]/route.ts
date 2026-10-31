@@ -6,6 +6,7 @@ import { ok, fail } from '@/lib/api';
 import connectDB from '../../../../../../database/db';
 import LearningMaterial from '../../../../../../models/LearningMaterial';
 import { logAudit } from '@/lib/audit';
+import { syncDynamicRecommendations } from '@/lib/dynamicRecommendations';
 
 /**
  * PATCH /api/coordinator/learning-materials/[id]
@@ -175,6 +176,8 @@ export async function PATCH(
       },
     });
 
+    await syncDynamicRecommendations().catch((err) => console.error('Failed to sync recommendations:', err));
+
     return ok({
       message: 'Learning material updated successfully.',
       material,
@@ -221,12 +224,16 @@ export async function DELETE(
         meta: { title: material.title, edition: material.edition },
       });
 
+      await syncDynamicRecommendations().catch((err) => console.error('Failed to sync recommendations:', err));
+
       return ok({ message: `Material "${material.title}" permanently deleted.` });
     }
 
     // Default: Soft-delete / Archive
     material.isActive = false;
     await material.save();
+
+    await syncDynamicRecommendations().catch((err) => console.error('Failed to sync recommendations:', err));
 
     await logAudit({
       actorId: coordinator.id,

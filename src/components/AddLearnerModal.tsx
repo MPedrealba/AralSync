@@ -7,6 +7,8 @@ import { parseJsonResponse } from "@/lib/safeFetch";
 interface TeacherOption {
   id: string;
   name: string;
+  assignedSubject?: string;
+  specialization?: string;
 }
 
 interface Props {
@@ -32,7 +34,9 @@ export default function AddLearnerModal({
   const [section, setSection] = useState("Rosal");
   const [isCustomSection, setIsCustomSection] = useState(false);
   const [customSectionText, setCustomSectionText] = useState("");
-  const [assignedTeacherId, setAssignedTeacherId] = useState("");
+  const [readingTeacherId, setReadingTeacherId] = useState("");
+  const [mathTeacherId, setMathTeacherId] = useState("");
+  const [scienceTeacherId, setScienceTeacherId] = useState("");
   const [riskLevel, setRiskLevel] = useState("Pending Assessment");
   const [guardian, setGuardian] = useState("");
   const [contact, setContact] = useState("");
@@ -47,6 +51,30 @@ export default function AddLearnerModal({
     }
     return availableSections;
   }, [gradeSectionsMap, gradeLevel, availableSections]);
+
+  // Reading: Teachers assigned to 'Reading', 'All', or with 'reading' specialization
+  const readingTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) =>
+        t.assignedSubject === "Reading" ||
+        t.assignedSubject === "All" ||
+        t.specialization === "reading"
+    );
+  }, [teachers]);
+
+  // Mathematics: Teachers assigned to 'Math' or 'All'
+  const mathTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) => t.assignedSubject === "Math" || t.assignedSubject === "All"
+    );
+  }, [teachers]);
+
+  // Science: Teachers assigned to 'Science' or 'All'
+  const scienceTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) => t.assignedSubject === "Science" || t.assignedSubject === "All"
+    );
+  }, [teachers]);
 
   if (!isOpen) return null;
 
@@ -87,7 +115,15 @@ export default function AddLearnerModal({
           name: name.trim(),
           gradeLevel: Number(gradeLevel) || 7,
           section: finalSection,
-          assignedTeacherId: assignedTeacherId || null,
+          assignedTeacherId: readingTeacherId || mathTeacherId || scienceTeacherId || null,
+          assignedTeachers: {
+            reading: readingTeacherId || null,
+            math: mathTeacherId || null,
+            science: scienceTeacherId || null,
+          },
+          readingTeacherId: readingTeacherId || null,
+          mathTeacherId: mathTeacherId || null,
+          scienceTeacherId: scienceTeacherId || null,
           riskLevel,
           guardian: guardian.trim() || undefined,
           contact: contact.trim() || undefined,
@@ -106,7 +142,9 @@ export default function AddLearnerModal({
       setGuardian("");
       setContact("");
       setAddress("");
-      setAssignedTeacherId("");
+      setReadingTeacherId("");
+      setMathTeacherId("");
+      setScienceTeacherId("");
       setRiskLevel("Pending Assessment");
       setIsCustomSection(false);
       setCustomSectionText("");
@@ -258,26 +296,111 @@ export default function AddLearnerModal({
             </div>
           </div>
 
-          {/* Teacher Assignment */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Assign to Teacher
-            </label>
-            <select
-              value={assignedTeacherId}
-              onChange={(e) => setAssignedTeacherId(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white"
-            >
-              <option value="">— Unassigned (Assign later) —</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[11px] text-gray-400">
-              Assigned teachers will immediately see this learner in their workstation.
+          {/* Subject-Specific Teacher Assignments (Reading, Math, Science) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Subject Teacher Assignments
+              </label>
+              <span className="text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
+                3 ARAL Subjects
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              Assign designated subject remedial teachers. Each teacher will immediately see this learner in their subject workstation.
             </p>
+
+            <div className="space-y-2.5">
+              {/* 1. Reading Teacher */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded bg-rose-100 text-[10px]">📖</span>
+                  <span>Reading Remedial Teacher</span>
+                </label>
+                <select
+                  value={readingTeacherId}
+                  onChange={(e) => setReadingTeacherId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white cursor-pointer"
+                >
+                  <option value="">— Unassigned (Assign later) —</option>
+                  {readingTeachers.map((t) => {
+                    const tag =
+                      t.assignedSubject === "Reading"
+                        ? " • Reading Specialist"
+                        : t.assignedSubject === "All"
+                        ? " • All Subjects"
+                        : t.assignedSubject
+                        ? ` • ${t.assignedSubject}`
+                        : "";
+                    return (
+                      <option key={`reading-${t.id}`} value={t.id}>
+                        {t.name}{tag}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 2. Mathematics Teacher */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded bg-blue-100 text-[10px]">📐</span>
+                  <span>Mathematics (Numeracy) Teacher</span>
+                </label>
+                <select
+                  value={mathTeacherId}
+                  onChange={(e) => setMathTeacherId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white cursor-pointer"
+                >
+                  <option value="">— Unassigned (Assign later) —</option>
+                  {mathTeachers.map((t) => {
+                    const tag =
+                      t.assignedSubject === "Math"
+                        ? " • Math Specialist"
+                        : t.assignedSubject === "All"
+                        ? " • All Subjects"
+                        : t.assignedSubject
+                        ? ` • ${t.assignedSubject}`
+                        : "";
+                    return (
+                      <option key={`math-${t.id}`} value={t.id}>
+                        {t.name}{tag}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 3. Science Teacher */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-100 text-[10px]">🔬</span>
+                  <span>Science Remedial Teacher</span>
+                </label>
+                <select
+                  value={scienceTeacherId}
+                  onChange={(e) => setScienceTeacherId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white cursor-pointer"
+                >
+                  <option value="">— Unassigned (Assign later) —</option>
+                  {scienceTeachers.map((t) => {
+                    const tag =
+                      t.assignedSubject === "Science"
+                        ? " • Science Specialist"
+                        : t.assignedSubject === "All"
+                        ? " • All Subjects"
+                        : t.assignedSubject
+                        ? ` • ${t.assignedSubject}`
+                        : "";
+                    return (
+                      <option key={`science-${t.id}`} value={t.id}>
+                        {t.name}{tag}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -347,8 +470,8 @@ export default function AddLearnerModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition-colors disabled:opacity-50"
+              disabled={loading || !lrn.trim() || !name.trim() || !(isCustomSection ? customSectionText.trim() : section.trim())}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               <span>{loading ? "Enrolling..." : "Enroll Learner"}</span>

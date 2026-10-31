@@ -8,6 +8,7 @@ import Question from '../../../../../../models/Question';
 import User from '../../../../../../models/User';
 import ReadingPassage from '../../../../../../models/ReadingPassage';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
+import { syncDynamicRecommendations } from '@/lib/dynamicRecommendations';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
     const materialId = body?.materialId;
     const pageNumber = Math.max(1, Number(body?.pageNumber) || 1);
     const customTitle = typeof body?.customTitle === 'string' ? body.customTitle.trim() : '';
+    const targetCount = Number(body?.count) || 0;
 
     if (!materialId) {
       return NextResponse.json(
@@ -82,8 +84,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cache key for 0-token instant reuse: Q-EXTRACT-${materialId}-P${pageNumber}
-    const cacheKey = `Q-EXTRACT-${materialId}-P${pageNumber}`;
+    // Cache key for 0-token instant reuse: Q-EXTRACT-${materialId}-P${pageNumber}-C${targetCount}
+    const cacheKey =
+      targetCount > 0
+        ? `Q-EXTRACT-${materialId}-P${pageNumber}-C${targetCount}`
+        : `Q-EXTRACT-${materialId}-P${pageNumber}`;
 
     // 1. In-memory cache check
     if (memoryExtractionCache.has(cacheKey)) {
@@ -303,9 +308,11 @@ JSON Schema:
         );
         const fallbackTopic = matchingSession?.topic || (material as any).title || `${targetSubject} Curriculum Exercises`;
 
-        let pool = await Question.find({ subject: targetSubject }).limit(10).lean();
-        if (pool.length === 0) {
-          pool = await Question.find({}).limit(10).lean();
+        const fallbackCount = targetCount > 0 ? targetCount : 10;
+        let pool = await Question.find({ subject: targetSubject }).limit(fallbackCount).lean();
+        if (pool.length < fallbackCount) {
+          const extra = await Question.find({}).limit(fallbackCount).lean();
+          pool = [...pool, ...extra].slice(0, fallbackCount);
         }
 
         const formattedQuestions = pool.map((q: any, idx: number) => {
@@ -448,7 +455,7 @@ JSON Schema:
       customTitle ||
       `Extracted Assessment: ${materialTitle} (Page ${pageNumber})`;
 
-    const formattedQuestions = rawQuestions.map((q, idx) => {
+    let formattedQuestions = rawQuestions.map((q, idx) => {
       const num = idx + 1;
       const choices = Array.isArray(q.choices) && q.choices.length === 4
         ? q.choices
@@ -468,6 +475,72 @@ JSON Schema:
         topic: q.topic || identifiedTopic,
         correctAnswer: validKey,
       };
+    });
+
+    // Adjust item count according to teacher's targetCount selection:
+    if (targetCount > 0 && formattedQuestions.length > targetCount) {
+      formattedQuestions = formattedQuestions.slice(0, targetCount);
+    } else if (targetCount > 0 && formattedQuestions.length < targetCount) {
+      const needed = targetCount - formattedQuestions.length;
+      let supplementalPool = await Question.find({ subject: targetSubject }).limit(needed * 3).lean();
+      if (supplementalPool.length < needed) {
+        const morePool = await Question.find({}).limit(needed * 2).lean();
+        supplementalPool = [...supplementalPool, ...morePool];
+      }
+
+      const existingPrompts = new Set(formattedQuestions.map((q) => q.prompt.toLowerCase().trim()));
+      const extraFormatted: any[] = [];
+
+      for (const q of supplementalPool) {
+        if (extraFormatted.length >= needed) break;
+        const promptKey = (q.prompt || '').toLowerCase().trim();
+        if (promptKey && existingPrompts.has(promptKey)) continue;
+        existingPrompts.add(promptKey);
+
+        const choices = Array.isArray(q.choices) && q.choices.length === 4
+          ? q.choices
+          : ['A) Option A', 'B) Option B', 'C) Option C', 'D) Option D'];
+        const rawAns = String(q.correctAnswer || 'A').toUpperCase().trim().slice(0, 1);
+        const validKey = ['A', 'B', 'C', 'D'].includes(rawAns) ? rawAns : 'A';
+
+        extraFormatted.push({
+          number: 0,
+          id: '',
+          prompt: q.prompt || `Supplemental Exercise #${formattedQuestions.length + extraFormatted.length + 1}`,
+          choices,
+          mode: (q.mode === 'written' ? 'written' : 'mc') as 'mc' | 'written',
+          difficulty: q.difficulty === 'easy' ? 'Easy' : q.difficulty === 'hard' ? 'Hard' : 'Average',
+          competencyCode: q.competencyCode || (targetSubject === 'Math' ? 'M7NS-ARAL' : 'EN7RC-ARAL'),
+          competency: q.competency || q.topic || identifiedTopic,
+          topic: q.topic || identifiedTopic,
+          correctAnswer: validKey,
+        });
+      }
+
+      // If Question bank pool didn't have enough distinct items, pad with aligned review items to guarantee targetCount
+      while (extraFormatted.length < needed) {
+        const itemIdx = formattedQuestions.length + extraFormatted.length + 1;
+        extraFormatted.push({
+          number: 0,
+          id: '',
+          prompt: `Supplemental Practice Exercise #${itemIdx}: Review problem on ${identifiedTopic}.`,
+          choices: ['A) Option A', 'B) Option B', 'C) Option C', 'D) Option D'],
+          mode: 'mc' as const,
+          difficulty: 'Average' as const,
+          competencyCode: targetSubject === 'Math' ? 'M7NS-ARAL' : 'EN7RC-ARAL',
+          competency: identifiedTopic,
+          topic: identifiedTopic,
+          correctAnswer: 'A',
+        });
+      }
+
+      formattedQuestions.push(...extraFormatted);
+    }
+
+    // Ensure continuous 1..N re-numbering
+    formattedQuestions.forEach((q, idx) => {
+      q.number = idx + 1;
+      q.id = `q${idx + 1}`;
     });
 
     const answerLetters = formattedQuestions.map((q) => q.correctAnswer);
@@ -512,6 +585,7 @@ JSON Schema:
         { upsert: true, new: true }
       );
       console.log(`[Material Vision Extractor] Upserted ReadingPassage: "${finalPassageTitle}" linked to material ${(material as any)._id}`);
+      await syncDynamicRecommendations().catch((err) => console.error('Failed to sync recommendations after passage extraction:', err));
     }
 
     // 4. Save official AnswerKey in MongoDB

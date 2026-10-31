@@ -16,6 +16,7 @@ import {
   LogOut,
   UserPlus,
   GraduationCap,
+  FileSpreadsheet,
   X,
 } from "lucide-react";
 import { useMobileNav } from "@/components/MobileNavContext";
@@ -53,6 +54,11 @@ const navSections = [
         name: "Learning Materials",
         href: "/coordinator/learning-materials",
         icon: BookOpen,
+      },
+      {
+        name: "e-Class Record Matrix",
+        href: "/coordinator/class-record",
+        icon: FileSpreadsheet,
       },
     ],
   },

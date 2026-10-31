@@ -15,11 +15,22 @@ import { logAudit } from '@/lib/audit';
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const actor = await requireAuth(req, ['coordinator']);
+    const actor = await requireAuth(req, ['coordinator', 'principal']);
     await connectDB();
 
     const body = await req.json();
-    const { learnerId, teacherId, gradeLevel, section } = body;
+    const {
+      learnerId,
+      teacherId,
+      gradeLevel,
+      section,
+      subject,
+      assignedTeachers,
+      readingTeacherId,
+      mathTeacherId,
+      scienceTeacherId,
+    } = body;
+    const normalizedSubject = subject ? String(subject).toLowerCase().trim() : null;
 
     // Resolve teacher (if teacherId provided and not 'unassigned' or null)
     let teacherDoc: any = null;
@@ -56,13 +67,90 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Learner record not found.' }, { status: 404 });
       }
 
+      const updateFields: Record<string, any> = {};
+
+      if (teacherId !== undefined) {
+        updateFields.assignedTeacherId = assignedTeacherId;
+        updateFields.assignedTeacherName = assignedTeacherName;
+      }
+
+      // Support subject-specific assignments
+      const reqReadingId = assignedTeachers?.reading !== undefined ? assignedTeachers.reading : readingTeacherId;
+      const reqMathId = assignedTeachers?.math !== undefined ? assignedTeachers.math : mathTeacherId;
+      const reqScienceId = assignedTeachers?.science !== undefined ? assignedTeachers.science : scienceTeacherId;
+
+      if (reqReadingId !== undefined) {
+        if (!reqReadingId || reqReadingId === 'unassigned') {
+          updateFields['assignedTeachers.reading'] = null;
+          updateFields.readingTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqReadingId)) {
+          const tDoc = await User.findById(reqReadingId);
+          if (tDoc) {
+            updateFields['assignedTeachers.reading'] = tDoc._id;
+            updateFields.readingTeacherName = tDoc.name;
+            if (!updateFields.assignedTeacherId) {
+              updateFields.assignedTeacherId = tDoc._id;
+              updateFields.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqMathId !== undefined) {
+        if (!reqMathId || reqMathId === 'unassigned') {
+          updateFields['assignedTeachers.math'] = null;
+          updateFields.mathTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqMathId)) {
+          const tDoc = await User.findById(reqMathId);
+          if (tDoc) {
+            updateFields['assignedTeachers.math'] = tDoc._id;
+            updateFields.mathTeacherName = tDoc.name;
+            if (!updateFields.assignedTeacherId) {
+              updateFields.assignedTeacherId = tDoc._id;
+              updateFields.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqScienceId !== undefined) {
+        if (!reqScienceId || reqScienceId === 'unassigned') {
+          updateFields['assignedTeachers.science'] = null;
+          updateFields.scienceTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqScienceId)) {
+          const tDoc = await User.findById(reqScienceId);
+          if (tDoc) {
+            updateFields['assignedTeachers.science'] = tDoc._id;
+            updateFields.scienceTeacherName = tDoc.name;
+            if (!updateFields.assignedTeacherId) {
+              updateFields.assignedTeacherId = tDoc._id;
+              updateFields.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (normalizedSubject === 'reading') {
+        updateFields['assignedTeachers.reading'] = assignedTeacherId;
+        updateFields.readingTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'math') {
+        updateFields['assignedTeachers.math'] = assignedTeacherId;
+        updateFields.mathTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'science') {
+        updateFields['assignedTeachers.science'] = assignedTeacherId;
+        updateFields.scienceTeacherName = assignedTeacherName;
+      } else if (teacherDoc?.assignedSubject) {
+        const subjKey = teacherDoc.assignedSubject.toLowerCase();
+        if (['reading', 'math', 'science'].includes(subjKey)) {
+          updateFields[`assignedTeachers.${subjKey}`] = assignedTeacherId;
+          updateFields[`${subjKey}TeacherName`] = assignedTeacherName;
+        }
+      }
+
       await LearnerRecord.updateOne(
         { _id: record._id },
         {
-          $set: {
-            assignedTeacherId,
-            assignedTeacherName,
-          },
+          $set: updateFields,
         }
       );
 
@@ -86,12 +174,12 @@ export async function PATCH(req: NextRequest) {
         success: true,
         message: assignedTeacherName
           ? `Assigned ${(record.studentId as any)?.name || 'Learner'} to ${assignedTeacherName}.`
-          : `Removed teacher assignment for ${(record.studentId as any)?.name || 'Learner'}.`,
+          : `Updated teacher assignments for ${(record.studentId as any)?.name || 'Learner'}.`,
         updatedCount: 1,
         data: {
           learnerId: record._id.toString(),
-          assignedTeacherId,
-          assignedTeacherName,
+          assignedTeacherId: updateFields.assignedTeacherId || assignedTeacherId,
+          assignedTeacherName: updateFields.assignedTeacherName || assignedTeacherName,
         },
       });
     }
@@ -106,11 +194,92 @@ export async function PATCH(req: NextRequest) {
         section: new RegExp(`^${trimmedSection}$`, 'i'),
       };
 
+      const batchUpdate: Record<string, any> = {};
+
+      if (teacherId !== undefined) {
+        batchUpdate.assignedTeacherId = assignedTeacherId;
+        batchUpdate.assignedTeacherName = assignedTeacherName;
+      }
+
+      // Subject-specific assignment resolving
+      const reqReadingId = assignedTeachers?.reading !== undefined ? assignedTeachers.reading : readingTeacherId;
+      const reqMathId = assignedTeachers?.math !== undefined ? assignedTeachers.math : mathTeacherId;
+      const reqScienceId = assignedTeachers?.science !== undefined ? assignedTeachers.science : scienceTeacherId;
+
+      if (reqReadingId !== undefined) {
+        if (!reqReadingId || reqReadingId === 'unassigned') {
+          batchUpdate['assignedTeachers.reading'] = null;
+          batchUpdate.readingTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqReadingId)) {
+          const tDoc = await User.findById(reqReadingId);
+          if (tDoc) {
+            batchUpdate['assignedTeachers.reading'] = tDoc._id;
+            batchUpdate.readingTeacherName = tDoc.name;
+            if (!batchUpdate.assignedTeacherId) {
+              batchUpdate.assignedTeacherId = tDoc._id;
+              batchUpdate.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqMathId !== undefined) {
+        if (!reqMathId || reqMathId === 'unassigned') {
+          batchUpdate['assignedTeachers.math'] = null;
+          batchUpdate.mathTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqMathId)) {
+          const tDoc = await User.findById(reqMathId);
+          if (tDoc) {
+            batchUpdate['assignedTeachers.math'] = tDoc._id;
+            batchUpdate.mathTeacherName = tDoc.name;
+            if (!batchUpdate.assignedTeacherId) {
+              batchUpdate.assignedTeacherId = tDoc._id;
+              batchUpdate.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqScienceId !== undefined) {
+        if (!reqScienceId || reqScienceId === 'unassigned') {
+          batchUpdate['assignedTeachers.science'] = null;
+          batchUpdate.scienceTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqScienceId)) {
+          const tDoc = await User.findById(reqScienceId);
+          if (tDoc) {
+            batchUpdate['assignedTeachers.science'] = tDoc._id;
+            batchUpdate.scienceTeacherName = tDoc.name;
+            if (!batchUpdate.assignedTeacherId) {
+              batchUpdate.assignedTeacherId = tDoc._id;
+              batchUpdate.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (normalizedSubject === 'reading') {
+        batchUpdate['assignedTeachers.reading'] = assignedTeacherId;
+        batchUpdate.readingTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'math') {
+        batchUpdate['assignedTeachers.math'] = assignedTeacherId;
+        batchUpdate.mathTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'science') {
+        batchUpdate['assignedTeachers.science'] = assignedTeacherId;
+        batchUpdate.scienceTeacherName = assignedTeacherName;
+      } else if (teacherDoc?.assignedSubject) {
+        const subjKey = teacherDoc.assignedSubject.toLowerCase();
+        if (['reading', 'math', 'science'].includes(subjKey)) {
+          batchUpdate[`assignedTeachers.${subjKey}`] = assignedTeacherId;
+          batchUpdate[`${subjKey}TeacherName`] = assignedTeacherName;
+        }
+      }
+
+      if (Object.keys(batchUpdate).length === 0) {
+        return NextResponse.json({ error: 'No teacher assignments provided.' }, { status: 400 });
+      }
+
       const result = await LearnerRecord.updateMany(filter, {
-        $set: {
-          assignedTeacherId,
-          assignedTeacherName,
-        },
+        $set: batchUpdate,
       });
 
       await logAudit({
@@ -131,9 +300,7 @@ export async function PATCH(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: assignedTeacherName
-          ? `Successfully assigned ${result.modifiedCount} Grade ${parsedGrade} - ${trimmedSection} learners to ${assignedTeacherName}.`
-          : `Unassigned ${result.modifiedCount} Grade ${parsedGrade} - ${trimmedSection} learners.`,
+        message: `Successfully assigned/updated ${result.modifiedCount} Grade ${parsedGrade} - ${trimmedSection} learners.`,
         updatedCount: result.modifiedCount,
       });
     }

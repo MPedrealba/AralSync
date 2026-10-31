@@ -29,6 +29,10 @@ import {
   Laptop,
   Globe,
   Clock,
+  FileCheck2,
+  TrendingUp,
+  Calendar,
+  Users,
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -40,11 +44,109 @@ const tabs = ["Results/History", "Generate Questionnaire", "Exam Library"] as co
 type Tab = (typeof tabs)[number];
 
 /* ──── Types ──── */
+export type AssessmentType = "quiz" | "exam" | "pre-test" | "post-test";
+
+export function renderAssessmentCategoryBadge(category?: string, title: string = "") {
+  const t = title.toLowerCase();
+  const cat = category || (
+    t.includes("pre-test") || t.includes("pretest") || t.includes("baseline")
+      ? "pre-test"
+      : t.includes("post-test") || t.includes("posttest") || t.includes("endline")
+      ? "post-test"
+      : t.includes("exam")
+      ? "exam"
+      : "quiz"
+  );
+
+  if (cat === "pre-test") {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+        <FileCheck2 className="h-3 w-3 text-amber-700" /> Pre-Test
+      </span>
+    );
+  }
+  if (cat === "post-test") {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+        <TrendingUp className="h-3 w-3 text-emerald-700" /> Post-Test
+      </span>
+    );
+  }
+  if (cat === "exam") {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-800 border border-purple-200">
+        <Award className="h-3 w-3 text-purple-700" /> Exam
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-900 border border-blue-200">
+      <FileText className="h-3 w-3 text-blue-700" /> Quiz
+    </span>
+  );
+}
+
+export function resolveAssessmentScopeType(category?: string, title: string = ""): AssessmentType {
+  const t = title.toLowerCase();
+  if (category === "pre-test" || category === "post-test" || category === "exam" || category === "quiz") {
+    return category;
+  }
+  if (t.includes("pre-test") || t.includes("pretest") || t.includes("baseline")) return "pre-test";
+  if (t.includes("post-test") || t.includes("posttest") || t.includes("endline")) return "post-test";
+  if (t.includes("exam")) return "exam";
+  return "quiz";
+}
+
+export function renderPreviewScopeBadge(category?: string, title: string = "") {
+  const cat = resolveAssessmentScopeType(category, title);
+
+  if (cat === "pre-test") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
+        <FileCheck2 className="h-3.5 w-3.5 text-amber-600" /> Diagnostic Pre-Test
+      </span>
+    );
+  }
+  if (cat === "post-test") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+        <TrendingUp className="h-3.5 w-3.5 text-emerald-600" /> Recovery Post-Test
+      </span>
+    );
+  }
+  if (cat === "exam") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-800 border border-purple-200">
+        <Award className="h-3.5 w-3.5 text-purple-600" /> Periodical Exam
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 border border-red-200">
+      <FileText className="h-3.5 w-3.5 text-red-700" /> Weekly Quiz
+    </span>
+  );
+}
+
+export function getSaveButtonLabels(type: AssessmentType) {
+  switch (type) {
+    case "pre-test":
+      return { save: "Save Pre-Test", saved: "Pre-Test Saved" };
+    case "post-test":
+      return { save: "Save Post-Test", saved: "Post-Test Saved" };
+    case "exam":
+      return { save: "Save Exam", saved: "Exam Saved" };
+    case "quiz":
+    default:
+      return { save: "Save Quiz", saved: "Quiz Saved" };
+  }
+}
+
 interface AssessmentRow {
   id: string;
   title: string;
   type: string;
-  assessmentCategory?: "quiz" | "exam";
+  assessmentCategory?: AssessmentType;
   topics?: string[];
   subject: string;
   studentName: string;
@@ -69,7 +171,8 @@ interface AnswerKeyRow {
   id: string;
   title: string;
   subject: string;
-  assessmentType?: "quiz" | "exam";
+  assessmentType?: AssessmentType;
+  assessmentCategory?: AssessmentType;
   topic?: string;
   topics?: string[];
   items: number;
@@ -182,7 +285,7 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
   const { query: search, setQuery: setSearch } = useSearch();
   const [subjectFilter, setSubjectFilter] = useState(assignedSubject !== "All" ? assignedSubject : "");
   const [gradeFilter, setGradeFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"" | "quiz" | "exam">("");
+  const [categoryFilter, setCategoryFilter] = useState<"" | AssessmentType>("");
   // Grading modal state
   const [grading, setGrading] = useState<AssessmentRow | null>(null);
   const [draftScores, setDraftScores] = useState<number[]>([]);
@@ -221,8 +324,16 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
       : true;
     const matchSubject = subjectFilter ? r.subject === subjectFilter : true;
     const matchGrade = gradeFilter ? r.gradeSection.includes(gradeFilter) : true;
-    const isExam = r.assessmentCategory === "exam" || r.title.toLowerCase().includes("exam");
-    const matchCategory = categoryFilter ? (categoryFilter === "exam" ? isExam : !isExam) : true;
+    const rawCat = r.assessmentCategory || (
+      r.title.toLowerCase().includes("pre-test") || r.title.toLowerCase().includes("pretest") || r.title.toLowerCase().includes("baseline")
+        ? "pre-test"
+        : r.title.toLowerCase().includes("post-test") || r.title.toLowerCase().includes("posttest") || r.title.toLowerCase().includes("endline")
+        ? "post-test"
+        : r.title.toLowerCase().includes("exam")
+        ? "exam"
+        : "quiz"
+    );
+    const matchCategory = categoryFilter ? rawCat === categoryFilter : true;
     return matchSearch && matchSubject && matchGrade && matchCategory;
   });
 
@@ -280,9 +391,11 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
           onChange={(e) => setCategoryFilter(e.target.value as any)}
           className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
         >
-          <option value="">All Formats (Quizzes & Exams)</option>
-          <option value="quiz">Weekly Quizzes Only (📝)</option>
-          <option value="exam">Comprehensive Exams Only (🏆)</option>
+          <option value="">All Formats (Quizzes, Tests & Exams)</option>
+          <option value="quiz">Weekly Quizzes (📝)</option>
+          <option value="pre-test">Diagnostic Pre-Tests (📋)</option>
+          <option value="post-test">Post-Tests & Endlines (📈)</option>
+          <option value="exam">Comprehensive Exams (🏆)</option>
         </select>
         <select
           value={subjectFilter}
@@ -369,20 +482,11 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
                   text: "text-slate-600",
                   border: "border-slate-200",
                 };
-                const isExam = r.assessmentCategory === "exam" || r.title.toLowerCase().includes("exam");
                 return (
                   <tr key={r.id} className="transition-colors hover:bg-slate-50/70">
                     <td className="px-6 py-4 text-sm font-medium text-slate-800">
                       <div className="flex items-center gap-2">
-                        {isExam ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                            <Award className="h-3 w-3" /> Exam
-                          </span>
-                        ) : (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-900 border border-red-200">
-                            <FileText className="h-3 w-3" /> Quiz
-                          </span>
-                        )}
+                        {renderAssessmentCategoryBadge(r.assessmentCategory, r.title)}
                         <span className="font-semibold text-slate-900">{r.title}</span>
                       </div>
                       {r.topics && r.topics.length > 0 && (
@@ -563,12 +667,12 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
 
   // Search and format filter
   const [keySearch, setKeySearch] = useState("");
-  const [keyCategoryFilter, setKeyCategoryFilter] = useState<"" | "quiz" | "exam">("");
+  const [keyCategoryFilter, setKeyCategoryFilter] = useState<"" | AssessmentType>("");
 
   // Manual "Add Answer Key" modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newAssessmentType, setNewAssessmentType] = useState<"quiz" | "exam">("quiz");
+  const [newAssessmentType, setNewAssessmentType] = useState<AssessmentType>("quiz");
   const [newSubject, setNewSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [newItems, setNewItems] = useState(20);
   const [answersText, setAnswersText] = useState("");
@@ -583,78 +687,19 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanTitle, setScanTitle] = useState("");
-  const [scanAssessmentType, setScanAssessmentType] = useState<"quiz" | "exam">("quiz");
+  const [scanAssessmentType, setScanAssessmentType] = useState<AssessmentType>("quiz");
   const [scanSubject, setScanSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [scanItems, setScanItems] = useState(20);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [detected, setDetected] = useState<{ item: number; letter: string | null }[] | null>(null);
 
-  // Online CBT Settings Modal State
+  // Online Assignment Modal State
   const [onlineModalKey, setOnlineModalKey] = useState<AnswerKeyRow | null>(null);
-  const [isOnlineToggle, setIsOnlineToggle] = useState(false);
-  const [timeLimitInput, setTimeLimitInput] = useState(0);
-  const [targetSectionInput, setTargetSectionInput] = useState("");
-  const [targetGradeInput, setTargetGradeInput] = useState<number | null>(null);
-  const [dueDateInput, setDueDateInput] = useState("");
-  const [savingOnline, setSavingOnline] = useState(false);
   const [onlineSuccessToast, setOnlineSuccessToast] = useState<string | null>(null);
 
   const openOnlineModal = (ak: AnswerKeyRow) => {
     setOnlineModalKey(ak);
-    setIsOnlineToggle(Boolean(ak.isOnline));
-    setTimeLimitInput(Number(ak.timeLimitMinutes) || 0);
-    setTargetSectionInput(ak.targetSection || "");
-    setTargetGradeInput(ak.targetGrade ?? null);
-    setDueDateInput(ak.dueDate ? ak.dueDate.slice(0, 10) : "");
-  };
-
-  const handleSaveOnlineSettings = async () => {
-    if (!onlineModalKey) return;
-    setSavingOnline(true);
-    try {
-      const res = await fetch(`/api/teacher/answer-keys/${onlineModalKey.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          isOnline: isOnlineToggle,
-          timeLimitMinutes: timeLimitInput,
-          targetSection: targetSectionInput,
-          targetGrade: targetGradeInput,
-          dueDate: dueDateInput ? new Date(dueDateInput) : null,
-        }),
-      });
-      const json = await parseJsonResponse(res);
-      if (json.success) {
-        setKeys((prev) =>
-          prev.map((k) =>
-            k.id === onlineModalKey.id
-              ? {
-                  ...k,
-                  isOnline: isOnlineToggle,
-                  timeLimitMinutes: timeLimitInput,
-                  targetSection: targetSectionInput,
-                  targetGrade: targetGradeInput,
-                  dueDate: dueDateInput || null,
-                }
-              : k
-          )
-        );
-        setOnlineSuccessToast(
-          isOnlineToggle
-            ? `"${onlineModalKey.title}" is now published online for students!`
-            : `"${onlineModalKey.title}" set to Paper Only (OMR).`
-        );
-        setTimeout(() => setOnlineSuccessToast(null), 4000);
-        setOnlineModalKey(null);
-      } else {
-        alert(json.error || "Failed to update online exam settings.");
-      }
-    } catch {
-      alert("Network error updating online exam settings.");
-    } finally {
-      setSavingOnline(false);
-    }
   };
 
   useEffect(() => {
@@ -702,7 +747,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
   }: {
     title: string;
     subject: string;
-    assessmentType?: "quiz" | "exam";
+    assessmentType?: AssessmentType;
     answers: (string | null)[];
   }): Promise<boolean> => {
     const res = await fetch("/api/teacher/answer-keys", {
@@ -876,9 +921,16 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
         (ak.topic && ak.topic.toLowerCase().includes(term)) ||
         (ak.topics && ak.topics.some((t) => t.toLowerCase().includes(term)))
       : true;
-    const isExam = ak.assessmentType === "exam" || ak.title.toLowerCase().includes("exam");
-    const matchesCategory =
-      !keyCategoryFilter ? true : keyCategoryFilter === "exam" ? isExam : !isExam;
+    const rawCat = ak.assessmentType || ak.assessmentCategory || (
+      ak.title.toLowerCase().includes("pre-test") || ak.title.toLowerCase().includes("pretest") || ak.title.toLowerCase().includes("baseline")
+        ? "pre-test"
+        : ak.title.toLowerCase().includes("post-test") || ak.title.toLowerCase().includes("posttest") || ak.title.toLowerCase().includes("endline")
+        ? "post-test"
+        : ak.title.toLowerCase().includes("exam")
+        ? "exam"
+        : "quiz"
+    );
+    const matchesCategory = !keyCategoryFilter ? true : rawCat === keyCategoryFilter;
     const matchesSubject =
       assignedSubject && assignedSubject !== "All"
         ? (ak.subject || "").toLowerCase() === assignedSubject.toLowerCase()
@@ -931,9 +983,11 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
             onChange={(e) => setKeyCategoryFilter(e.target.value as any)}
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none shadow-sm"
           >
-            <option value="">All Formats (Quizzes & Exams)</option>
-            <option value="quiz">Weekly Quizzes Only (📝)</option>
-            <option value="exam">Comprehensive Exams Only (🏆)</option>
+            <option value="">All Formats (Quizzes, Tests & Exams)</option>
+            <option value="quiz">Weekly Quizzes (📝)</option>
+            <option value="pre-test">Diagnostic Pre-Tests (📋)</option>
+            <option value="post-test">Post-Tests & Endlines (📈)</option>
+            <option value="exam">Comprehensive Exams (🏆)</option>
           </select>
         </div>
 
@@ -999,7 +1053,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
         ) : (
           <div className="space-y-3">
             {filteredKeys.map((ak) => {
-              const isExam = ak.assessmentType === "exam" || ak.title.toLowerCase().includes("exam");
+              const category = ak.assessmentType || ak.assessmentCategory;
               return (
                 <div
                   key={ak.id}
@@ -1007,26 +1061,16 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                 >
                   <div className="flex items-center gap-4">
                     <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-                        isExam ? "bg-emerald-50 text-emerald-600" : "bg-purple-50 text-purple-600"
-                      }`}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 text-slate-700 border border-slate-200"
                     >
                       <FileText className="h-5 w-5" />
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {isExam ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                            🏆 Exam
-                          </span>
-                        ) : (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
-                            📝 Quiz
-                          </span>
-                        )}
+                        {renderAssessmentCategoryBadge(category, ak.title)}
                         {ak.isOnline ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
-                            <Globe className="h-3 w-3" /> Published Online
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 border border-red-200">
+                            <Globe className="h-3 w-3" /> Assigned Online
                           </span>
                         ) : (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200">
@@ -1034,7 +1078,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                           </span>
                         )}
                         {ak.isOnline && ak.timeLimitMinutes ? (
-                          <span className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5">
+                          <span className="text-[10px] font-bold text-red-800 flex items-center gap-0.5">
                             <Clock className="h-2.5 w-2.5" /> {ak.timeLimitMinutes}m limit
                           </span>
                         ) : null}
@@ -1081,13 +1125,13 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                       onClick={() => openOnlineModal(ak)}
                       className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] ${
                         ak.isOnline
-                          ? "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          ? "border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-red-50/50 hover:text-red-900 hover:border-red-200"
                       }`}
-                      title="Configure Online CBT & Distance Learning Delivery"
+                      title="Assign this assessment to students online with section, date and time"
                     >
-                      <Laptop className="h-3.5 w-3.5 text-blue-600" />
-                      <span>{ak.isOnline ? "Online Settings" : "Publish Online"}</span>
+                      <Globe className="h-3.5 w-3.5 text-red-800" />
+                      <span>{ak.isOnline ? "Online Settings" : "Assign Online"}</span>
                     </button>
                     <button
                       type="button"
@@ -1169,6 +1213,8 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   >
                     <option value="quiz">Weekly Quiz</option>
+                    <option value="pre-test">Pre-Test (Diagnostic)</option>
+                    <option value="post-test">Post-Test (Endline)</option>
                     <option value="exam">Comprehensive Exam</option>
                   </select>
                 </div>
@@ -1274,6 +1320,8 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                     >
                       <option value="quiz">Weekly Quiz</option>
+                      <option value="pre-test">Pre-Test (Diagnostic)</option>
+                      <option value="post-test">Post-Test (Endline)</option>
                       <option value="exam">Comprehensive Exam</option>
                     </select>
                   </div>
@@ -1444,176 +1492,374 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
         <ExamViewerModal
           examKey={viewingExamKey}
           onClose={() => setViewingExamKey(null)}
+          onKeyUpdated={(updated) => {
+            setKeys((prev) =>
+              prev.map((k) => (k.id === updated.id ? { ...k, ...updated } : k))
+            );
+          }}
         />
       )}
       {onlineModalKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
-                  <Laptop className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Online CBT Delivery Settings</h3>
-                  <p className="text-xs text-slate-500 line-clamp-1">{onlineModalKey.title}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOnlineModalKey(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Online Delivery Toggle */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900">Online Examination Status</span>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Allow students to take this assessment in their student portal at /student/exams.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsOnlineToggle((v) => !v)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      isOnlineToggle ? "bg-blue-600" : "bg-slate-300"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                        isOnlineToggle ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center gap-2">
-                  {isOnlineToggle ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700">
-                      <Globe className="h-3.5 w-3.5" />
-                      Active — Students can access and take this test online.
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                      📄 Paper Only — Assessment is restricted to in-person OMR sheets.
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Timing & Scheduling */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Time Limit (Minutes)
-                  </label>
-                  <select
-                    value={timeLimitInput}
-                    onChange={(e) => setTimeLimitInput(Number(e.target.value) || 0)}
-                    disabled={!isOnlineToggle}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
-                  >
-                    <option value={0}>Untimed (No Time Limit)</option>
-                    <option value={15}>15 Minutes (Short Quiz)</option>
-                    <option value={30}>30 Minutes</option>
-                    <option value={45}>45 Minutes</option>
-                    <option value={60}>60 Minutes (1 Hour)</option>
-                    <option value={90}>90 Minutes</option>
-                    <option value={120}>120 Minutes (2 Hours)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Due Date & Deadline
-                  </label>
-                  <input
-                    type="date"
-                    value={dueDateInput}
-                    onChange={(e) => setDueDateInput(e.target.value)}
-                    disabled={!isOnlineToggle}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              {/* Target Audience / Student Filtering */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Target Grade
-                  </label>
-                  <select
-                    value={targetGradeInput ?? ""}
-                    onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
-                    disabled={!isOnlineToggle}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
-                  >
-                    <option value="">All Grade Levels</option>
-                    <option value={7}>Grade 7</option>
-                    <option value={8}>Grade 8</option>
-                    <option value={9}>Grade 9</option>
-                    <option value={10}>Grade 10</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Target Section (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={targetSectionInput}
-                    onChange={(e) => setTargetSectionInput(e.target.value)}
-                    disabled={!isOnlineToggle}
-                    placeholder="e.g. Rosal (leave blank for all)"
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-[11px] text-blue-900 leading-relaxed">
-                💡 <strong>Instant Auto-Grading:</strong> Submitting an online exam immediately computes mastery levels, updates student recovery profiles, and streams results into your Teacher and Coordinator dashboards.
-              </div>
-            </div>
-
-            <div className="mt-6 pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setOnlineModalKey(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveOnlineSettings}
-                disabled={savingOnline}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 active:scale-95 disabled:opacity-60 transition-all"
-              >
-                {savingOnline ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Saving…</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-3.5 w-3.5" />
-                    <span>Save Settings</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AssignOnlineModal
+          examKey={onlineModalKey}
+          onClose={() => setOnlineModalKey(null)}
+          onSaved={(updated) => {
+            setKeys((prev) =>
+              prev.map((k) => (k.id === updated.id ? { ...k, ...updated } : k))
+            );
+            setOnlineSuccessToast(
+              updated.isOnline
+                ? `"${updated.title}" is now assigned online${updated.targetSection ? ` to Section ${updated.targetSection}` : ""}!`
+                : `"${updated.title}" switched to Paper-Only mode.`
+            );
+          }}
+        />
       )}
     </>
+  );
+}
+
+/* ━━━ MODAL: ASSIGN ASSESSMENT ONLINE ━━━ */
+interface AssignOnlineModalProps {
+  examKey: {
+    id: string;
+    title: string;
+    isOnline?: boolean;
+    timeLimitMinutes?: number;
+    dueDate?: string | Date | null;
+    targetGrade?: number | null;
+    targetSection?: string | null;
+    subject?: string;
+    items?: number;
+    [key: string]: any;
+  } | null;
+  onClose: () => void;
+  onSaved?: (updatedKey: any) => void;
+}
+
+const toDatetimeLocal = (val?: string | Date | null): string => {
+  if (!val) return "";
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const mins = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${mins}`;
+};
+
+function AssignOnlineModal({
+  examKey,
+  onClose,
+  onSaved,
+}: AssignOnlineModalProps) {
+  const [isOnlineToggle, setIsOnlineToggle] = useState<boolean>(
+    examKey?.isOnline !== undefined ? Boolean(examKey.isOnline) : true
+  );
+  const [timeLimitInput, setTimeLimitInput] = useState<number>(examKey?.timeLimitMinutes ?? 0);
+  const [dueDateInput, setDueDateInput] = useState<string>(toDatetimeLocal(examKey?.dueDate));
+  const [targetGradeInput, setTargetGradeInput] = useState<number | null>(examKey?.targetGrade ?? null);
+  const [targetSectionInput, setTargetSectionInput] = useState<string>(examKey?.targetSection ?? "");
+  const [sectionsList, setSectionsList] = useState<string[]>([]);
+  const [customSectionMode, setCustomSectionMode] = useState<boolean>(false);
+  const [savingOnline, setSavingOnline] = useState<boolean>(false);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/teacher/learners")
+      .then((r) => r.json())
+      .then((d) => {
+        if (isMounted && d.success && Array.isArray(d.data)) {
+          const set = new Set<string>();
+          d.data.forEach((l: any) => {
+            if (l.section && typeof l.section === "string") set.add(l.section.trim());
+          });
+          const list = Array.from(set).filter(Boolean).sort();
+          setSectionsList(list);
+          if (examKey?.targetSection && !list.includes(examKey.targetSection) && examKey.targetSection !== "") {
+            setCustomSectionMode(true);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [examKey?.targetSection]);
+
+  if (!examKey) return null;
+
+  const handleSaveOnlineSettings = async () => {
+    setSavingOnline(true);
+    setOnlineError(null);
+    try {
+      const res = await fetch(`/api/teacher/answer-keys/${examKey.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isOnline: isOnlineToggle,
+          timeLimitMinutes: timeLimitInput,
+          dueDate: dueDateInput ? new Date(dueDateInput).toISOString() : null,
+          targetGrade: targetGradeInput,
+          targetSection: targetSectionInput.trim(),
+        }),
+      });
+      const json = await parseJsonResponse(res);
+      if (json.success && json.data) {
+        onSaved?.(json.data);
+        onClose();
+      } else {
+        setOnlineError(json.error || "Failed to save online assignment settings.");
+      }
+    } catch (err) {
+      console.error("Save online assignment settings error:", err);
+      setOnlineError("Network error while saving settings. Please try again.");
+    } finally {
+      setSavingOnline(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs">
+      <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-800 border border-red-200">
+              <Globe className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Assign Assessment Online</h3>
+              <p className="text-xs text-slate-500 line-clamp-1">{examKey.title}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Online Assignment Toggle */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-slate-900">Online Assignment Status</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Make this assessment available in the Student Portal for digital taking.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOnlineToggle((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isOnlineToggle ? "bg-red-800" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                    isOnlineToggle ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-center gap-2">
+              {isOnlineToggle ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-red-800">
+                  <Globe className="h-3.5 w-3.5" />
+                  Assigned Online — Eligible students in the designated section can take this test online.
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                  📄 Paper Only — Assessment is restricted to printed in-person DepEd bubble sheets.
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Section & Grade Assignment */}
+          <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+              <Users className="h-4 w-4 text-red-800" />
+              <span>Target Class &amp; Section</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Assigned Section
+                </label>
+                {customSectionMode ? (
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={targetSectionInput}
+                      onChange={(e) => setTargetSectionInput(e.target.value)}
+                      disabled={!isOnlineToggle}
+                      placeholder="e.g. Rosal, Diamond, Section A"
+                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomSectionMode(false);
+                        setTargetSectionInput("");
+                      }}
+                      className="text-[10px] text-red-800 hover:text-red-900 hover:underline font-semibold"
+                    >
+                      ← Choose from existing sections
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <select
+                      value={targetSectionInput}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setCustomSectionMode(true);
+                          setTargetSectionInput("");
+                        } else {
+                          setTargetSectionInput(e.target.value);
+                        }
+                      }}
+                      disabled={!isOnlineToggle}
+                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer"
+                    >
+                      <option value="">All Sections (Entire Grade Level)</option>
+                      {sectionsList.map((sec) => (
+                        <option key={sec} value={sec}>
+                          Section: {sec}
+                        </option>
+                      ))}
+                      <option value="__custom__">✏️ Enter custom section name…</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400">
+                      {targetSectionInput
+                        ? `Only students in Section "${targetSectionInput}" will receive this online test.`
+                        : "Open to all student sections in the selected grade."}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Target Grade Level
+                </label>
+                <select
+                  value={targetGradeInput ?? ""}
+                  onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
+                  disabled={!isOnlineToggle}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer"
+                >
+                  <option value="">All Grade Levels</option>
+                  <option value={7}>Grade 7</option>
+                  <option value={8}>Grade 8</option>
+                  <option value={9}>Grade 9</option>
+                  <option value={10}>Grade 10</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Filters availability to students in this grade level.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Schedule & Timing */}
+          <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+              <Calendar className="h-4 w-4 text-red-800" />
+              <span>Schedule &amp; Date/Time Needed</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Date &amp; Time Needed to be Taken
+                </label>
+                <input
+                  type="datetime-local"
+                  value={dueDateInput}
+                  onChange={(e) => setDueDateInput(e.target.value)}
+                  disabled={!isOnlineToggle}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Deadline date &amp; time for students to take and submit.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Time Limit (Duration)
+                </label>
+                <select
+                  value={timeLimitInput}
+                  onChange={(e) => setTimeLimitInput(Number(e.target.value) || 0)}
+                  disabled={!isOnlineToggle}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer"
+                >
+                  <option value={0}>Untimed (No Time Limit)</option>
+                  <option value={15}>15 Minutes (Short Quiz)</option>
+                  <option value={30}>30 Minutes</option>
+                  <option value={45}>45 Minutes (Class Period)</option>
+                  <option value={60}>60 Minutes (1 Hour)</option>
+                  <option value={90}>90 Minutes</option>
+                  <option value={120}>120 Minutes (2 Hours)</option>
+                </select>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Active countdown timer inside the student exam player.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {onlineError && (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+              {onlineError}
+            </p>
+          )}
+
+          <div className="rounded-xl border border-red-100 bg-red-50/60 p-3 text-[11px] text-red-950 leading-relaxed">
+            💡 <strong>Instant Auto-Grading:</strong> Submitting an online exam immediately computes DepEd mastery levels, updates student recovery profiles, and streams results into your Teacher and Coordinator dashboards.
+          </div>
+        </div>
+
+        <div className="mt-6 pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveOnlineSettings}
+            disabled={savingOnline}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-900 active:scale-95 disabled:opacity-60 transition-all cursor-pointer"
+          >
+            {savingOnline ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Saving Assignment…</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-3.5 w-3.5" />
+                <span>Save Assignment</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1621,13 +1867,20 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
 function ExamViewerModal({
   examKey,
   onClose,
+  onKeyUpdated,
 }: {
   examKey: AnswerKeyRow;
   onClose: () => void;
+  onKeyUpdated?: (updated: AnswerKeyRow) => void;
 }) {
+  const [currentKey, setCurrentKey] = useState<AnswerKeyRow>(examKey);
+  const [showOnlineModal, setShowOnlineModal] = useState(false);
   const [printThis, setPrintThis] = useState<"questionnaire" | null>(null);
-  const activeBubbleSheet = getSubjectBubbleSheet(examKey.subject || "Reading");
-  const isExam = examKey.assessmentType === "exam" || examKey.title.toLowerCase().includes("exam");
+  const activeBubbleSheet = getSubjectBubbleSheet(currentKey.subject || "Reading");
+
+  useEffect(() => {
+    setCurrentKey(examKey);
+  }, [examKey]);
 
   useEffect(() => {
     if (!printThis) return;
@@ -1640,14 +1893,14 @@ function ExamViewerModal({
     };
   }, [printThis]);
 
-  const hasFullQuestions = Array.isArray(examKey.questions) && examKey.questions.length > 0;
+  const hasFullQuestions = Array.isArray(currentKey.questions) && currentKey.questions.length > 0;
   const questionsList = hasFullQuestions
-    ? examKey.questions!.map((q, idx) => ({
+    ? currentKey.questions!.map((q, idx) => ({
         ...q,
         number: q.number ?? (q.index !== undefined ? q.index + 1 : idx + 1),
-        correctAnswer: q.correctAnswer || (examKey.answers ? examKey.answers[idx] : undefined),
+        correctAnswer: q.correctAnswer || (currentKey.answers ? currentKey.answers[idx] : undefined),
       }))
-    : (examKey.answers || []).map((ans: any, idx) => {
+    : (currentKey.answers || []).map((ans: any, idx) => {
         const val =
           typeof ans === "object" && ans !== null
             ? ans.correctKey || ans.letter || "A"
@@ -1656,33 +1909,34 @@ function ExamViewerModal({
           number: idx + 1,
           prompt: `Question ${idx + 1}`,
           choices: ["Option A", "Option B", "Option C", "Option D"],
-          mode: (examKey.modes && examKey.modes[idx] === "written" ? "written" : "mc") as "mc" | "written",
-          competencyCode: examKey.topic || "DepEd ARAL",
+          mode: (currentKey.modes && currentKey.modes[idx] === "written" ? "written" : "mc") as "mc" | "written",
+          competencyCode: currentKey.topic || "DepEd ARAL",
           difficulty: "Average",
           correctAnswer: String(val),
         };
       });
 
   const viewerDoc: GeneratedDoc = {
-    title: examKey.title,
-    assessmentType: examKey.assessmentType || (isExam ? "exam" : "quiz"),
-    subject: examKey.subject || "Reading",
+    title: currentKey.title,
+    assessmentType: currentKey.assessmentType || resolveAssessmentScopeType(currentKey.assessmentCategory, currentKey.title),
+    subject: currentKey.subject || "Reading",
     gradeLevel: 7,
-    topic: examKey.topic,
-    topics: examKey.topics,
-    itemCount: examKey.items || questionsList.length,
-    writtenCount: examKey.writtenItems?.length || (examKey.modes || []).filter((m) => m === "written").length,
+    topic: currentKey.topic,
+    topics: currentKey.topics,
+    itemCount: currentKey.items || questionsList.length,
+    writtenCount: currentKey.writtenItems?.length || (currentKey.modes || []).filter((m) => m === "written").length,
     questions: questionsList as any,
-    answers: (examKey.answers || []).map((ans: any) =>
+    answers: (currentKey.answers || []).map((ans: any) =>
       typeof ans === "object" && ans !== null ? ans.correctKey || ans.letter || "" : String(ans || "")
     ),
-    passageTitle: examKey.passageTitle,
-    passageText: examKey.passageText,
+    passageTitle: currentKey.passageTitle,
+    passageText: currentKey.passageText,
     answerKey: {
-      id: examKey.id,
-      title: examKey.title,
-      subject: examKey.subject,
-      items: examKey.items,
+      id: currentKey.id,
+      title: currentKey.title,
+      subject: currentKey.subject,
+      items: currentKey.items,
+      isOnline: currentKey.isOnline,
     },
   };
 
@@ -1694,30 +1948,40 @@ function ExamViewerModal({
           <div className="relative flex flex-col gap-4 border-b border-slate-200 bg-white px-6 py-5 pr-16 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                {isExam ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
-                    <Award className="h-3.5 w-3.5" /> Comprehensive Exam
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 border border-red-200">
-                    <FileText className="h-3.5 w-3.5" /> Weekly Quiz
+                {renderPreviewScopeBadge(currentKey.assessmentType || currentKey.assessmentCategory, currentKey.title)}
+                {currentKey.isOnline && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-800 border border-red-200">
+                    <Globe className="h-3.5 w-3.5" /> Assigned Online
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                   <CheckCircle2 className="h-3 w-3" /> Saved in Exam Library
                 </span>
-                <h3 className="text-base font-bold text-slate-900 truncate">{examKey.title}</h3>
+                <h3 className="text-base font-bold text-slate-900 truncate">{currentKey.title}</h3>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                {examKey.items} items • {examKey.subject} •{" "}
-                <span suppressHydrationWarning>Created {fmtShort(examKey.created)}</span>
-                {examKey.topics && examKey.topics.length > 0 && ` • Topics: ${examKey.topics.join(", ")}`}
+                {currentKey.items} items • {currentKey.subject} •{" "}
+                <span suppressHydrationWarning>Created {fmtShort(currentKey.created)}</span>
+                {currentKey.topics && currentKey.topics.length > 0 && ` • Topics: ${currentKey.topics.join(", ")}`}
               </p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setShowOnlineModal(true)}
+                className={`h-9 inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-1.5 text-xs font-semibold shadow-2xs transition-all active:scale-[0.98] whitespace-nowrap cursor-pointer ${
+                  currentKey.isOnline
+                    ? "border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-red-50/50 hover:text-red-900 hover:border-red-200"
+                }`}
+                title="Configure class section, schedule, and date/time needed to be taken"
+              >
+                <Globe className="h-3.5 w-3.5 text-red-800" />
+                <span>{currentKey.isOnline ? "Online Assignment Settings" : "Assign Online"}</span>
+              </button>
               <Link
-                href={`/dashboard/omr-scan?keyId=${examKey.id}&subject=${encodeURIComponent(examKey.subject || "Reading")}`}
+                href={`/dashboard/omr-scan?keyId=${currentKey.id}&subject=${encodeURIComponent(currentKey.subject || "Reading")}`}
                 className="h-9 inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-900 active:scale-[0.98] transition-all whitespace-nowrap"
                 title="Administered this test? Click here to start auto-grading student bubble sheets."
               >
@@ -1734,9 +1998,9 @@ function ExamViewerModal({
               </button>
               <a
                 href={getStampedBubbleSheetUrl({
-                  subject: examKey.subject,
-                  title: examKey.title,
-                  items: examKey.items,
+                  subject: currentKey.subject,
+                  title: currentKey.title,
+                  items: currentKey.items,
                   gradeLevel: 7,
                   download: true,
                 })}
@@ -1764,13 +2028,13 @@ function ExamViewerModal({
           {/* Modal Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {/* Reading Selection if available */}
-            {examKey.passageText && (
+            {currentKey.passageText && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                  📖 Reading Selection: {examKey.passageTitle || "Passage"}
+                  📖 Reading Selection: {currentKey.passageTitle || "Passage"}
                 </p>
                 <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-700">
-                  {examKey.passageText}
+                  {currentKey.passageText}
                 </p>
               </div>
             )}
@@ -1781,7 +2045,7 @@ function ExamViewerModal({
                 <div>
                   <p className="font-bold">Active Answer Key Ready for Scanning</p>
                   <p className="mt-0.5 text-blue-700">
-                    This answer key is registered with {examKey.items} items. Click &ldquo;Start Scanning Sheets&rdquo; to begin grading student bubble sheets with this key.
+                    This answer key is registered with {currentKey.items} items. Click &ldquo;Start Scanning Sheets&rdquo; to begin grading student bubble sheets with this key.
                   </p>
                 </div>
               </div>
@@ -1790,7 +2054,7 @@ function ExamViewerModal({
             {/* Questions list */}
             <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
               {questionsList.map((q, idx) => {
-                const keyVal = q.correctAnswer || (examKey.answers && examKey.answers[(q.number || idx + 1) - 1]) || "";
+                const keyVal = q.correctAnswer || (currentKey.answers && currentKey.answers[(q.number || idx + 1) - 1]) || "";
                 return (
                   <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
@@ -1838,6 +2102,17 @@ function ExamViewerModal({
         </div>
       </div>
 
+      {showOnlineModal && (
+        <AssignOnlineModal
+          examKey={currentKey}
+          onClose={() => setShowOnlineModal(false)}
+          onSaved={(updated) => {
+            setCurrentKey((prev) => ({ ...prev, ...updated }));
+            onKeyUpdated?.(updated);
+          }}
+        />
+      )}
+
       {/* Print overlay */}
       {printThis && (
         <>
@@ -1852,8 +2127,8 @@ function ExamViewerModal({
               <>
                 <div className="mb-6 border-b-2 border-black pb-3 text-center">
                   <h1 className="text-lg font-bold uppercase">AralSync — Official Assessment</h1>
-                  <p className="text-sm font-semibold">{examKey.title}</p>
-                  <p className="text-xs text-gray-700">Subject: {examKey.subject} • Items: {examKey.items}</p>
+                  <p className="text-sm font-semibold">{currentKey.title}</p>
+                  <p className="text-xs text-gray-700">Subject: {currentKey.subject} • Items: {currentKey.items}</p>
                 </div>
                 <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <div className="flex gap-2"><span className="font-semibold">Name:</span><span className="flex-1 border-b border-gray-400" /></div>
@@ -1861,13 +2136,13 @@ function ExamViewerModal({
                   <div className="flex gap-2"><span className="font-semibold">Grade &amp; Section:</span><span className="flex-1 border-b border-gray-400" /></div>
                   <div className="flex gap-2"><span className="font-semibold">Date:</span><span className="flex-1 border-b border-gray-400" /></div>
                 </div>
-                {examKey.passageText && (
+                {currentKey.passageText && (
                   <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
                     <p className="font-bold uppercase tracking-wider text-black mb-1">
-                      Reading Selection: {examKey.passageTitle || "Passage"}
+                      Reading Selection: {currentKey.passageTitle || "Passage"}
                     </p>
                     <div className="whitespace-pre-line text-gray-800">
-                      {examKey.passageText}
+                      {currentKey.passageText}
                     </div>
                   </div>
                 )}
@@ -1911,7 +2186,8 @@ interface GeneratedQuestion {
 
 interface GeneratedDoc {
   title: string;
-  assessmentType?: "quiz" | "exam";
+  assessmentType?: AssessmentType;
+  assessmentCategory?: AssessmentType;
   subject: string;
   topic?: string;
   topics?: string[];
@@ -1926,12 +2202,18 @@ interface GeneratedDoc {
   answerKey: {
     id: string;
     title: string;
-    assessmentType?: "quiz" | "exam";
+    assessmentType?: AssessmentType;
+    assessmentCategory?: AssessmentType;
     subject: string;
     topic?: string;
     topics?: string[];
     items: number;
     sections?: QuestionnaireSection[];
+    isOnline?: boolean;
+    timeLimitMinutes?: number;
+    dueDate?: string | Date | null;
+    targetGrade?: number | null;
+    targetSection?: string | null;
   };
 }
 
@@ -1972,7 +2254,7 @@ function sanitizeDoc(d: any): GeneratedDoc {
 type GenType = "aral" | "extract" | "reading" | "upload";
 
 function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: string }) {
-  const [assessmentType, setAssessmentType] = useState<"quiz" | "exam">("quiz");
+  const [assessmentType, setAssessmentType] = useState<AssessmentType>("quiz");
   const [assignedSubject, setAssignedSubject] = useState(
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
@@ -1992,6 +2274,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const [passages, setPassages] = useState<PassageOption[]>([]);
   const [passageId, setPassageId] = useState("");
   const [aralPassageId, setAralPassageId] = useState("");
+  const [aralMaterialId, setAralMaterialId] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
   const [doc, setDoc] = useState<GeneratedDoc | null>(null);
@@ -2110,7 +2393,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     });
   };
 
-  const switchAssessmentType = (type: "quiz" | "exam") => {
+  const switchAssessmentType = (type: AssessmentType) => {
     setAssessmentType(type);
     if (type === "quiz") {
       if (count > 20) setCount(10);
@@ -2118,6 +2401,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         const firstUnused = topics.find((t) => !usedTopics.includes(t)) || topics[0];
         setSelectedTopics([firstUnused]);
       }
+    } else if (type === "pre-test" || type === "post-test") {
+      if (count < 10) setCount(20);
     } else {
       if (count < 25) setCount(50);
     }
@@ -2293,8 +2578,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     }
   };
 
-  const handleSaveExam = async () => {
-    if (!doc || isSavingExam || isSaved) return;
+  const handleSaveExam = async (): Promise<any> => {
+    if (!doc || isSavingExam) return null;
+    if (isSaved && doc.answerKey) return doc.answerKey;
 
     setIsSavingExam(true);
     setSaveExamError(null);
@@ -2333,20 +2619,39 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       const json = await parseJsonResponse(res);
       if (json.success) {
         setIsSaved(true);
-        if (json.data?.answerKey) {
-          setDoc((prev) => (prev ? { ...prev, answerKey: json.data.answerKey } : prev));
+        const savedKey = json.data?.answerKey;
+        if (savedKey) {
+          setDoc((prev) => (prev ? { ...prev, answerKey: savedKey } : prev));
         }
         setSaveNotification(
           "Saved to your library! You can access, print, and scan this exam anytime under the Answer Keys tab."
         );
+        return savedKey;
       } else {
         setSaveExamError(json.error || "Failed to save to your library. Please try again.");
+        return null;
       }
     } catch (err) {
       console.error("Save exam error:", err);
       setSaveExamError("Network error while saving. Please try again.");
+      return null;
     } finally {
       setIsSavingExam(false);
+    }
+  };
+
+  const [onlineModalExam, setOnlineModalExam] = useState<any | null>(null);
+  const isOnlineActive = Boolean(doc?.answerKey?.isOnline);
+
+  const handleOpenOnlineModal = async () => {
+    if (!doc) return;
+    if (doc.answerKey?.id) {
+      setOnlineModalExam(doc.answerKey);
+      return;
+    }
+    const savedKey = await handleSaveExam();
+    if (savedKey?.id) {
+      setOnlineModalExam(savedKey);
     }
   };
 
@@ -2399,6 +2704,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   assessmentType,
                   topics: assessmentType === "quiz" ? selectedTopics : topics,
                   topic: selectedTopics[0] || "",
+                  materialId: aralMaterialId || undefined,
                 }
               : {
                   title: customTitle.trim() || undefined,
@@ -2408,6 +2714,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   count,
                   writtenCount,
                   allowRetake,
+                  materialId: aralMaterialId || undefined,
                 }
           ),
         });
@@ -2440,6 +2747,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             materialId: extractMaterialId,
             pageNumber: extractPageNumber,
             customTitle: customTitle.trim() || undefined,
+            count: count > 0 ? count : undefined,
           }),
         });
         const json = await parseJsonResponse(res);
@@ -2573,12 +2881,71 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </span>
                 </div>
 
-                {/* Assessment Scope Switcher (Quiz vs Exam) */}
+                {/* Source Learning Material Dropdown */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Source Learning Material
+                    </label>
+                    {aralMaterialId && (
+                      <a
+                        href={`/api/learning-materials/view?id=${aralMaterialId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-red-800 hover:text-red-900 underline flex items-center gap-1 font-semibold"
+                      >
+                        <BookOpen className="h-3 w-3" />
+                        <span>View PDF</span>
+                      </a>
+                    )}
+                  </div>
+                  <select
+                    value={aralMaterialId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setAralMaterialId(id);
+                      const chosen = learningMaterials.find((m) => (m._id || (m as any).id) === id);
+                      if (chosen && !customTitle) {
+                        setCustomTitle(`${chosen.title} Assessment`);
+                      }
+                    }}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                  >
+                    <option value="">All DepEd ARAL Materials ({subject})</option>
+                    {learningMaterials
+                      .filter((m) => subject === "All" || m.subject === subject || m.subject === "General")
+                      .map((m) => (
+                        <option key={m._id || (m as any).id} value={m._id || (m as any).id}>
+                          {m.title} ({m.subject})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Optionally align questions to an approved ARAL learning material module.
+                  </p>
+                </div>
+
+                {/* Assessment Scope Switcher (Chronological: Pre-Test -> Weekly Quiz -> Periodical Exam -> Post-Test) */}
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Assessment Scope
                   </label>
-                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
+                    {/* 1. Pre-Test (Baseline Diagnostic at start) */}
+                    <button
+                      type="button"
+                      onClick={() => switchAssessmentType("pre-test")}
+                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                        assessmentType === "pre-test"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <FileCheck2 className="h-3.5 w-3.5" />
+                      <span>Pre-Test</span>
+                    </button>
+
+                    {/* 2. Weekly Quiz (Formative ongoing checks) */}
                     <button
                       type="button"
                       onClick={() => switchAssessmentType("quiz")}
@@ -2591,17 +2958,33 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       <FileText className="h-3.5 w-3.5" />
                       <span>Weekly Quiz</span>
                     </button>
+
+                    {/* 3. Periodical Exam (Quarterly milestone examination) */}
                     <button
                       type="button"
                       onClick={() => switchAssessmentType("exam")}
                       className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
                         assessmentType === "exam"
-                          ? "bg-red-800 text-white shadow-xs"
+                          ? "bg-purple-700 text-white shadow-xs"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
                       <Award className="h-3.5 w-3.5" />
-                      <span>Comprehensive Exam</span>
+                      <span>Periodical Exam</span>
+                    </button>
+
+                    {/* 4. Post-Test (Culminating summative evaluation at end) */}
+                    <button
+                      type="button"
+                      onClick={() => switchAssessmentType("post-test")}
+                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                        assessmentType === "post-test"
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      <span>Post-Test</span>
                     </button>
                   </div>
                 </div>
@@ -2629,6 +3012,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     placeholder={
                       assessmentType === "quiz"
                         ? "e.g. Weekly Quiz #1 — Vocabulary & Context Clues"
+                        : assessmentType === "pre-test"
+                        ? "e.g. ARAL Diagnostic Pre-Test in Reading"
+                        : assessmentType === "post-test"
+                        ? "e.g. ARAL Learning Recovery Post-Test in Reading"
                         : "e.g. First Quarter Periodical Exam in Reading"
                     }
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 transition-all"
@@ -2687,14 +3074,34 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     </div>
                   </div>
                 ) : (
-                  /* Exam Mode: Whole Curriculum Display */
+                  /* Exam / Pre-Test / Post-Test Mode: Whole Curriculum Display */
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs text-slate-800">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                        <Award className="h-4 w-4 text-emerald-600" />
-                        <span>Whole Curriculum Coverage</span>
+                        {assessmentType === "pre-test" ? (
+                          <>
+                            <FileCheck2 className="h-4 w-4 text-amber-600" />
+                            <span>Pre-Test Diagnostic Coverage</span>
+                          </>
+                        ) : assessmentType === "post-test" ? (
+                          <>
+                            <TrendingUp className="h-4 w-4 text-emerald-600" />
+                            <span>Post-Test Growth Assessment</span>
+                          </>
+                        ) : (
+                          <>
+                            <Award className="h-4 w-4 text-purple-600" />
+                            <span>Whole Curriculum Coverage</span>
+                          </>
+                        )}
                       </div>
-                      <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                        assessmentType === "pre-test"
+                          ? "bg-amber-50 border-amber-200 text-amber-700"
+                          : assessmentType === "post-test"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                          : "bg-purple-50 border-purple-200 text-purple-700"
+                      }`}>
                         All {topics.length} Topics
                       </span>
                     </div>
@@ -2710,7 +3117,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       ))}
                     </div>
                     <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200">
-                      Even distribution: ~{Math.floor(count / Math.max(1, topics.length))} items per topic for a {count}-item balanced exam.
+                      {assessmentType === "pre-test"
+                        ? "Baseline diagnostic: questions sample across competencies to establish student entry level."
+                        : assessmentType === "post-test"
+                        ? "Endline evaluation: questions match diagnostic competencies to measure net learning recovery."
+                        : `Even distribution: ~${Math.floor(count / Math.max(1, topics.length))} items per topic for a ${count}-item balanced exam.`}
                     </div>
                   </div>
                 )}
@@ -2784,6 +3195,12 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       ? [5, 10, 15, 20].map((n) => (
                           <option key={n} value={n}>
                             {n} items {n === 10 ? "• Standard Weekly Quiz" : ""}
+                          </option>
+                        ))
+                      : assessmentType === "pre-test" || assessmentType === "post-test"
+                      ? [10, 20, 25, 30, 40, 50].map((n) => (
+                          <option key={n} value={n}>
+                            {n} items {n === 20 ? "• Standard Baseline/Endline" : n === 50 ? "• Comprehensive Evaluation" : ""}
                           </option>
                         ))
                       : [20, 25, 30, 40, 50].map((n) => (
@@ -2964,6 +3381,31 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </p>
                 </div>
 
+                {/* Target Items Count */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Number of Items
+                  </label>
+                  <select
+                    value={count}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 10)}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                  >
+                    <option value={0}>All Extracted Items (From page)</option>
+                    <option value={5}>5 items</option>
+                    <option value={10}>10 items — Standard Weekly Quiz</option>
+                    <option value={15}>15 items</option>
+                    <option value={20}>20 items</option>
+                    <option value={25}>25 items</option>
+                    <option value={30}>30 items</option>
+                    <option value={40}>40 items</option>
+                    <option value={50}>50 items — Full 50-Item DepEd Exam Sheet</option>
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Target item count for this questionnaire.
+                  </p>
+                </div>
+
                 {/* Optional Custom Assessment Title */}
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -3017,9 +3459,13 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   selectedTopics.some((t) => usedTopics.includes(t)) &&
                   !allowRetake
                 ? "Topic Already Assessed"
-                : assessmentType === "quiz"
-                ? `Generate Weekly Quiz (${count} items)`
-                : `Generate Comprehensive Exam (${count} items)`}
+                : assessmentType === "pre-test"
+                ? `Generate Diagnostic Pre-Test (${count} items)`
+                : assessmentType === "post-test"
+                ? `Generate Recovery Post-Test (${count} items)`
+                : assessmentType === "exam"
+                ? `Generate Periodical Exam (${count} items)`
+                : `Generate Weekly Quiz (${count} items)`}
             </button>
           )}
 
@@ -3044,13 +3490,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {doc.assessmentType === "exam" || doc.title.toLowerCase().includes("exam") ? (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
-                        <Award className="h-3.5 w-3.5" /> Comprehensive Exam
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 border border-red-200">
-                        <FileText className="h-3.5 w-3.5" /> Weekly Quiz
+                    {renderPreviewScopeBadge(doc.assessmentType, doc.title)}
+                    {isOnlineActive && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-800 border border-red-200">
+                        <Globe className="h-3.5 w-3.5" /> Assigned Online
                       </span>
                     )}
                     {isSaved ? (
@@ -3144,40 +3587,54 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 {/* Command Action Bar */}
                 <div className="flex flex-wrap items-center gap-2.5">
                   {/* Dynamic Save Button */}
+                  {(() => {
+                    const saveLabels = getSaveButtonLabels(
+                      resolveAssessmentScopeType(doc.assessmentType, doc.title)
+                    );
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleSaveExam}
+                        disabled={isSavingExam || isSaved}
+                        className={`h-10 inline-flex items-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-xs transition-all active:scale-[0.98] ${
+                          isSaved
+                            ? "bg-emerald-600 text-white cursor-default"
+                            : "bg-red-800 hover:bg-red-900 text-white cursor-pointer"
+                        }`}
+                      >
+                        {isSavingExam ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : isSaved ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>{saveLabels.saved}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            <span>{saveLabels.save}</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
+
                   <button
                     type="button"
-                    onClick={handleSaveExam}
-                    disabled={isSavingExam || isSaved}
-                    className={`h-10 inline-flex items-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-xs transition-all active:scale-[0.98] ${
-                      isSaved
-                        ? "bg-emerald-600 text-white cursor-default"
-                        : "bg-red-800 hover:bg-red-900 text-white cursor-pointer"
+                    onClick={handleOpenOnlineModal}
+                    disabled={isSavingExam}
+                    className={`h-10 inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold shadow-2xs active:scale-[0.98] transition-all cursor-pointer ${
+                      isOnlineActive
+                        ? "border-red-300 bg-red-50 text-red-900 hover:bg-red-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-red-50/50 hover:text-red-900 hover:border-red-200"
                     }`}
+                    title="Assign this assessment online to a class section with schedule and time limit"
                   >
-                    {isSavingExam ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : isSaved ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        <span>
-                          {doc.assessmentType === "exam" || doc.title.toLowerCase().includes("exam")
-                            ? "Exam Saved"
-                            : "Quiz Saved"}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        <span>
-                          {doc.assessmentType === "exam" || doc.title.toLowerCase().includes("exam")
-                            ? "Save Exam"
-                            : "Save Quiz"}
-                        </span>
-                      </>
-                    )}
+                    <Globe className="h-4 w-4 text-red-800" />
+                    <span>{isOnlineActive ? "Online Assignment Settings" : "Assign Online"}</span>
                   </button>
 
                   {doc.answerKey?.id && (
@@ -3601,6 +4058,26 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             <QuestionnairePrint doc={doc!} />
           </div>
         </>
+      )}
+
+      {onlineModalExam && (
+        <AssignOnlineModal
+          examKey={onlineModalExam}
+          onClose={() => setOnlineModalExam(null)}
+          onSaved={(updated) => {
+            setDoc((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    answerKey: {
+                      ...(prev.answerKey || {}),
+                      ...updated,
+                    },
+                  }
+                : prev
+            );
+          }}
+        />
       )}
     </>
   );
