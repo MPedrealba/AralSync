@@ -6,6 +6,7 @@ import connectDB from '../../../../../database/db';
 import User from '../../../../../models/User';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import { logAudit } from '@/lib/audit';
+import { extractSurnamePassword } from '@/lib/nameUtils';
 
 /**
  * GET /api/coordinator/learners
@@ -261,8 +262,9 @@ export async function POST(req: NextRequest) {
       scienceTeacherDoc = await User.findById(resolvedScienceId);
     }
 
-    // Create student user account
-    const hashedPassword = await bcrypt.hash(trimmedLrn.toUpperCase(), 10);
+    // Create student user account (Username: LRN, Default Password: Student Surname)
+    const defaultPassword = extractSurnamePassword(trimmedName, trimmedLrn);
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
     const userDoc = await User.create({
       username: trimmedLrn,
       password: hashedPassword,

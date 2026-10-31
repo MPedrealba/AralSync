@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Header from "@/components/Header";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import {
@@ -11,13 +11,24 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 
 interface SkillGapEntry {
   name: string;
   mastery: number;
   level: string;
+}
+
+interface FilterMetadata {
+  grades: string[];
+  sections: string[];
+  sectionsByGrade: Record<string, string[]>;
+}
+
+interface SkillGapData {
+  competencyData: Array<{ name: string; below60: number; between60_75: number; above75: number }>;
+  skillGaps: Array<{ subject: string; competencies: SkillGapEntry[] }>;
+  filters?: FilterMetadata;
 }
 
 const levelConfig: Record<string, { bg: string; text: string; bar: string }> = {
@@ -61,13 +72,17 @@ const CustomTooltip = ({
 export default function SkillGapPage() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
-  const [data, setData] = useState<{
-    competencyData: Array<{ name: string; below60: number; between60_75: number; above75: number }>;
-    skillGaps: Array<{ subject: string; competencies: SkillGapEntry[] }>;
-  } | null>(null);
+  const [filters, setFilters] = useState<FilterMetadata>({
+    grades: [],
+    sections: [],
+    sectionsByGrade: {},
+  });
+  const [data, setData] = useState<SkillGapData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch skill gap data whenever filters change
   useEffect(() => {
+    let isCancelled = false;
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -76,15 +91,62 @@ export default function SkillGapPage() {
         if (sectionFilter) params.set("section", sectionFilter);
         const res = await fetch(`/api/teacher/skill-gap?${params.toString()}`);
         const json = await parseJsonResponse(res);
-        if (json.success) setData(json.data);
+        if (!isCancelled && json.success && json.data) {
+          setData(json.data);
+          if (json.data.filters) {
+            setFilters(json.data.filters);
+          }
+        }
       } catch (e) {
-        console.error("Failed to fetch skill gaps:", e);
+        if (!isCancelled) console.error("Failed to fetch skill gaps:", e);
       } finally {
-        setLoading(false);
+        if (!isCancelled) setLoading(false);
       }
     };
     fetchData();
+    return () => {
+      isCancelled = true;
+    };
   }, [gradeFilter, sectionFilter]);
+
+  // Compute available sections dynamically based on selected grade
+  const availableSections = useMemo(() => {
+    if (!gradeFilter) {
+      return filters.sections || [];
+    }
+    const rawKey = gradeFilter;
+    const digitsKey = gradeFilter.replace(/\D/g, "");
+    const forGrade =
+      filters.sectionsByGrade[rawKey] ||
+      filters.sectionsByGrade[digitsKey] ||
+      filters.sectionsByGrade[`Grade ${digitsKey}`] ||
+      [];
+    return forGrade;
+  }, [gradeFilter, filters]);
+
+  // Handle grade change and synchronize section filter
+  const handleGradeChange = (newGrade: string) => {
+    setGradeFilter(newGrade);
+
+    // If a section is currently selected, verify if it is valid for the newly selected grade
+    if (sectionFilter) {
+      if (!newGrade) {
+        if (!filters.sections.includes(sectionFilter)) {
+          setSectionFilter("");
+        }
+      } else {
+        const digitsKey = newGrade.replace(/\D/g, "");
+        const validSections =
+          filters.sectionsByGrade[newGrade] ||
+          filters.sectionsByGrade[digitsKey] ||
+          filters.sectionsByGrade[`Grade ${digitsKey}`] ||
+          [];
+        if (!validSections.includes(sectionFilter)) {
+          setSectionFilter("");
+        }
+      }
+    }
+  };
 
   const competencyData = data?.competencyData ?? [];
   const skillGaps = data?.skillGaps ?? [];
@@ -104,26 +166,32 @@ export default function SkillGapPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Dynamic Grade Selector */}
             <select
               value={gradeFilter}
-              onChange={(e) => setGradeFilter(e.target.value)}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              onChange={(e) => handleGradeChange(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
             >
               <option value="">All Grades</option>
-              <option>Grade 7</option>
-              <option>Grade 8</option>
-              <option>Grade 9</option>
-              <option>Grade 10</option>
+              {filters.grades.map((g) => (
+                <option key={g} value={g}>
+                  {g.toLowerCase().startsWith("grade") ? g : `Grade ${g}`}
+                </option>
+              ))}
             </select>
+
+            {/* Dynamic Section Selector */}
             <select
               value={sectionFilter}
               onChange={(e) => setSectionFilter(e.target.value)}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
             >
               <option value="">All Sections</option>
-              <option>Rosal</option>
-              <option>Sampaguita</option>
-              <option>Ilang-Ilang</option>
+              {availableSections.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
+              ))}
             </select>
           </div>
         </div>

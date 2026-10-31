@@ -85,8 +85,6 @@ interface Props {
   userRole?: "teacher" | "coordinator" | "principal";
 }
 
-const DEFAULT_SECTIONS = ["Rosal", "Sampaguita", "Ilang-Ilang", "Camia", "Daisy"];
-
 export default function ClassRecordMatrix({
   initialGrade = "7",
   initialSection = "Rosal",
@@ -99,6 +97,11 @@ export default function ClassRecordMatrix({
   const [customSectionText, setCustomSectionText] = useState("");
   const [subject, setSubject] = useState(initialSubject);
   const [search, setSearch] = useState("");
+
+  // Dynamic cohorts loaded directly from database
+  const [gradeSectionsMap, setGradeSectionsMap] = useState<Record<string, string[]>>({});
+  const [availableGrades, setAvailableGrades] = useState<string[]>(["7", "8", "9", "10"]);
+  const [loadingCohorts, setLoadingCohorts] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -126,9 +129,67 @@ export default function ClassRecordMatrix({
 
   const effectiveSection = (isCustomSection ? customSectionText : section).trim();
 
+  // Fetch real cohorts from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCohorts = async () => {
+      try {
+        let res = await fetch("/api/class-record/cohorts");
+        if (!res.ok && userRole === "coordinator") {
+          res = await fetch("/api/coordinator/learners");
+        }
+        const json = await parseJsonResponse(res);
+        if (isMounted && res.ok && json.success) {
+          const map: Record<string, string[]> = json.gradeSectionsMap || json.data?.gradeSectionsMap || {};
+          const grades: any[] = json.availableGrades || json.allGrades || json.data?.availableGrades;
+
+          setGradeSectionsMap(map);
+          if (Array.isArray(grades) && grades.length > 0) {
+            setAvailableGrades(grades.map(String));
+          }
+
+          // Automatically align initial section if not valid for the current grade
+          const currentSections = map[initialGrade] || map["7"] || [];
+          if (currentSections.length > 0 && !currentSections.includes(initialSection)) {
+            setSection(currentSections[0]);
+          } else if (currentSections.length === 0) {
+            setSection("");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load cohort sections:", e);
+      } finally {
+        if (isMounted) setLoadingCohorts(false);
+      }
+    };
+
+    fetchCohorts();
+    return () => {
+      isMounted = false;
+    };
+  }, [userRole, initialGrade, initialSection]);
+
+  // Synchronize Section on Grade Change
+  const handleGradeChange = (newGrade: string) => {
+    setGradeLevel(newGrade);
+    setIsCustomSection(false);
+    const sectionsForGrade = gradeSectionsMap[newGrade] || [];
+    if (sectionsForGrade.length > 0) {
+      if (!sectionsForGrade.includes(section)) {
+        setSection(sectionsForGrade[0]);
+      }
+    } else {
+      setSection("");
+    }
+  };
+
   // Load Matrix Data
   const loadMatrix = useCallback(async () => {
-    if (!effectiveSection) return;
+    if (!effectiveSection) {
+      setMatrixData(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -147,6 +208,13 @@ export default function ClassRecordMatrix({
       }
 
       setMatrixData(json.data);
+
+      if (json.data?.gradeSectionsMap && Object.keys(json.data.gradeSectionsMap).length > 0) {
+        setGradeSectionsMap((prev) => (Object.keys(prev).length === 0 ? json.data.gradeSectionsMap : prev));
+      }
+      if (Array.isArray(json.data?.availableGrades) && json.data.availableGrades.length > 0) {
+        setAvailableGrades((prev) => (prev.length <= 4 ? json.data.availableGrades.map(String) : prev));
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load class record matrix.");
       setMatrixData(null);
@@ -401,13 +469,14 @@ export default function ClassRecordMatrix({
             <div className="relative">
               <select
                 value={gradeLevel}
-                onChange={(e) => setGradeLevel(e.target.value)}
+                onChange={(e) => handleGradeChange(e.target.value)}
                 className="h-9.5 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
               >
-                <option value="7">Grade 7</option>
-                <option value="8">Grade 8</option>
-                <option value="9">Grade 9</option>
-                <option value="10">Grade 10</option>
+                {availableGrades.map((g) => (
+                  <option key={g} value={g}>
+                    Grade {g}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             </div>
@@ -463,11 +532,17 @@ export default function ClassRecordMatrix({
                   }}
                   className="h-9.5 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
                 >
-                  {DEFAULT_SECTIONS.map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec}
+                  {(gradeSectionsMap[gradeLevel] || []).length === 0 ? (
+                    <option value="" disabled>
+                      {loadingCohorts ? "Loading sections..." : "No sections enrolled"}
                     </option>
-                  ))}
+                  ) : (
+                    (gradeSectionsMap[gradeLevel] || []).map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))
+                  )}
                   <option value="__custom__">+ Enter Custom Section...</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -517,7 +592,7 @@ export default function ClassRecordMatrix({
         <div className="mt-4 flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 text-xs">
           <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 font-medium">
             <span className="text-slate-500 font-semibold">Cohort:</span>
-            <span className="font-bold text-slate-900">Grade {gradeLevel} &bull; {effectiveSection}</span>
+            <span className="font-bold text-slate-900">Grade {gradeLevel} &bull; {effectiveSection || "No Section Selected"}</span>
           </div>
 
           <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 font-medium">
@@ -556,9 +631,13 @@ export default function ClassRecordMatrix({
         ) : filteredRows.length === 0 ? (
           <div className="py-16 text-center text-slate-400">
             <FileSpreadsheet className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-            <p className="font-semibold text-slate-700">No student records found in this cohort</p>
+            <p className="font-semibold text-slate-700">
+              {!effectiveSection ? "No section selected" : "No student records found in this cohort"}
+            </p>
             <p className="text-xs text-slate-400 mt-1">
-              Select another grade/section or verify enrollment in Learner Hub.
+              {!effectiveSection
+                ? "Select a section from the dropdown or enter a custom section above."
+                : "Select another grade/section or verify enrollment in Learner Hub."}
             </p>
           </div>
         ) : (

@@ -7,11 +7,12 @@ import User from '../../../../../../models/User';
 import LearnerRecord from '../../../../../../models/LearnerRecord';
 import { parseWorksheet } from '@/lib/learnerImport';
 import { logAudit } from '@/lib/audit';
+import { extractSurnamePassword } from '@/lib/nameUtils';
 
 /**
  * POST /api/coordinator/learners/import
  * Commit a previously-previewed Excel import as Coordinator.
- * Creates student Users (username & password = LRN) + LearnerRecords.
+ * Creates student Users (username = LRN, default password = student's surname) + LearnerRecords.
  * Optionally assigns all newly imported learners to a designated teacher.
  */
 export async function POST(req: NextRequest) {
@@ -70,9 +71,10 @@ export async function POST(req: NextRequest) {
       }
       try {
         const trimmedLrn = data.lrn.trim();
+        const defaultPassword = extractSurnamePassword(data.name, trimmedLrn);
         const userDoc = await User.create({
           username: trimmedLrn,
-          password: await bcrypt.hash(trimmedLrn.toUpperCase(), 10),
+          password: await bcrypt.hash(defaultPassword, 10),
           name: data.name,
           role: 'student',
           active: true,

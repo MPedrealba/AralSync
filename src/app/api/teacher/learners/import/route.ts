@@ -7,6 +7,7 @@ import connectDB from '../../../../../../database/db';
 import User from '../../../../../../models/User';
 import LearnerRecord from '../../../../../../models/LearnerRecord';
 import { parseWorksheet } from '@/lib/learnerImport';
+import { extractSurnamePassword } from '@/lib/nameUtils';
 import { logAudit } from '@/lib/audit';
 
 /**
@@ -63,9 +64,11 @@ export async function POST(req: NextRequest) {
         continue;
       }
       try {
+        const trimmedLrn = data.lrn.trim();
+        const defaultPassword = extractSurnamePassword(data.name, trimmedLrn);
         const userDoc = await User.create({
-          username: data.lrn,
-          password: await bcrypt.hash(data.lrn, 10),
+          username: trimmedLrn,
+          password: await bcrypt.hash(defaultPassword, 10),
           name: data.name,
           role: 'student',
           active: true,

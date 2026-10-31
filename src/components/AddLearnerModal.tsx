@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { X, UserPlus, AlertCircle, Loader2 } from "lucide-react";
+import { X, UserPlus, AlertCircle, Loader2, KeyRound } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface TeacherOption {
@@ -218,6 +218,14 @@ export default function AddLearnerModal({
                 placeholder="e.g. Juan dela Cruz"
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
               />
+            </div>
+          </div>
+
+          {/* Default Credentials Info Box */}
+          <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/80 p-3 text-xs text-sky-900">
+            <KeyRound className="h-4 w-4 shrink-0 mt-0.5 text-sky-600" />
+            <div className="leading-relaxed">
+              <span className="font-semibold">Student Account Credentials:</span> A student user account will be automatically created with <strong>Username: LRN</strong> and <strong>Default Password: Student&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
             </div>
           </div>
 

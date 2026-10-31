@@ -15,8 +15,65 @@ export async function GET(req: NextRequest) {
     const section = searchParams.get('section')?.trim();
     const subject = searchParams.get('subject') || 'Reading';
 
+    // Query distinct cohorts for filter synchronization
+    const allCohorts = await LearnerRecord.aggregate([
+      {
+        $match: {
+          section: { $exists: true, $ne: '' },
+        },
+      },
+      {
+        $group: {
+          _id: { grade: '$gradeLevel', section: '$section' },
+        },
+      },
+      {
+        $sort: { '_id.grade': 1, '_id.section': 1 },
+      },
+    ]);
+
+    const gradeSectionsMap: Record<string, string[]> = {};
+    const gradesSet = new Set<string>();
+
+    for (const c of allCohorts) {
+      const g = c._id?.grade;
+      const s = (c._id?.section || '').trim();
+      if (g != null && s) {
+        const gKey = String(g);
+        gradesSet.add(gKey);
+        if (!gradeSectionsMap[gKey]) {
+          gradeSectionsMap[gKey] = [];
+        }
+        if (!gradeSectionsMap[gKey].includes(s)) {
+          gradeSectionsMap[gKey].push(s);
+        }
+      }
+    }
+
+    for (const g of Object.keys(gradeSectionsMap)) {
+      gradeSectionsMap[g].sort((a, b) => a.localeCompare(b));
+    }
+
+    const standardGrades = ['7', '8', '9', '10'];
+    standardGrades.forEach((g) => {
+      gradesSet.add(g);
+      if (!gradeSectionsMap[g]) {
+        gradeSectionsMap[g] = [];
+      }
+    });
+
+    const availableGrades = Array.from(gradesSet).sort((a, b) => Number(a) - Number(b));
+
     if (!gradeLevel || !section) {
-      return NextResponse.json({ error: 'gradeLevel and section are required.' }, { status: 400 });
+      return NextResponse.json({
+        success: true,
+        data: {
+          gradeSectionsMap,
+          availableGrades,
+        },
+        gradeSectionsMap,
+        availableGrades,
+      });
     }
 
     const parsedGrade = Number(gradeLevel);
@@ -115,7 +172,11 @@ export async function GET(req: NextRequest) {
         subject,
         assignmentColumns,
         rows,
+        gradeSectionsMap,
+        availableGrades,
       },
+      gradeSectionsMap,
+      availableGrades,
     });
   } catch (err: any) {
     if (err instanceof AuthError) return authErrorResponse(err);

@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Users,
+  KeyRound,
 } from "lucide-react";
 
 type RowStatus = "new" | "duplicate" | "invalid";
@@ -227,6 +228,14 @@ export default function CoordinatorImportLearnersModal({
                 </p>
               </div>
 
+              {/* Automatic Credentials Notice */}
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/80 p-3 text-xs text-sky-900">
+                <KeyRound className="h-4 w-4 shrink-0 mt-0.5 text-sky-600" />
+                <div className="leading-relaxed">
+                  <span className="font-semibold">Automatic Student Accounts:</span> All imported learners automatically receive user accounts with <strong>Username: LRN</strong> and <strong>Default Password: Learner&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
+                </div>
+              </div>
+
               <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Need the template?</p>
@@ -322,6 +331,9 @@ export default function CoordinatorImportLearnersModal({
               <p className="mt-1 text-sm text-gray-500">
                 Successfully enrolled <strong>{result.created}</strong> new learners.
                 {result.skippedDuplicates > 0 && ` (${result.skippedDuplicates} duplicate LRNs skipped)`}
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                Student portal accounts have been created with <strong>Username: LRN</strong> and <strong>Default Password: Student&apos;s surname</strong>.
               </p>
             </div>
           )}

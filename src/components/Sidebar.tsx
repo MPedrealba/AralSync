@@ -17,7 +17,6 @@ import {
   LogOut,
   TrendingUp,
   Target,
-  Lightbulb,
   FileText,
   FileSpreadsheet,
   X,
@@ -141,25 +140,25 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r border-slate-200 bg-white shadow-xl md:shadow-xs transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-h-[100dvh] w-64 flex-col overflow-hidden border-r border-slate-200 bg-white shadow-xl md:shadow-xs transition-transform duration-300 ease-in-out ${
           isDrawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
         {/* Brand Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#800000] via-[#6e0000] to-[#590000] px-5 py-5">
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-[#800000] via-[#6e0000] to-[#590000] px-4 py-3 sm:px-5 sm:py-4">
           <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10 blur-xl" />
-          <div className="relative flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
+          <div className="relative flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
                 <img
                   src="/aral-logo.png"
                   alt="ARAL Program Logo"
-                  className="h-8 w-8 rounded-full object-contain"
+                  className="h-6 w-6 sm:h-8 sm:w-8 rounded-full object-contain"
                 />
               </div>
-              <span className="text-xl font-bold tracking-tight text-white">
+              <span className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight truncate">
                 AralSync
-                <span className="block text-[10px] font-semibold uppercase tracking-widest text-amber-200/90">
+                <span className="block text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest text-amber-200/90 truncate mt-0.5">
                   {portalLabel} Portal
                 </span>
               </span>
@@ -169,10 +168,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
             <button
               type="button"
               onClick={handleClose}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors md:hidden cursor-pointer"
+              className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors md:hidden cursor-pointer"
               aria-label="Close sidebar"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
           {/* Gold accent bar — DepEd theme */}
@@ -180,10 +179,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-2.5 py-2 sm:px-3 sm:py-3 overscroll-contain [-webkit-overflow-scrolling:touch]">
           {navSections.map((section) => (
-            <div key={section.label} className="mb-4">
-              <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <div key={section.label} className="mb-2.5 sm:mb-4">
+              <p className="mb-1 sm:mb-1.5 px-2.5 sm:px-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 {section.label}
               </p>
               <ul className="space-y-0.5">
@@ -197,25 +196,25 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
                       <Link
                         href={item.href}
                         onClick={handleClose}
-                        className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-150 min-h-[44px] ${
+                        className={`group relative flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm transition-all duration-150 min-h-[38px] sm:min-h-[42px] ${
                           isActive
                             ? "bg-red-50 font-semibold text-red-900"
                             : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                         }`}
                       >
                         <span
-                          className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-red-800 transition-all duration-150 ${
+                          className={`absolute left-0 top-1/2 h-4 sm:h-5 w-1 -translate-y-1/2 rounded-r-full bg-red-800 transition-all duration-150 ${
                             isActive ? "opacity-100" : "opacity-0"
                           }`}
                         />
                         <item.icon
-                          className={`h-[18px] w-[18px] flex-shrink-0 ${
+                          className={`h-4 w-4 sm:h-[18px] sm:w-[18px] flex-shrink-0 ${
                             isActive
                               ? "text-red-800"
                               : "text-slate-400 group-hover:text-slate-600"
                           }`}
                         />
-                        {item.name}
+                        <span className="truncate">{item.name}</span>
                       </Link>
                     </li>
                   );
@@ -226,22 +225,22 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
         </nav>
 
         {/* Bottom Utility */}
-        <div className="border-t border-slate-200 px-3 py-3">
+        <div className="shrink-0 border-t border-slate-200 bg-white px-2.5 py-2 sm:px-3 sm:py-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:pb-3 space-y-0.5">
           <Link
             href="/dashboard/profile"
             onClick={handleClose}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 min-h-[44px]"
+            className="flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 min-h-[38px] sm:min-h-[42px]"
           >
-            <User className="h-[18px] w-[18px] text-slate-400" />
-            My Profile
+            <User className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-slate-400 shrink-0" />
+            <span className="truncate">My Profile</span>
           </Link>
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-800 min-h-[44px] cursor-pointer"
+            className="flex w-full items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-800 min-h-[38px] sm:min-h-[42px] cursor-pointer"
           >
-            <LogOut className="h-[18px] w-[18px]" />
-            Logout
+            <LogOut className="h-4 w-4 sm:h-[18px] sm:w-[18px] shrink-0" />
+            <span className="truncate">Logout</span>
           </button>
         </div>
       </aside>

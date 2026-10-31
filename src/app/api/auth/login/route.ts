@@ -77,7 +77,17 @@ export async function POST(req: Request) {
     }
 
     // Verify the password
-    const isMatch = await bcrypt.compare(password, user.password);
+    let isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch && user.role === 'student') {
+      // Allow case-insensitive and punctuation/space-tolerant matching for student surnames or LRNs
+      const normalizedInput = String(password).toLowerCase().replace(/[^a-z0-9]/gi, '');
+      if (normalizedInput && normalizedInput !== password) {
+        isMatch = await bcrypt.compare(normalizedInput, user.password);
+      }
+      if (!isMatch && normalizedInput) {
+        isMatch = await bcrypt.compare(normalizedInput.toUpperCase(), user.password);
+      }
+    }
     if (!isMatch) {
       return NextResponse.json(
         { error: "Invalid credentials" },
