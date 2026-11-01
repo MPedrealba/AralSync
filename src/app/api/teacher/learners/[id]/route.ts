@@ -258,6 +258,7 @@ export async function PATCH(
     const recordFields = [
       'gradeLevel',
       'section',
+      'lrn',
       'guardian',
       'contact',
       'address',
@@ -269,9 +270,16 @@ export async function PATCH(
     }
     await record.save();
 
-    if (body.name && record.studentId) {
-      await User.findByIdAndUpdate(record.studentId, { name: body.name });
+    if (record.studentId) {
+      const userUpdates: Record<string, string> = {};
+      if (body.name && body.name.trim()) userUpdates.name = body.name.trim();
+      if (body.lrn && body.lrn.trim()) userUpdates.username = body.lrn.trim();
+      if (Object.keys(userUpdates).length > 0) {
+        await User.findByIdAndUpdate(record.studentId, userUpdates);
+      }
     }
+
+    const updatedUser = record.studentId ? await User.findById(record.studentId).lean() : null;
 
     await logAudit({
       actorId: actor.id,
@@ -283,7 +291,13 @@ export async function PATCH(
       meta: { fields: Object.keys(body) },
     });
 
-    return ok({ id: String(record._id) });
+    return ok({
+      id: String(record._id),
+      name: updatedUser?.name || record.name,
+      section: record.section,
+      gradeLevel: record.gradeLevel,
+      lrn: record.lrn,
+    });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     console.error('Teacher Learner Update API Error:', error);

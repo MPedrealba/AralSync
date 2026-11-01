@@ -35,7 +35,11 @@ export async function PATCH(
       (typeof gradeScore === 'string' && gradeScore.trim() === '');
 
     if (!isScoreEmpty) {
-      const numericScore = Number(gradeScore);
+      let rawScore = gradeScore;
+      if (typeof rawScore === 'string' && rawScore.includes('/')) {
+        rawScore = rawScore.split('/')[0].trim();
+      }
+      const numericScore = Number(rawScore);
       const maxAllowed = intervention.maxPoints != null ? intervention.maxPoints : 100;
       if (isNaN(numericScore) || numericScore < 0 || numericScore > maxAllowed) {
         return fail(

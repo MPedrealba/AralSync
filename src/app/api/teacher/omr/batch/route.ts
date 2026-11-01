@@ -17,66 +17,114 @@ function computeMasteryLevel(pct: number): string {
   return 'Beginning';
 }
 
-/** Single sheet detection via Python service or simulated fallback */
-async function detectSingleSheetAnswers(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<string[]> {
-  try {
-    const blob = new Blob([imageBuffer], { type: 'image/png' });
-    const form = new FormData();
-    form.append('file', blob, 'sheet.png');
-    form.append('num_questions', String(keyLength));
+export class OMRServiceError extends Error {
+  code: string;
+  status: number;
+  constructor(message: string, code: string = 'OMR_SERVICE_OFFLINE', status: number = 503) {
+    super(message);
+    this.name = 'OMRServiceError';
+    this.code = code;
+    this.status = status;
+  }
+}
 
-    const res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
+/** Single sheet detection via Python OpenCV service */
+async function detectSingleSheetAnswers(
+  imageBuffer: ArrayBuffer,
+  keyLength: number = 20
+): Promise<{ answers: (string | null)[]; nameCropBase64?: string | null }> {
+  const blob = new Blob([imageBuffer], { type: 'image/png' });
+  const form = new FormData();
+  form.append('file', blob, 'sheet.png');
+  form.append('num_questions', String(keyLength));
+
+  let res: Response;
+  try {
+    res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
       method: 'POST',
       body: form,
       signal: AbortSignal.timeout(15000),
     });
+  } catch (e: unknown) {
+    console.error('Python OMR detect connection error:', (e as Error).message);
+    throw new OMRServiceError(
+      'OMR Vision Engine is offline. Please ensure the Python OpenCV microservice is running on port 8000.',
+      'OMR_SERVICE_OFFLINE',
+      503
+    );
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.answers)) {
-        return data.answers.map((a: any) => a.answer_label || null);
-      }
+  if (!res.ok) {
+    let errMessage = 'OMR Vision Engine returned an error.';
+    try {
+      const errData = await res.json();
+      errMessage = errData.detail || errData.error || errMessage;
+    } catch {
+      // ignore
     }
-  } catch (e) {
-    console.warn('Python OMR detect returned error or timed out, using fallback:', (e as Error).message);
+    throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
   }
 
-  // Fallback: simulated marks
-  const OPTIONS = ['A', 'B', 'C', 'D'];
-  const fallbackAnswers: string[] = [];
-  for (let i = 0; i < keyLength; i++) {
-    fallbackAnswers.push(OPTIONS[Math.floor(Math.random() * 4)]);
+  const data = await res.json();
+  if (!data.success || !Array.isArray(data.answers)) {
+    const errorDetails = Array.isArray(data.errors) && data.errors.length > 0
+      ? data.errors.join('; ')
+      : 'No bubble grid detected on sheet.';
+    throw new OMRServiceError(errorDetails, 'OMR_DETECTION_FAILED', 422);
   }
-  return fallbackAnswers;
+
+  return {
+    answers: data.answers.map((a: any) => a.answer_label || null),
+    nameCropBase64: data.name_crop_base64 || null,
+  };
 }
 
-/** Multi-page PDF detection via Python service */
+/** Multi-page PDF detection via Python OpenCV service */
 async function detectPdfPages(
   pdfBuffer: ArrayBuffer,
   keyLength: number = 20
-): Promise<{ page_index: number; png_base64: string; answers: any[] }[] | null> {
-  try {
-    const blob = new Blob([pdfBuffer], { type: 'application/pdf' });
-    const form = new FormData();
-    form.append('file', blob, 'exam.pdf');
-    form.append('num_questions', String(keyLength));
+): Promise<{ page_index: number; png_base64: string; answers: any[]; name_crop_base64?: string | null }[]> {
+  const blob = new Blob([pdfBuffer], { type: 'application/pdf' });
+  const form = new FormData();
+  form.append('file', blob, 'exam.pdf');
+  form.append('num_questions', String(keyLength));
 
-    const res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect-pdf`, {
+  let res: Response;
+  try {
+    res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect-pdf`, {
       method: 'POST',
       body: form,
       signal: AbortSignal.timeout(60000), // 60s for multi-page PDF
     });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.pages)) {
-        return data.pages;
-      }
-    }
-  } catch (e) {
-    console.warn('Python PDF OMR detect failed:', (e as Error).message);
+  } catch (e: unknown) {
+    console.error('Python PDF OMR connection error:', (e as Error).message);
+    throw new OMRServiceError(
+      'OMR Vision Engine is offline. Please ensure the Python OpenCV microservice is running on port 8000.',
+      'OMR_SERVICE_OFFLINE',
+      503
+    );
   }
-  return null;
+
+  if (!res.ok) {
+    let errMessage = 'Python PDF OMR service error.';
+    try {
+      const errData = await res.json();
+      errMessage = errData.detail || errData.error || errMessage;
+    } catch {
+      // ignore
+    }
+    throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
+  }
+
+  const data = await res.json();
+  if (!data.success || !Array.isArray(data.pages)) {
+    const errorDetails = Array.isArray(data.errors) && data.errors.length > 0
+      ? data.errors.join('; ')
+      : 'Failed to detect exam pages in PDF.';
+    throw new OMRServiceError(errorDetails, 'OMR_DETECTION_FAILED', 422);
+  }
+
+  return data.pages;
 }
 
 export async function POST(req: NextRequest) {
@@ -146,13 +194,17 @@ export async function POST(req: NextRequest) {
     }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'omr');
+    const cropsDir = path.join(uploadDir, 'crops');
     await fs.mkdir(uploadDir, { recursive: true });
+    await fs.mkdir(cropsDir, { recursive: true });
 
     const processedSheets: Array<{
       sheetId: string;
       sheetIndex: number;
       originalFilename: string;
       omrSheetUrl: string;
+      nameCropUrl?: string;
+      nameCropBase64?: string;
       detectedAnswers: (string | null)[];
       verifiedAnswers: (string | null)[];
       score: number;
@@ -190,6 +242,19 @@ export async function POST(req: NextRequest) {
               await fs.writeFile(outPath, imgBuffer);
             }
 
+            // Save Name Crop if available
+            let nameCropUrl: string | undefined = undefined;
+            if (pageData.name_crop_base64) {
+              const cropFilename = `crop-batch-${now}-f${fIdx}-p${pIdx + 1}.jpg`;
+              const cropPath = path.join(cropsDir, cropFilename);
+              try {
+                await fs.writeFile(cropPath, Buffer.from(pageData.name_crop_base64, 'base64'));
+                nameCropUrl = `/uploads/omr/crops/${cropFilename}`;
+              } catch (cropErr) {
+                console.warn('Failed saving page name crop:', cropErr);
+              }
+            }
+
             // Grade MC
             let mcCorrect = 0;
             let mcTotal = 0;
@@ -216,6 +281,8 @@ export async function POST(req: NextRequest) {
               sheetIndex: processedSheets.length,
               originalFilename: `${file.name} (Page ${pIdx + 1})`,
               omrSheetUrl: `/uploads/omr/${outFilename}`,
+              nameCropUrl,
+              nameCropBase64: pageData.name_crop_base64 || undefined,
               detectedAnswers: pageAnswers,
               verifiedAnswers: [...pageAnswers],
               score: pct,
@@ -243,6 +310,19 @@ export async function POST(req: NextRequest) {
 
       const detected = await detectSingleSheetAnswers(imageBuffer, totalItems);
 
+      // Save Name Crop if available
+      let nameCropUrl: string | undefined = undefined;
+      if (detected.nameCropBase64) {
+        const cropFilename = `crop-batch-${now}-${processedSheets.length}.jpg`;
+        const cropPath = path.join(cropsDir, cropFilename);
+        try {
+          await fs.writeFile(cropPath, Buffer.from(detected.nameCropBase64, 'base64'));
+          nameCropUrl = `/uploads/omr/crops/${cropFilename}`;
+        } catch (cropErr) {
+          console.warn('Failed saving image name crop:', cropErr);
+        }
+      }
+
       let mcCorrect = 0;
       let mcTotal = 0;
       const flagged: number[] = [];
@@ -250,7 +330,7 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < totalItems; i++) {
         if (keyModes[i] !== 'written') {
           mcTotal++;
-          const ans = detected[i];
+          const ans = detected.answers[i];
           if (ans && ans.toUpperCase() === keyAnswers[i]?.toUpperCase()) {
             mcCorrect++;
           }
@@ -268,8 +348,10 @@ export async function POST(req: NextRequest) {
         sheetIndex: processedSheets.length,
         originalFilename: file.name,
         omrSheetUrl,
-        detectedAnswers: detected,
-        verifiedAnswers: [...detected],
+        nameCropUrl,
+        nameCropBase64: detected.nameCropBase64 || undefined,
+        detectedAnswers: detected.answers,
+        verifiedAnswers: [...detected.answers],
         score: pct,
         mcCorrect,
         mcTotal,
@@ -296,6 +378,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
+    if (error instanceof OMRServiceError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+        },
+        { status: error.status }
+      );
+    }
     console.error('Batch OMR Upload Error:', error);
     return NextResponse.json({ error: 'Failed to process batch OMR upload.' }, { status: 500 });
   }

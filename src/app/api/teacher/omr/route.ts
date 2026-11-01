@@ -22,42 +22,61 @@ import { getRecommendationsForLearner, Subject } from '@/lib/dynamicRecommendati
  *  the Python service is unavailable.
  * ────────────────────────────────────────────────────────────── */
 
+export class OMRServiceError extends Error {
+  code: string;
+  status: number;
+  constructor(message: string, code: string = 'OMR_SERVICE_OFFLINE', status: number = 503) {
+    super(message);
+    this.name = 'OMRServiceError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
-async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<string[]> {
-  /* ── Try the Python OpenCV service first ── */
-  try {
-    const blob = new Blob([imageBuffer], { type: 'image/png' });
-    const form = new FormData();
-    form.append('file', blob, 'sheet.png');
-    form.append('num_questions', String(keyLength));
+async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<(string | null)[]> {
+  const blob = new Blob([imageBuffer], { type: 'image/png' });
+  const form = new FormData();
+  form.append('file', blob, 'sheet.png');
+  form.append('num_questions', String(keyLength));
 
-    const res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
+  let res: Response;
+  try {
+    res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
       method: 'POST',
       body: form,
       signal: AbortSignal.timeout(15000), // 15s timeout
     });
+  } catch (e: unknown) {
+    console.error('Python OMR service connection error:', (e as Error).message);
+    throw new OMRServiceError(
+      'OMR Vision Engine is offline. Please ensure the Python OpenCV microservice is running on port 8000.',
+      'OMR_SERVICE_OFFLINE',
+      503
+    );
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.answers)) {
-        return data.answers.map((a: any) => a.answer_label || null);
-      }
+  if (!res.ok) {
+    let errMessage = 'OMR vision engine returned an error.';
+    try {
+      const errData = await res.json();
+      errMessage = errData.detail || errData.error || errMessage;
+    } catch {
+      // ignore
     }
-    console.warn('Python OMR service returned non-success, falling back to simulation.');
-  } catch (e) {
-    console.warn('Python OMR service unavailable, using simulation:', (e as Error).message);
+    throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
   }
 
-  /* ── Fallback: simulated OMR (original behavior) ── */
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-
-  const OPTIONS = ['A', 'B', 'C', 'D'];
-  const detectedAnswers: string[] = [];
-  for (let i = 0; i < keyLength; i++) {
-    detectedAnswers.push(OPTIONS[Math.floor(Math.random() * 4)]);
+  const data = await res.json();
+  if (!data.success || !Array.isArray(data.answers)) {
+    const errorDetails = Array.isArray(data.errors) && data.errors.length > 0
+      ? data.errors.join('; ')
+      : 'No bubble grid detected. Ensure the sheet has registration marks and is scanned clearly.';
+    throw new OMRServiceError(errorDetails, 'OMR_DETECTION_FAILED', 422);
   }
-  return detectedAnswers;
+
+  return data.answers.map((a: any) => a.answer_label || null);
 }
 
 /** Compute mastery level from a percentage score */
@@ -311,6 +330,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
+    if (error instanceof OMRServiceError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+        },
+        { status: error.status }
+      );
+    }
     console.error('OMR Processing Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

@@ -99,4 +99,56 @@ describe('ARAL Intervention Task Mandatory Grade Score Validation Suite', () => 
     assert.equal(inFlightResult.isScoreOutOfRange, false);
     assert.equal(inFlightResult.isSaveDisabled, true);
   });
+
+  describe('Intervention Drawer Reviewing Modal Validation Suite', () => {
+    function validateDrawerGradeInput(drawerGradeInput, drawerGradingSaving = false) {
+      const cleanScoreNum = (() => {
+        if (!drawerGradeInput || drawerGradeInput.trim() === '') return null;
+        const raw = drawerGradeInput.trim();
+        const parsed = raw.includes('/') ? Number(raw.split('/')[0].trim()) : Number(raw);
+        return isNaN(parsed) ? null : parsed;
+      })();
+
+      const isGradeInputEmpty = !drawerGradeInput || drawerGradeInput.trim() === '';
+      const isGradeInputInvalid = !isGradeInputEmpty && (cleanScoreNum === null || cleanScoreNum < 0 || cleanScoreNum > 100);
+      const isSaveGradeDisabled = drawerGradingSaving || isGradeInputEmpty || isGradeInputInvalid;
+
+      return { cleanScoreNum, isGradeInputEmpty, isGradeInputInvalid, isSaveGradeDisabled };
+    }
+
+    test('disables drawer buttons on blank, empty, or whitespace score', () => {
+      assert.equal(validateDrawerGradeInput('').isSaveGradeDisabled, true);
+      assert.equal(validateDrawerGradeInput('   ').isSaveGradeDisabled, true);
+      assert.equal(validateDrawerGradeInput(null).isSaveGradeDisabled, true);
+      assert.equal(validateDrawerGradeInput(undefined).isSaveGradeDisabled, true);
+    });
+
+    test('disables drawer buttons on invalid score formats', () => {
+      assert.equal(validateDrawerGradeInput('abc').isSaveGradeDisabled, true);
+      assert.equal(validateDrawerGradeInput('-5').isSaveGradeDisabled, true);
+      assert.equal(validateDrawerGradeInput('105').isSaveGradeDisabled, true);
+    });
+
+    test('extracts numerator and enables drawer buttons on valid slash format e.g. 95/100', () => {
+      const slashResult = validateDrawerGradeInput('95/100');
+      assert.equal(slashResult.cleanScoreNum, 95);
+      assert.equal(slashResult.isGradeInputInvalid, false);
+      assert.equal(slashResult.isSaveGradeDisabled, false);
+
+      const slashResult10 = validateDrawerGradeInput('10/10');
+      assert.equal(slashResult10.cleanScoreNum, 10);
+      assert.equal(slashResult10.isGradeInputInvalid, false);
+      assert.equal(slashResult10.isSaveGradeDisabled, false);
+    });
+
+    test('enables drawer buttons on valid numbers 0 to 100', () => {
+      assert.equal(validateDrawerGradeInput('0').isSaveGradeDisabled, false);
+      assert.equal(validateDrawerGradeInput('85').isSaveGradeDisabled, false);
+      assert.equal(validateDrawerGradeInput('100').isSaveGradeDisabled, false);
+    });
+
+    test('disables drawer buttons while save operation is in-flight', () => {
+      assert.equal(validateDrawerGradeInput('95', true).isSaveGradeDisabled, true);
+    });
+  });
 });

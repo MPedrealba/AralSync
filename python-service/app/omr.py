@@ -15,6 +15,7 @@ The bubble sheet layout (printed by the Next.js BubbleSheetPrint component):
 - 4 fiducial marks: top-left, top-right, bottom-left, bottom-right corners
 """
 
+import base64
 import cv2
 import numpy as np
 from typing import Optional
@@ -449,11 +450,15 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
         # Step 2: Warp to standard rectangular grid
         warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
 
+    # Step 2.5: Extract Name & Section Header Crop
+    name_crop_base64 = extract_name_crop(warped)
+
     # Step 3: Find bubble grid
     grid = find_bubble_grid(warped, num_questions)
 
     if not grid:
         return {"success": False, "answers": [], "detected_questions": 0,
+                "name_crop_base64": name_crop_base64,
                 "errors": ["No bubble grid detected. Ensure the sheet has registration marks "
                           "and is scanned clearly."]}
 
@@ -490,8 +495,86 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
         "answers": results,
         "detected_questions": len(grid),
         "filled_count": filled_count,
+        "name_crop_base64": name_crop_base64,
         "errors": errors,
     }
+
+
+def extract_name_crop(warped_img: np.ndarray) -> Optional[str]:
+    """
+    Extracts the handwritten Name & Class/Section box from the standardized 1275x1650 warped grid.
+    Coordinates: Y in [260, 420], X in [80, 860].
+    Returns base64-encoded JPEG image string.
+    """
+    try:
+        h, w = warped_img.shape[:2]
+        y1, y2 = int(260 * h / 1650), int(420 * h / 1650)
+        x1, x2 = int(80 * w / 1275), int(860 * w / 1275)
+        crop = warped_img[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        _, buf = cv2.imencode('.jpg', crop, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        return base64.b64encode(buf).decode('utf-8')
+    except Exception as e:
+        print(f"Error extracting name crop: {e}")
+        return None
+
+
+def build_name_collages(crop_items: list[dict], max_per_collage: int = 8) -> list[dict]:
+    """
+    Stitches cropped name boxes into labeled vertical composite collages.
+    Each item in crop_items:
+      - 'index': int (0-based sheet index)
+      - 'image_base64': str
+    Returns a list of collages:
+      - 'collage_base64': str
+      - 'indices': list[int]
+    """
+    collages = []
+    target_w = 780
+    target_h = 140
+    sep = np.full((4, target_w), 140, dtype=np.uint8)
+
+    for i in range(0, len(crop_items), max_per_collage):
+        chunk = crop_items[i : i + max_per_collage]
+        labeled_crops = []
+        chunk_indices = []
+
+        for item in chunk:
+            idx = item.get("index", 0)
+            b64 = item.get("image_base64")
+            if not b64:
+                continue
+            try:
+                img_data = base64.b64decode(b64)
+                np_arr = np.frombuffer(img_data, np.uint8)
+                crop_img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)
+                if crop_img is None:
+                    continue
+                resized = cv2.resize(crop_img, (target_w, target_h))
+                cv2.rectangle(resized, (0, 0), (64, target_h), (245, 245, 245), -1)
+                cv2.rectangle(resized, (0, 0), (64, target_h), (180, 180, 180), 1)
+                cv2.putText(resized, f"#{idx + 1}", (8, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (20, 20, 20), 2)
+                labeled_crops.append(resized)
+                chunk_indices.append(idx)
+            except Exception as e:
+                print(f"Error processing crop for collage: {e}")
+                continue
+
+        if labeled_crops:
+            stacked = []
+            for c_idx, c in enumerate(labeled_crops):
+                if c_idx > 0:
+                    stacked.append(sep)
+                stacked.append(c)
+            composite = np.vstack(stacked)
+            _, buf = cv2.imencode('.jpg', composite, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            collages.append({
+                "collage_base64": base64.b64encode(buf).decode('utf-8'),
+                "indices": chunk_indices,
+            })
+
+    return collages
 
 
 def detect_omr_sheet_path(image_path: str, num_questions: int = 50) -> dict:

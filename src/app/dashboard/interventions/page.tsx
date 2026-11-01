@@ -203,6 +203,19 @@ export default function InterventionsPage() {
   const [drawerGradingError, setDrawerGradingError] = useState("");
   const [submissionFeedbackToast, setSubmissionFeedbackToast] = useState<string | null>(null);
 
+  // Mandatory Score Validation for Drawer / Modal
+  const cleanScoreNum = (() => {
+    if (!drawerGradeInput || drawerGradeInput.trim() === "") return null;
+    const raw = drawerGradeInput.trim();
+    // Support both "95" and "95/100" format by extracting the numerator
+    const parsed = raw.includes("/") ? Number(raw.split("/")[0].trim()) : Number(raw);
+    return isNaN(parsed) ? null : parsed;
+  })();
+
+  const isGradeInputEmpty = !drawerGradeInput || drawerGradeInput.trim() === "";
+  const isGradeInputInvalid = !isGradeInputEmpty && (cleanScoreNum === null || cleanScoreNum < 0 || cleanScoreNum > 100);
+  const isSaveGradeDisabled = drawerGradingSaving || isGradeInputEmpty || isGradeInputInvalid;
+
   // View B: Submissions & Grading state
   const [activeAssignment, setActiveAssignment] = useState<AssignmentGroup | null>(null);
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
@@ -337,20 +350,19 @@ export default function InterventionsPage() {
   };
 
   const handleSaveGradeDrawer = async (statusOverride?: "Reviewed" | "Completed") => {
-    if (!reviewingSubmission) return;
+    if (!reviewingSubmission || isSaveGradeDisabled) return;
     setDrawerGradingSaving(true);
     setDrawerGradingError("");
 
     const nextStatus = statusOverride || drawerGradingStatus;
+    const finalScore = cleanScoreNum !== null ? cleanScoreNum : Number(drawerGradeInput.trim());
 
     try {
       const res = await fetch(`/api/teacher/interventions/${reviewingSubmission.id}/grade`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(drawerGradeInput && drawerGradeInput.trim() !== ""
-            ? { gradeScore: Number(drawerGradeInput.trim()) || drawerGradeInput.trim() }
-            : {}),
+          gradeScore: finalScore,
           teacherRemarks: drawerRemarksInput ? drawerRemarksInput.trim() : "",
           status: nextStatus,
         }),
@@ -364,7 +376,7 @@ export default function InterventionsPage() {
               ? {
                   ...item,
                   status: nextStatus,
-                  gradeScore: drawerGradeInput ? drawerGradeInput.trim() : null,
+                  gradeScore: finalScore,
                   teacherRemarks: drawerRemarksInput ? drawerRemarksInput.trim() : "",
                   reviewed: true,
                   gradedAt: new Date().toISOString(),
@@ -376,6 +388,10 @@ export default function InterventionsPage() {
         setTimeout(() => setSubmissionFeedbackToast(null), 4000);
         setReviewingSubmission(null);
         loadAssignments();
+        loadAllSubmissions();
+        if (activeAssignment?.assignmentId) {
+          loadSubmissions(activeAssignment.assignmentId);
+        }
       } else {
         setDrawerGradingError(json.error || "Failed to save grade and remarks.");
       }
@@ -2443,15 +2459,24 @@ export default function InterventionsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Score / Grade (e.g., 95/100, 10/10, Satisfactory)
+                      Score / Grade <span className="text-rose-500">*</span> (e.g., 95, 95/100, 10/10)
                     </label>
                     <input
                       type="text"
                       value={drawerGradeInput}
                       onChange={(e) => setDrawerGradeInput(e.target.value)}
-                      placeholder="e.g. 95/100"
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none focus:border-red-800"
+                      placeholder="e.g. 95/100 or 95"
+                      className={`h-10 w-full rounded-xl border bg-white px-3.5 text-xs font-bold text-slate-900 outline-none transition-colors ${
+                        isGradeInputInvalid
+                          ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                          : "border-slate-200 focus:border-red-800"
+                      }`}
                     />
+                    {isGradeInputInvalid && (
+                      <p className="mt-1 text-[11px] font-medium text-rose-600">
+                        Please enter a valid numeric score between 0 and 100 (e.g., 95 or 95/100).
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
@@ -2495,17 +2520,17 @@ export default function InterventionsPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={drawerGradingSaving}
+                  disabled={isSaveGradeDisabled}
                   onClick={() => handleSaveGradeDrawer("Reviewed")}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer shadow-2xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-2xs"
                 >
                   Save Feedback
                 </button>
                 <button
                   type="button"
-                  disabled={drawerGradingSaving}
+                  disabled={isSaveGradeDisabled}
                   onClick={() => handleSaveGradeDrawer("Completed")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {drawerGradingSaving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

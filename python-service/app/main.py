@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-from .omr import detect_omr_sheet
+from .omr import detect_omr_sheet, build_name_collages
 from .reading import analyze_reading_audio
 from .cluster import cluster_learners
 
@@ -108,9 +108,22 @@ async def omr_detect_pdf(
             "png_base64": base64.b64encode(png_bytes).decode("ascii"),
             "answers": res.get("answers", []),
             "detected_count": res.get("detected_count", 0),
+            "name_crop_base64": res.get("name_crop_base64", None),
         })
 
     return {"success": True, "page_count": len(pages), "pages": pages}
+
+
+class BuildCollagesRequest(BaseModel):
+    crops: list[dict]
+    max_per_collage: Optional[int] = 8
+
+
+@app.post("/omr/build-collages")
+async def omr_build_collages(payload: BuildCollagesRequest):
+    """Build composite vertical collage strips from cropped student name boxes."""
+    collages = build_name_collages(payload.crops, payload.max_per_collage or 8)
+    return {"success": True, "collages": collages}
 
 
 # ── Learning Material PDF Renderer ──────────────────────────────────────────

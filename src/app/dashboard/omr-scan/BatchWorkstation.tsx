@@ -25,11 +25,11 @@ import {
   FileText,
   SlidersHorizontal,
   ExternalLink,
+  Edit3,
 } from "lucide-react";
 import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 
 export interface Learner {
-
   _id: string;
   name: string;
   section?: string;
@@ -66,6 +66,13 @@ export interface BatchSheetItem {
   writtenScores?: Record<number, number>;
   notes?: string;
   isExcluded?: boolean;
+
+  // AI Vision & Name Matching
+  nameCropUrl?: string;
+  nameCropBase64?: string;
+  aiDetectedName?: string;
+  aiConfidence?: number;
+  isManuallyOverridden?: boolean;
 }
 
 const COMPETENCIES = [
@@ -182,10 +189,41 @@ export default function BatchWorkstation({
       : (key.questions || []).map((q: any) => q.correctAnswer || q.answer || "A");
   }, [selectedKeyId, answerKeys]);
 
-  // Alphabetical sorted class roster for 1-to-1 matching
+  const [localStudents, setLocalStudents] = useState<Learner[]>(students);
+  useEffect(() => {
+    setLocalStudents(students);
+  }, [students]);
+
+  // Alphabetical sorted class roster for 1-to-1 matching (filtered to current grade & section)
   const sortedBatchStudents = useMemo(() => {
-    return [...filteredStudents].sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredStudents]);
+    return localStudents
+      .filter((s) => {
+        const matchesGrade = selectedGrade === "all" || String(s.gradeLevel) === String(selectedGrade);
+        const matchesSection =
+          selectedSection === "all" ||
+          (s.section || "").trim().toLowerCase() === selectedSection.trim().toLowerCase();
+        return matchesGrade && matchesSection;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [localStudents, selectedGrade, selectedSection]);
+
+  // Other students across the school (to allow cross-section or cross-grade assignment)
+  const otherStudents = useMemo(() => {
+    const currentIds = new Set(sortedBatchStudents.map((s) => s._id));
+    return localStudents
+      .filter((s) => !currentIds.has(s._id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [localStudents, sortedBatchStudents]);
+
+  // ── Learner Editing Modal State ──
+  const [editingLearner, setEditingLearner] = useState<Learner | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editGrade, setEditGrade] = useState("7");
+  const [editSection, setEditSection] = useState("");
+  const [editLrn, setEditLrn] = useState("");
+  const [isSavingLearner, setIsSavingLearner] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [isAiMatching, setIsAiMatching] = useState(false);
 
   // ── Batch Processing State ──
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -238,6 +276,159 @@ export default function BatchWorkstation({
     setInfoMessage(`${filesArray.length} file${filesArray.length > 1 ? "s" : ""} selected. Click "Start Batch Scan" to process.`);
   };
 
+  // ── Open Learner Edit Modal ──
+  const handleOpenEditLearner = (learner: Learner) => {
+    setEditingLearner(learner);
+    setEditName(learner.name || "");
+    setEditGrade(String(learner.gradeLevel || "7"));
+    setEditSection(learner.section || "");
+    setEditLrn(learner.lrn || "");
+    setEditError("");
+  };
+
+  // ── Save Learner Edit ──
+  const handleSaveLearnerEdit = async () => {
+    if (!editingLearner) return;
+    if (!editName.trim()) {
+      setEditError("Student name cannot be empty.");
+      return;
+    }
+    setIsSavingLearner(true);
+    setEditError("");
+
+    try {
+      const res = await fetch(`/api/teacher/learners/${editingLearner._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          gradeLevel: Number(editGrade) || 7,
+          section: editSection.trim(),
+          lrn: editLrn.trim() || undefined,
+        }),
+      });
+
+      const json = await parseJsonResponse(res);
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to update learner record.");
+      }
+
+      const updatedName = editName.trim();
+      const updatedSection = editSection.trim();
+      const updatedGrade = Number(editGrade) || 7;
+      const updatedLrn = editLrn.trim() || editingLearner.lrn;
+
+      // Update in local students
+      setLocalStudents((prev) =>
+        prev.map((s) =>
+          s._id === editingLearner._id
+            ? {
+                ...s,
+                name: updatedName,
+                gradeLevel: updatedGrade,
+                section: updatedSection,
+                lrn: updatedLrn,
+              }
+            : s
+        )
+      );
+
+      // Mark affected sheet as manually verified/overridden
+      setBatchSheets((prev) =>
+        prev.map((sheet) =>
+          sheet.studentId === editingLearner._id
+            ? { ...sheet, isManuallyOverridden: true }
+            : sheet
+        )
+      );
+
+      if (inspectingSheet && inspectingSheet.studentId === editingLearner._id) {
+        setInspectingSheet({
+          ...inspectingSheet,
+          isManuallyOverridden: true,
+        });
+      }
+
+      setEditingLearner(null);
+      setInfoMessage(`Successfully updated profile for ${updatedName}.`);
+    } catch (err: any) {
+      setEditError(err.message || "Failed to update learner details.");
+    } finally {
+      setIsSavingLearner(false);
+    }
+  };
+
+  // ── Run AI Vision Name Matching ──
+  const handleRunAiMatching = async (currentSheets?: BatchSheetItem[]) => {
+    const sheetsToProcess = currentSheets || batchSheets;
+    if (sheetsToProcess.length === 0 || sortedBatchStudents.length === 0) return;
+
+    setIsAiMatching(true);
+    setErrorMessage("");
+    try {
+      const matchRes = await fetch("/api/teacher/omr/batch/match-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          crops: sheetsToProcess.map((s) => ({
+            sheetIndex: s.sheetIndex,
+            nameCropBase64: s.nameCropBase64,
+            nameCropUrl: s.nameCropUrl,
+          })),
+          roster: sortedBatchStudents.map((s) => ({
+            _id: s._id,
+            name: s.name,
+            lrn: s.lrn,
+            section: s.section,
+            gradeLevel: s.gradeLevel,
+          })),
+        }),
+      });
+
+      const matchJson = await parseJsonResponse(matchRes);
+      if (!matchRes.ok || !matchJson.success) {
+        throw new Error(matchJson.error || "Failed to match names with AI.");
+      }
+
+      const matchMap = new Map<number, any>();
+      (matchJson.data?.matches || []).forEach((m: any) => matchMap.set(m.sheetIndex, m));
+
+      let matchedCount = 0;
+      setBatchSheets((prev) =>
+        prev.map((s) => {
+          const m = matchMap.get(s.sheetIndex);
+          if (m && m.matchedStudentId) {
+            matchedCount++;
+            return {
+              ...s,
+              studentId: m.matchedStudentId,
+              aiDetectedName: m.detectedName || undefined,
+              aiConfidence: typeof m.confidence === "number" ? m.confidence : 0.9,
+              isManuallyOverridden: false,
+            };
+          }
+          if (m && m.detectedName) {
+            return {
+              ...s,
+              aiDetectedName: m.detectedName,
+              aiConfidence: typeof m.confidence === "number" ? m.confidence : 0.4,
+            };
+          }
+          return s;
+        })
+      );
+
+      setInfoMessage(
+        `AI Vision matched ${matchedCount} of ${sheetsToProcess.length} sheets against the roster.`
+      );
+    } catch (err: any) {
+      console.warn("AI Name matching error:", err.message);
+      setErrorMessage(err.message || "Could not complete AI name matching. Standard roster order retained.");
+    } finally {
+      setIsAiMatching(false);
+    }
+  };
+
   // ── Batch Scan Execution ──
   const handleStartBatchScan = async () => {
     if (selectedFiles.length === 0) {
@@ -273,8 +464,8 @@ export default function BatchWorkstation({
 
       const returnedSheets = json.data.sheets || [];
 
-      // Align sheets with sorted class roster
-      const alignedSheets: BatchSheetItem[] = returnedSheets.map(
+      // Align sheets with sorted class roster as default
+      let alignedSheets: BatchSheetItem[] = returnedSheets.map(
         (sheet: any, idx: number) => {
           const student = sortedBatchStudents[idx];
           return {
@@ -285,10 +476,67 @@ export default function BatchWorkstation({
         }
       );
 
+      // Trigger AI Vision name matching if any sheet has a name crop
+      const hasCrops = alignedSheets.some((s) => s.nameCropBase64 || s.nameCropUrl);
+      if (hasCrops && sortedBatchStudents.length > 0) {
+        try {
+          setProgressText("Analyzing handwritten student names with AI Vision...");
+          const matchRes = await fetch("/api/teacher/omr/batch/match-names", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              crops: alignedSheets.map((s) => ({
+                sheetIndex: s.sheetIndex,
+                nameCropBase64: s.nameCropBase64,
+                nameCropUrl: s.nameCropUrl,
+              })),
+              roster: sortedBatchStudents.map((s) => ({
+                _id: s._id,
+                name: s.name,
+                lrn: s.lrn,
+                section: s.section,
+                gradeLevel: s.gradeLevel,
+              })),
+            }),
+          });
+
+          const matchJson = await parseJsonResponse(matchRes);
+          if (matchRes.ok && matchJson.success && Array.isArray(matchJson.data?.matches)) {
+            const matchMap = new Map<number, any>();
+            matchJson.data.matches.forEach((m: any) => matchMap.set(m.sheetIndex, m));
+
+            alignedSheets = alignedSheets.map((s) => {
+              const m = matchMap.get(s.sheetIndex);
+              if (m && m.matchedStudentId) {
+                return {
+                  ...s,
+                  studentId: m.matchedStudentId,
+                  aiDetectedName: m.detectedName || undefined,
+                  aiConfidence: typeof m.confidence === "number" ? m.confidence : 0.9,
+                };
+              }
+              if (m && m.detectedName) {
+                return {
+                  ...s,
+                  aiDetectedName: m.detectedName,
+                  aiConfidence: typeof m.confidence === "number" ? m.confidence : 0.4,
+                };
+              }
+              return s;
+            });
+          }
+        } catch (matchErr) {
+          console.warn("AI Name matching during scan failed:", matchErr);
+        }
+      }
+
       setBatchSheets(alignedSheets);
       setSelectedFiles([]);
+      const matchedWithAi = alignedSheets.filter((s) => s.aiConfidence && s.aiConfidence >= 0.7).length;
       setInfoMessage(
-        `Successfully scanned ${alignedSheets.length} sheet${alignedSheets.length > 1 ? "s" : ""}. Student assignments pre-filled from roster.`
+        matchedWithAi > 0
+          ? `Successfully scanned ${alignedSheets.length} sheet${alignedSheets.length > 1 ? "s" : ""}. ${matchedWithAi} student${matchedWithAi > 1 ? "s" : ""} identified via AI Vision.`
+          : `Successfully scanned ${alignedSheets.length} sheet${alignedSheets.length > 1 ? "s" : ""}. Student assignments pre-filled from roster.`
       );
     } catch (err: any) {
       setErrorMessage(err.message || "An error occurred during batch scanning.");
@@ -301,7 +549,15 @@ export default function BatchWorkstation({
   // ── Student Reassignment in Roster Table ──
   const handleStudentReassign = (sheetIdx: number, newStudentId: string) => {
     setBatchSheets((prev) =>
-      prev.map((s, idx) => (idx === sheetIdx ? { ...s, studentId: newStudentId } : s))
+      prev.map((s, idx) =>
+        idx === sheetIdx
+          ? {
+              ...s,
+              studentId: newStudentId,
+              isManuallyOverridden: true,
+            }
+          : s
+      )
     );
   };
 
@@ -917,16 +1173,29 @@ export default function BatchWorkstation({
               </button>
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search student or sheet #..."
-                className="h-8.5 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 outline-none focus:border-red-800 focus:bg-white"
-              />
+            {/* AI Re-match Button & Search Input */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => handleRunAiMatching()}
+                disabled={isAiMatching || batchSheets.length === 0}
+                className="h-8.5 px-3 rounded-lg border border-red-200 bg-red-50 text-red-800 hover:bg-red-100 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 shrink-0 shadow-2xs"
+                title="Run AI Vision handwriting match on student name crops"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${isAiMatching ? "animate-spin text-red-800" : "text-red-700"}`} />
+                <span>{isAiMatching ? "Matching..." : "⚡ AI Match Names"}</span>
+              </button>
+
+              <div className="relative w-full sm:w-60">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search student or sheet #..."
+                  className="h-8.5 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 outline-none focus:border-red-800 focus:bg-white"
+                />
+              </div>
             </div>
           </div>
 
@@ -937,18 +1206,19 @@ export default function BatchWorkstation({
                 <thead className="border-b border-slate-200 bg-slate-50 font-bold uppercase tracking-wider text-slate-500 text-[10px]">
                   <tr>
                     <th className="py-3 px-3.5 text-center w-12">#</th>
-                    <th className="py-3 px-3.5 w-20">Preview</th>
-                    <th className="py-3 px-3.5 min-w-[220px]">Assigned Learner</th>
-                    <th className="py-3 px-3.5 text-center min-w-[120px]">Score</th>
-                    <th className="py-3 px-3.5 text-center min-w-[110px]">Mastery</th>
-                    <th className="py-3 px-3.5 min-w-[130px]">Verification</th>
-                    <th className="py-3 px-3.5 text-right min-w-[150px]">Actions</th>
+                    <th className="py-3 px-3.5 w-16">Sheet</th>
+                    <th className="py-3 px-3.5 w-32">Name Crop</th>
+                    <th className="py-3 px-3.5 min-w-[280px]">Assigned Learner</th>
+                    <th className="py-3 px-3.5 text-center min-w-[100px]">Score</th>
+                    <th className="py-3 px-3.5 text-center min-w-[100px]">Mastery</th>
+                    <th className="py-3 px-3.5 min-w-[110px]">Verification</th>
+                    <th className="py-3 px-3.5 text-right min-w-[140px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {displayedSheets.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-xs text-slate-400">
+                      <td colSpan={8} className="py-8 text-center text-xs text-slate-400">
                         No exam sheets found matching your active filter.
                       </td>
                     </tr>
@@ -956,7 +1226,7 @@ export default function BatchWorkstation({
                     displayedSheets.map((sheet) => {
                       const band = getMasteryBand(sheet.score);
                       const isDuplicate = !sheet.isExcluded && duplicateStudentIds.has(sheet.studentId);
-                      const assignedStudent = students.find((s) => s._id === sheet.studentId);
+                      const assignedStudent = localStudents.find((s) => s._id === sheet.studentId);
 
                       return (
                         <tr
@@ -970,13 +1240,13 @@ export default function BatchWorkstation({
                             {sheet.sheetIndex + 1}
                           </td>
 
-                          {/* 2. Thumbnail Preview */}
+                          {/* 2. Sheet Preview */}
                           <td className="py-3 px-3.5">
                             <button
                               type="button"
                               onClick={() => setPreviewImageUrl(sheet.omrSheetUrl)}
                               className="group relative block h-14 w-11 rounded-lg border border-slate-200 overflow-hidden bg-slate-100 hover:border-red-800 transition-colors shadow-xs"
-                              title="Click to view full preview"
+                              title="Click to view full sheet preview"
                             >
                               <img
                                 src={sheet.omrSheetUrl}
@@ -989,30 +1259,109 @@ export default function BatchWorkstation({
                             </button>
                           </td>
 
-                          {/* 3. Assigned Student Dropdown */}
+                          {/* 2.5. Handwritten Name Crop Snippet */}
                           <td className="py-3 px-3.5">
-                            <div className="space-y-1">
-                              <select
-                                value={sheet.studentId}
-                                onChange={(e) =>
-                                  handleStudentReassign(sheet.sheetIndex, e.target.value)
-                                }
-                                disabled={sheet.isExcluded}
-                                className={`h-8.5 w-full rounded-lg border px-2.5 text-xs font-semibold outline-none transition-colors ${
-                                  !sheet.studentId
-                                    ? "border-amber-300 bg-amber-50/50 text-amber-800 font-bold"
-                                    : isDuplicate
-                                    ? "border-amber-400 bg-amber-50 text-amber-900"
-                                    : "border-slate-200 bg-white text-slate-800 focus:border-red-800"
-                                }`}
+                            {sheet.nameCropUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(sheet.nameCropUrl!)}
+                                className="group relative block h-12 w-28 rounded-lg border border-slate-200 overflow-hidden bg-slate-100 hover:border-red-800 transition-colors shadow-2xs"
+                                title="Click to enlarge handwritten name crop"
                               >
-                                <option value="">-- Unassigned (Select Learner) --</option>
-                                {sortedBatchStudents.map((stud) => (
-                                  <option key={stud._id} value={stud._id}>
-                                    {stud.name} {stud.lrn ? `(${stud.lrn})` : ""}
-                                  </option>
-                                ))}
-                              </select>
+                                <img
+                                  src={sheet.nameCropUrl}
+                                  alt={`Name Crop ${sheet.sheetIndex + 1}`}
+                                  className="h-full w-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-bold transition-opacity">
+                                  Zoom Name
+                                </div>
+                              </button>
+                            ) : (
+                              <div className="h-10 w-24 rounded-lg border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-[10px] text-slate-400">
+                                No Crop
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Assigned Student Dropdown & Edit */}
+                          <td className="py-3 px-3.5">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={sheet.studentId}
+                                  onChange={(e) =>
+                                    handleStudentReassign(sheet.sheetIndex, e.target.value)
+                                  }
+                                  disabled={sheet.isExcluded}
+                                  className={`h-8.5 w-full rounded-lg border px-2.5 text-xs font-semibold outline-none transition-colors ${
+                                    !sheet.studentId
+                                      ? "border-amber-300 bg-amber-50/50 text-amber-800 font-bold"
+                                      : isDuplicate
+                                      ? "border-amber-400 bg-amber-50 text-amber-900"
+                                      : "border-slate-200 bg-white text-slate-800 focus:border-red-800"
+                                  }`}
+                                >
+                                  <option value="">-- Unassigned (Select Learner) --</option>
+                                  <optgroup label={`Current Section: ${selectedSection !== "all" ? selectedSection : "Section"} (${sortedBatchStudents.length})`}>
+                                    {sortedBatchStudents.map((stud) => (
+                                      <option key={stud._id} value={stud._id}>
+                                        {stud.name} {stud.lrn ? `(${stud.lrn})` : ""}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                  {otherStudents.length > 0 && (
+                                    <optgroup label={`Other Sections (${otherStudents.length})`}>
+                                      {otherStudents.map((stud) => (
+                                        <option key={stud._id} value={stud._id}>
+                                          {stud.name} {stud.section ? `• ${stud.section}` : ""} {stud.lrn ? `(${stud.lrn})` : ""}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                </select>
+
+                                {assignedStudent && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditLearner(assignedStudent)}
+                                    disabled={sheet.isExcluded}
+                                    className="h-8.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-red-800 transition-colors flex items-center gap-1 text-xs font-semibold shrink-0 shadow-2xs"
+                                    title="Edit student name, grade, section, or LRN"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                    <span className="hidden xl:inline text-[11px]">Edit</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* AI Matching & Status Tags */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {sheet.isManuallyOverridden ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    ✍️ Manually Verified
+                                  </span>
+                                ) : sheet.aiConfidence !== undefined ? (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                      sheet.aiConfidence >= 0.85
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : sheet.aiConfidence >= 0.5
+                                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}
+                                  >
+                                    {sheet.aiConfidence >= 0.85 ? "🟢" : sheet.aiConfidence >= 0.5 ? "🟡" : "⚪"}
+                                    AI Match: {Math.round(sheet.aiConfidence * 100)}%
+                                  </span>
+                                ) : null}
+
+                                {sheet.aiDetectedName && (
+                                  <span className="text-[10px] text-slate-500 font-medium truncate max-w-[200px]" title={sheet.aiDetectedName}>
+                                    Detected: &ldquo;{sheet.aiDetectedName}&rdquo;
+                                  </span>
+                                )}
+                              </div>
 
                               {isDuplicate && (
                                 <p className="text-[10px] font-bold text-amber-700">
@@ -1196,29 +1545,79 @@ export default function BatchWorkstation({
                 />
               </div>
 
-              {/* Right Column: Bubble Grid */}
+              {/* Right Column: Bubble Grid & Learner Details */}
               <div className="w-1/2 p-5 overflow-y-auto space-y-4">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    Assigned Student Learner
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Assigned Student Learner
+                    </label>
+                    {inspectingSheet.studentId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentStudent = localStudents.find((s) => s._id === inspectingSheet.studentId);
+                          if (currentStudent) handleOpenEditLearner(currentStudent);
+                        }}
+                        className="text-xs text-red-800 hover:underline font-bold flex items-center gap-1"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                        Edit Profile
+                      </button>
+                    )}
+                  </div>
+
+                  {inspectingSheet.nameCropUrl && (
+                    <div className="mb-2 p-2 rounded-xl border border-slate-200 bg-slate-50">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Handwritten Name Snippet from Sheet:
+                      </p>
+                      <img
+                        src={inspectingSheet.nameCropUrl}
+                        alt="Handwritten Name Crop"
+                        className="h-14 w-full rounded-lg border border-slate-200 object-contain bg-white shadow-2xs"
+                      />
+                    </div>
+                  )}
+
                   <select
                     value={inspectingSheet.studentId}
                     onChange={(e) =>
                       setInspectingSheet({
                         ...inspectingSheet,
                         studentId: e.target.value,
+                        isManuallyOverridden: true,
                       })
                     }
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
                   >
                     <option value="">-- Unassigned --</option>
-                    {sortedBatchStudents.map((s) => (
-                      <option key={s._id} value={s._id}>
-                        {s.name} ({s.lrn || "No LRN"})
-                      </option>
-                    ))}
+                    <optgroup label={`Current Section (${sortedBatchStudents.length})`}>
+                      {sortedBatchStudents.map((s) => (
+                        <option key={s._id} value={s._id}>
+                          {s.name} {s.lrn ? `(${s.lrn})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {otherStudents.length > 0 && (
+                      <optgroup label={`Other Sections (${otherStudents.length})`}>
+                        {otherStudents.map((s) => (
+                          <option key={s._id} value={s._id}>
+                            {s.name} {s.section ? `• ${s.section}` : ""} {s.lrn ? `(${s.lrn})` : ""}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
+
+                  {inspectingSheet.aiDetectedName && (
+                    <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                      🤖 AI Vision Detected: <strong>&ldquo;{inspectingSheet.aiDetectedName}&rdquo;</strong>{" "}
+                      {inspectingSheet.aiConfidence && (
+                        <span>({Math.round(inspectingSheet.aiConfidence * 100)}% confidence)</span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1358,6 +1757,111 @@ export default function BatchWorkstation({
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Scan Another Class Section
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── MODAL: EDIT LEARNER INFORMATION ── */}
+      {editingLearner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Edit3 className="h-4 w-4 text-red-800" />
+                <h3 className="font-bold text-slate-800 text-sm">
+                  Edit Learner Profile &amp; Section
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingLearner(null)}
+                className="text-slate-400 hover:text-slate-600 rounded-lg p-1 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5">
+              {editError && (
+                <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Learner Full Name <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. Alyssa Cabrera"
+                  className="w-full h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800/15"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Grade Level
+                  </label>
+                  <select
+                    value={editGrade}
+                    onChange={(e) => setEditGrade(e.target.value)}
+                    className="w-full h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
+                  >
+                    <option value="7">Grade 7</option>
+                    <option value="8">Grade 8</option>
+                    <option value="9">Grade 9</option>
+                    <option value="10">Grade 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Section
+                  </label>
+                  <input
+                    type="text"
+                    value={editSection}
+                    onChange={(e) => setEditSection(e.target.value)}
+                    placeholder="e.g. Rosal"
+                    className="w-full h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Learner Reference Number (LRN)
+                </label>
+                <input
+                  type="text"
+                  value={editLrn}
+                  onChange={(e) => setEditLrn(e.target.value)}
+                  placeholder="e.g. 136860100041"
+                  className="w-full h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 bg-slate-50 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingLearner(null)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLearnerEdit}
+                disabled={isSavingLearner}
+                className="px-4 py-1.5 rounded-xl bg-red-800 hover:bg-red-900 text-white text-xs font-bold transition-colors disabled:opacity-50"
+              >
+                {isSavingLearner ? "Saving Changes..." : "Save & Update Learner"}
               </button>
             </div>
           </div>
