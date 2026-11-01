@@ -250,16 +250,19 @@ function ForgotPasswordContent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[url('/login_background_page.png')] bg-cover bg-center p-4">
       <div className="w-full max-w-[480px] rounded-3xl bg-white px-8 py-9 shadow-2xl animate-in fade-in-50 duration-200">
-        {/* Header */}
-        <div className="text-center">
+        {/* Clean Top-Left Back Navigation */}
+        <div className="mb-4">
           <Link
             href="/login"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-800 transition-colors mb-3"
+            className="group inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-800 transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
             <span>Back to Login</span>
           </Link>
+        </div>
 
+        {/* Centered Brand Header */}
+        <div className="text-center">
           <h1 className="text-2xl font-extrabold tracking-tight">
             <span style={{ color: "#DE2B2B" }}>AR</span>
             <span style={{ color: "#FBBF24" }}>A</span>
