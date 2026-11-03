@@ -196,9 +196,11 @@ export default function BatchWorkstation({
 
   // Alphabetical sorted class roster for 1-to-1 matching (filtered to current grade & section)
   const sortedBatchStudents = useMemo(() => {
+    const selGKey = selectedGrade !== "all" ? selectedGrade.replace(/\D/g, "") : "";
     return localStudents
       .filter((s) => {
-        const matchesGrade = selectedGrade === "all" || String(s.gradeLevel) === String(selectedGrade);
+        const studentGKey = String(s.gradeLevel || "").replace(/\D/g, "");
+        const matchesGrade = selectedGrade === "all" || studentGKey === selGKey;
         const matchesSection =
           selectedSection === "all" ||
           (s.section || "").trim().toLowerCase() === selectedSection.trim().toLowerCase();
@@ -829,11 +831,15 @@ export default function BatchWorkstation({
                 className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               >
                 <option value="all">All Sections</option>
-                {availableSections.map((sec) => (
-                  <option key={sec} value={sec}>
-                    {sec}
-                  </option>
-                ))}
+                {availableSections.length === 0 && selectedGrade !== "all" ? (
+                  <option value="" disabled>No sections enrolled</option>
+                ) : (
+                  availableSections.map((sec) => (
+                    <option key={sec} value={sec}>
+                      {sec}
+                    </option>
+                  ))
+                )}
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>

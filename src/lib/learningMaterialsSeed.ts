@@ -22,6 +22,21 @@ export async function alignLearningMaterials() {
     }
 
     for (const m of materials) {
+      // Auto-calibrate gradeLevels based on explicit title if present (e.g., Grade 7 & 8, Grade 9 to 10)
+      if (m.title) {
+        const titleMatch = m.title.match(/Grade[s]?\s*(\d+)(?:\s*(?:to|&|-)\s*(\d+))?/i);
+        if (titleMatch) {
+          const start = Number(titleMatch[1]);
+          const end = titleMatch[2] ? Number(titleMatch[2]) : start;
+          const expectedGrades: number[] = [];
+          for (let g = start; g <= end; g++) expectedGrades.push(g);
+          if (JSON.stringify(m.gradeLevels) !== JSON.stringify(expectedGrades)) {
+            m.gradeLevels = expectedGrades;
+            await m.save();
+          }
+        }
+      }
+
       if (!m.fileUrl) continue;
       const cleanRel = m.fileUrl.split(/[#?]/)[0].trim().replace(/^\/+/, '');
       const fullPath = path.resolve(publicDir, cleanRel);

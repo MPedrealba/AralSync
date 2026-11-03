@@ -91,29 +91,21 @@ export async function GET(req: NextRequest) {
     const allGradesSet = new Set<number>([7, 8, 9, 10]);
 
     for (const c of allCohorts) {
-      const g = c._id.grade;
-      const s = (c._id.section || '').trim();
-      if (g != null) {
+      const g = c._id?.grade;
+      const s = (c._id?.section || '').trim();
+      if (g != null && s) {
         const gradeKey = String(g);
         allGradesSet.add(Number(g));
         if (!gradeSectionsMap[gradeKey]) gradeSectionsMap[gradeKey] = [];
-        if (s && !gradeSectionsMap[gradeKey].includes(s)) {
+        if (!gradeSectionsMap[gradeKey].includes(s)) {
           gradeSectionsMap[gradeKey].push(s);
         }
       }
       if (s) allSectionsSet.add(s);
     }
-
-    // Default DepEd sections as baseline
-    const defaultSections = ['Rosal', 'Sampaguita', 'Ilang-Ilang', 'Camia'];
-    for (const g of allGradesSet) {
-      const gradeKey = String(g);
-      if (!gradeSectionsMap[gradeKey] || gradeSectionsMap[gradeKey].length === 0) {
-        gradeSectionsMap[gradeKey] = [...defaultSections];
-      }
-      gradeSectionsMap[gradeKey].sort();
+    for (const g of Object.keys(gradeSectionsMap)) {
+      gradeSectionsMap[g].sort((a, b) => a.localeCompare(b));
     }
-    defaultSections.forEach((s) => allSectionsSet.add(s));
 
     const allGrades = Array.from(allGradesSet).sort((a, b) => a - b);
     const allSections = Array.from(allSectionsSet).sort();

@@ -1243,6 +1243,35 @@ function QuestionnaireTab({
     return Array.from(set).sort();
   }, [learners, targetGrade]);
 
+  // Derive filtered passages matching selected targetGrade
+  const filteredPassages = useMemo(() => {
+    if (!targetGrade || targetGrade === "all") return passages;
+    const gNum = parseInt(targetGrade, 10);
+    return passages.filter((p) => !p.gradeLevel || p.gradeLevel === gNum);
+  }, [passages, targetGrade]);
+
+  const handleGradeChange = (newGrade: string) => {
+    setTargetGrade(newGrade);
+    const gNum = parseInt(newGrade, 10);
+    const matching = passages.filter((p) => !p.gradeLevel || p.gradeLevel === gNum);
+    if (!isCustomPassage && matching.length > 0) {
+      if (!matching.some((p) => p.title === selectedPassageTitle)) {
+        const first = matching[0];
+        setSelectedPassageTitle(first.title);
+        setPassageTitle(first.title);
+        setPassageText(first.text);
+        setAssessmentTitle(`Phil-IRI Reading Diagnostic — ${first.title}`);
+        const compiled = compileComprehensionQuestions(
+          first.questions || [],
+          first.text,
+          first.title,
+          targetCount
+        );
+        setQuestions(compiled);
+      }
+    }
+  };
+
   // Reset targetSection if no longer valid under targetGrade
   useEffect(() => {
     if (targetSection && !availableSections.includes(targetSection)) {
@@ -1264,8 +1293,9 @@ function QuestionnaireTab({
 
         if (passagesJson.success && Array.isArray(passagesJson.data)) {
           setPassages(passagesJson.data);
-          if (passagesJson.data.length > 0) {
-            const first = passagesJson.data[0];
+          const initialMatching = passagesJson.data.filter((p: any) => !p.gradeLevel || String(p.gradeLevel) === targetGrade);
+          const first = initialMatching.length > 0 ? initialMatching[0] : passagesJson.data[0];
+          if (first) {
             setSelectedPassageTitle(first.title);
             setPassageTitle(first.title);
             setPassageText(first.text);
@@ -1314,7 +1344,6 @@ function QuestionnaireTab({
       setPassageTitle(found.title);
       setPassageText(found.text);
       setAssessmentTitle(`Phil-IRI Reading Diagnostic — ${found.title}`);
-      if (found.gradeLevel) setTargetGrade(String(found.gradeLevel));
       const compiled = compileComprehensionQuestions(
         found.questions || [],
         found.text,
@@ -1446,18 +1475,59 @@ function QuestionnaireTab({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Passage Selector */}
+          {/* Target Grade (Elevated to top) */}
           <div>
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Select Reading Selection
+              Grade Level
             </label>
+            <select
+              value={targetGrade}
+              onChange={(e) => handleGradeChange(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
+            >
+              <option value="7">Grade 7</option>
+              <option value="8">Grade 8</option>
+              <option value="9">Grade 9</option>
+              <option value="10">Grade 10</option>
+            </select>
+          </div>
+
+          {/* Target Section (Cascaded from Grade) */}
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Target Section
+            </label>
+            <select
+              value={targetSection}
+              onChange={(e) => setTargetSection(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
+            >
+              <option value="">All sections ({availableSections.length} available in Grade {targetGrade})</option>
+              {availableSections.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Passage Selector (Filtered to Grade) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Select Reading Selection
+              </label>
+              <span className="text-[10px] font-semibold text-red-800 bg-red-50 border border-red-200 rounded-md px-1.5 py-0.5">
+                Grade {targetGrade} Filtered ({filteredPassages.length})
+              </span>
+            </div>
             <select
               value={selectedPassageTitle}
               onChange={(e) => handleSelectPassage(e.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
               <option value="Custom Reading Passage">Custom reading passage…</option>
-              {passages.map((p) => (
+              {filteredPassages.map((p) => (
                 <option key={p.id} value={p.title}>
                   {p.title} {p.gradeLevel ? `(Grade ${p.gradeLevel})` : ""}{" "}
                   {p.questionCount ? `• ${p.questionCount} extracted items` : ""}
@@ -1508,56 +1578,7 @@ function QuestionnaireTab({
             </select>
           </div>
 
-          {/* Assessment Title */}
-          <div className="md:col-span-2">
-            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Assessment Title (Printed on Booklet &amp; Student CBT)
-            </label>
-            <input
-              type="text"
-              value={assessmentTitle}
-              onChange={(e) => setAssessmentTitle(e.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-900 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-            />
-          </div>
-
-          {/* Target Grade & Section */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Target Grade
-              </label>
-              <select
-                value={targetGrade}
-                onChange={(e) => setTargetGrade(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-              >
-                <option value="7">Grade 7</option>
-                <option value="8">Grade 8</option>
-                <option value="9">Grade 9</option>
-                <option value="10">Grade 10</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Target Section
-              </label>
-              <select
-                value={targetSection}
-                onChange={(e) => setTargetSection(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
-              >
-                <option value="">All sections ({availableSections.length} available)</option>
-                {availableSections.map((sec) => (
-                  <option key={sec} value={sec}>
-                    {sec}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Time limit & Due date for CBT */}
+          {/* CBT Time Limit & Due Date */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -1586,6 +1607,19 @@ function QuestionnaireTab({
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
               />
             </div>
+          </div>
+
+          {/* Assessment Title */}
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Assessment Title (Printed on Booklet &amp; Student CBT)
+            </label>
+            <input
+              type="text"
+              value={assessmentTitle}
+              onChange={(e) => setAssessmentTitle(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-900 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+            />
           </div>
         </div>
 
@@ -1829,6 +1863,38 @@ function ComprehensionLibraryTab({
   const [dueDateInput, setDueDateInput] = useState("");
   const [savingOnline, setSavingOnline] = useState(false);
   const [onlineSuccessToast, setOnlineSuccessToast] = useState<string | null>(null);
+  const [learnersList, setLearnersList] = useState<Array<{ gradeLevel?: number | string; section?: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/teacher/learners")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.data)) {
+          setLearnersList(d.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const modalSections = useMemo(() => {
+    const set = new Set<string>();
+    learnersList
+      .filter((l) => {
+        if (!targetGradeInput) return true;
+        const gNum = Number(String(l.gradeLevel).replace(/\D/g, ""));
+        return gNum === targetGradeInput;
+      })
+      .forEach((l) => {
+        if (l.section && typeof l.section === "string") set.add(l.section.trim());
+      });
+    return Array.from(set).filter(Boolean).sort();
+  }, [learnersList, targetGradeInput]);
+
+  useEffect(() => {
+    if (targetSectionInput && !modalSections.includes(targetSectionInput)) {
+      setTargetSectionInput("");
+    }
+  }, [modalSections, targetSectionInput]);
 
   const load = async () => {
     setLoading(true);
@@ -1954,7 +2020,10 @@ function ComprehensionLibraryTab({
         : !ak.isOnline
       : true;
 
-    const matchesGrade = gradeFilter ? ak.targetGrade === Number(gradeFilter) : true;
+    const akGrade = ak.targetGrade ?? (ak as any).gradeLevel;
+    const matchesGrade = gradeFilter
+      ? akGrade != null && Number(akGrade) === Number(gradeFilter)
+      : true;
 
     return matchesSearch && matchesDelivery && matchesGrade;
   });
@@ -2117,7 +2186,7 @@ function ComprehensionLibraryTab({
 
                   <p className="mt-1.5 text-xs text-slate-500">
                     <span className="font-semibold text-slate-700">{ak.items || (ak.answers || []).length} Items</span>
-                    {ak.targetGrade && ` &bull; Grade ${ak.targetGrade}`}
+                    {(ak.targetGrade || (ak as any).gradeLevel) && ` &bull; Grade ${ak.targetGrade || (ak as any).gradeLevel}`}
                     {ak.targetSection && ` (${ak.targetSection})`}
                     {hasPassage && ak.passageTitle && ` &bull; Selection: "${ak.passageTitle}"`}
                     {wordCount > 0 && ` (${wordCount} words)`}
@@ -2305,7 +2374,7 @@ function ComprehensionLibraryTab({
                     value={targetGradeInput ?? ""}
                     onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
                     disabled={!isOnlineToggle}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer shadow-2xs"
                   >
                     <option value="">All Grades</option>
                     <option value={7}>Grade 7</option>
@@ -2318,14 +2387,21 @@ function ComprehensionLibraryTab({
                   <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Target Section
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={targetSectionInput}
                     onChange={(e) => setTargetSectionInput(e.target.value)}
                     disabled={!isOnlineToggle}
-                    placeholder="All sections"
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50"
-                  />
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer"
+                  >
+                    <option value="">
+                      {targetGradeInput ? `All Sections (Grade ${targetGradeInput})` : "All Sections"}
+                    </option>
+                    {modalSections.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -2371,8 +2447,12 @@ function GradeOMRModal({
   const [selectedKeyId, setSelectedKeyId] = useState<string>(initialKey?.id || "");
   const [learners, setLearners] = useState<LearnerOption[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("");
-  const [sectionFilter, setSectionFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState(
+    initialKey?.targetGrade ? String(initialKey.targetGrade) : ""
+  );
+  const [sectionFilter, setSectionFilter] = useState(
+    initialKey?.targetSection || ""
+  );
   const [loading, setLoading] = useState(true);
 
   // Scan file & bubble matrix
@@ -2424,11 +2504,50 @@ function GradeOMRModal({
 
   const activeKey = keys.find((k) => k.id === selectedKeyId) || initialKey;
 
-  const filteredLearners = learners.filter((l) => {
-    const matchGrade = gradeFilter ? String(l.gradeLevel) === gradeFilter : true;
-    const matchSection = sectionFilter ? l.section === sectionFilter : true;
-    return matchGrade && matchSection;
-  });
+  const availableModalSections = useMemo(() => {
+    const set = new Set<string>();
+    learners
+      .filter((l) => !gradeFilter || String(l.gradeLevel) === gradeFilter)
+      .forEach((l) => {
+        if (l.section && l.section.trim()) set.add(l.section.trim());
+      });
+    return Array.from(set).sort();
+  }, [learners, gradeFilter]);
+
+  useEffect(() => {
+    if (sectionFilter && !availableModalSections.includes(sectionFilter)) {
+      setSectionFilter("");
+    }
+  }, [availableModalSections, sectionFilter]);
+
+  const filteredLearners = useMemo(() => {
+    return learners.filter((l) => {
+      const matchGrade = gradeFilter ? String(l.gradeLevel) === gradeFilter : true;
+      const matchSection = sectionFilter ? l.section === sectionFilter : true;
+      return matchGrade && matchSection;
+    });
+  }, [learners, gradeFilter, sectionFilter]);
+
+  useEffect(() => {
+    if (filteredLearners.length > 0) {
+      if (!filteredLearners.some((l) => l.studentId === selectedStudentId)) {
+        setSelectedStudentId(filteredLearners[0].studentId);
+      }
+    } else {
+      setSelectedStudentId("");
+    }
+  }, [filteredLearners, selectedStudentId]);
+
+  const handleKeyChange = (keyId: string) => {
+    setSelectedKeyId(keyId);
+    const chosen = keys.find((k) => k.id === keyId);
+    if (chosen?.targetGrade) {
+      setGradeFilter(String(chosen.targetGrade));
+      if (chosen.targetSection) {
+        setSectionFilter(chosen.targetSection);
+      }
+    }
+  };
 
   const handleFileChange = (file: File | null) => {
     setSheetFile(file);
@@ -2534,32 +2653,88 @@ function GradeOMRModal({
               </label>
               <select
                 value={selectedKeyId}
-                onChange={(e) => setSelectedKeyId(e.target.value)}
+                onChange={(e) => handleKeyChange(e.target.value)}
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
               >
                 {keys.map((k) => (
                   <option key={k.id} value={k.id}>
-                    {k.title} ({k.items} Items &bull; {k.passageTitle || "Reading"})
+                    {k.title} ({k.items} Items &bull; {k.passageTitle || "Reading"}{k.targetGrade ? ` • Grade ${k.targetGrade}` : ""})
                   </option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                2. Select Student from Class Roster
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                2. Filter &amp; Select Student
               </label>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
-              >
-                {filteredLearners.map((l) => (
-                  <option key={l.studentId} value={l.studentId}>
-                    {l.name} &bull; Grade {l.gradeLevel} - {l.section}
-                  </option>
-                ))}
-              </select>
+
+              {/* Grade Level and Section filters directly above student roster */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Grade Level
+                  </label>
+                  <select
+                    value={gradeFilter}
+                    onChange={(e) => {
+                      setGradeFilter(e.target.value);
+                      setSectionFilter("");
+                    }}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">All Grades</option>
+                    <option value="7">Grade 7</option>
+                    <option value="8">Grade 8</option>
+                    <option value="9">Grade 9</option>
+                    <option value="10">Grade 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Section
+                  </label>
+                  <select
+                    value={sectionFilter}
+                    onChange={(e) => setSectionFilter(e.target.value)}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">All Sections ({availableModalSections.length})</option>
+                    {availableModalSections.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Student Name
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {filteredLearners.length} found
+                  </span>
+                </div>
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                >
+                  {filteredLearners.length === 0 ? (
+                    <option value="">No students in selected grade/section</option>
+                  ) : (
+                    filteredLearners.map((l) => (
+                      <option key={l.studentId} value={l.studentId}>
+                        {l.name} &bull; Grade {l.gradeLevel} - {l.section}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
             </div>
           </div>
 

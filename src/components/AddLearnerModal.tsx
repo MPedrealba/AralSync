@@ -26,7 +26,7 @@ export default function AddLearnerModal({
   onCreated,
   teachers,
   gradeSectionsMap,
-  availableSections = ["Rosal", "Sampaguita", "Ilang-Ilang", "Camia"],
+  availableSections = [],
 }: Props) {
   const [lrn, setLrn] = useState("");
   const [name, setName] = useState("");
@@ -46,8 +46,9 @@ export default function AddLearnerModal({
   const [error, setError] = useState("");
 
   const sectionsForGrade = useMemo(() => {
-    if (gradeSectionsMap && gradeSectionsMap[gradeLevel] && gradeSectionsMap[gradeLevel].length > 0) {
-      return gradeSectionsMap[gradeLevel];
+    const gKey = gradeLevel.replace(/\D/g, "");
+    if (gradeSectionsMap) {
+      return gradeSectionsMap[gradeLevel] || gradeSectionsMap[gKey] || [];
     }
     return availableSections;
   }, [gradeSectionsMap, gradeLevel, availableSections]);
@@ -80,9 +81,12 @@ export default function AddLearnerModal({
 
   const handleGradeChange = (newGrade: string) => {
     setGradeLevel(newGrade);
-    const secs = gradeSectionsMap?.[newGrade] || availableSections;
+    const gKey = newGrade.replace(/\D/g, "");
+    const secs = (gradeSectionsMap ? (gradeSectionsMap[newGrade] || gradeSectionsMap[gKey]) : null) || availableSections;
     if (secs.length > 0 && !isCustomSection) {
       setSection(secs[0]);
+    } else if (secs.length === 0 && !isCustomSection) {
+      setSection("");
     }
   };
 
@@ -293,11 +297,15 @@ export default function AddLearnerModal({
                   }}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white"
                 >
-                  {sectionsForGrade.map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec}
-                    </option>
-                  ))}
+                  {sectionsForGrade.length === 0 ? (
+                    <option value="" disabled>No sections enrolled</option>
+                  ) : (
+                    sectionsForGrade.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))
+                  )}
                   <option value="__custom__">+ Enter Custom Section...</option>
                 </select>
               )}

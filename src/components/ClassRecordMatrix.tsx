@@ -149,7 +149,8 @@ export default function ClassRecordMatrix({
           }
 
           // Automatically align initial section if not valid for the current grade
-          const currentSections = map[initialGrade] || map["7"] || [];
+          const gKey = initialGrade.replace(/\D/g, "");
+          const currentSections = map[initialGrade] || map[gKey] || map["7"] || [];
           if (currentSections.length > 0 && !currentSections.includes(initialSection)) {
             setSection(currentSections[0]);
           } else if (currentSections.length === 0) {
@@ -173,7 +174,8 @@ export default function ClassRecordMatrix({
   const handleGradeChange = (newGrade: string) => {
     setGradeLevel(newGrade);
     setIsCustomSection(false);
-    const sectionsForGrade = gradeSectionsMap[newGrade] || [];
+    const gKey = newGrade.replace(/\D/g, "");
+    const sectionsForGrade = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
     if (sectionsForGrade.length > 0) {
       if (!sectionsForGrade.includes(section)) {
         setSection(sectionsForGrade[0]);
@@ -533,12 +535,12 @@ export default function ClassRecordMatrix({
                   }}
                   className="h-9.5 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
                 >
-                  {(gradeSectionsMap[gradeLevel] || []).length === 0 ? (
+                  {((gradeSectionsMap[gradeLevel] || gradeSectionsMap[gradeLevel.replace(/\D/g, "")]) || []).length === 0 ? (
                     <option value="" disabled>
                       {loadingCohorts ? "Loading sections..." : "No sections enrolled"}
                     </option>
                   ) : (
-                    (gradeSectionsMap[gradeLevel] || []).map((sec) => (
+                    ((gradeSectionsMap[gradeLevel] || gradeSectionsMap[gradeLevel.replace(/\D/g, "")]) || []).map((sec) => (
                       <option key={sec} value={sec}>
                         {sec}
                       </option>

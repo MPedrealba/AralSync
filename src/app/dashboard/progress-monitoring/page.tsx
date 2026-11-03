@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Header from "@/components/Header";
 import { TrendingUp } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -39,7 +39,7 @@ export default function ProgressMonitoringPage() {
       total: number;
     }[];
   };
-  filters: { grades: string[]; sections: string[] };
+  filters: { grades: string[]; sections: string[]; sectionsByGrade?: Record<string, string[]> };
 }
 
 interface LearnerData {
@@ -113,6 +113,30 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
     fetchData();
   }, [learnerId, grade, section]);
 
+  const overviewFilters = (data as OverallData)?.filters;
+
+  const availableSections = useMemo(() => {
+    if (!overviewFilters) return [];
+    if (!grade) {
+      return overviewFilters.sections || [];
+    }
+    const gKey = grade.replace(/\D/g, "");
+    const map = overviewFilters.sectionsByGrade || {};
+    return map[grade] || map[gKey] || [];
+  }, [overviewFilters, grade]);
+
+  const handleGradeChange = (newGrade: string) => {
+    setGrade(newGrade);
+    if (newGrade && section) {
+      const gKey = newGrade.replace(/\D/g, "");
+      const map = overviewFilters?.sectionsByGrade || {};
+      const valid = map[newGrade] || map[gKey] || [];
+      if (!valid.includes(section)) {
+        setSection("");
+      }
+    }
+  };
+
   const isOverview = data?.overview === true;
   const donutPercent = !isOverview ? (data as LearnerData)?.interventions.percent ?? 0 : 0;
   const C = 327; // circumference for the donut ring
@@ -149,7 +173,7 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
               <>
                 <select
                   value={grade}
-                  onChange={(e) => setGrade(e.target.value)}
+                  onChange={(e) => handleGradeChange(e.target.value)}
                   className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
                 >
                   <option value="">All Grades</option>
@@ -165,11 +189,15 @@ const [data, setData] = useState<OverallData | LearnerData | null>(null);
                   className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none focus:border-blue-500"
                 >
                   <option value="">All Sections</option>
-                  {data.filters.sections.map((s, index) => (
-                    <option key={s ? `section-${s}` : `section-${index}`} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                  {availableSections.length === 0 && grade ? (
+                    <option value="" disabled>No sections enrolled</option>
+                  ) : (
+                    availableSections.map((s, index) => (
+                      <option key={s ? `section-${s}` : `section-${index}`} value={s}>
+                        {s}
+                      </option>
+                    ))
+                  )}
                 </select>
               </>
             )}

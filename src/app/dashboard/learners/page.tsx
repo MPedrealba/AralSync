@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import EditLearnerModal from "@/components/EditLearnerModal";
@@ -132,6 +132,33 @@ export default function LearnersPage() {
     learner: Learner | null;
   }>({ open: false, learner: null });
 
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    learners.forEach((l) => {
+      const lGradeDigits = (l.gradeLevel || "").replace(/\D/g, "");
+      const filterGradeDigits = gradeFilter.replace(/\D/g, "");
+      const matchGrade = !gradeFilter || lGradeDigits === filterGradeDigits;
+      if (matchGrade && l.section && l.section.trim()) {
+        set.add(l.section.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [learners, gradeFilter]);
+
+  const handleGradeChange = (newGrade: string) => {
+    setGradeFilter(newGrade);
+    if (sectionFilter && newGrade) {
+      const newGradeDigits = newGrade.replace(/\D/g, "");
+      const validSections = learners
+        .filter((l) => (l.gradeLevel || "").replace(/\D/g, "") === newGradeDigits)
+        .map((l) => l.section?.trim())
+        .filter(Boolean);
+      if (!validSections.includes(sectionFilter)) {
+        setSectionFilter("");
+      }
+    }
+  };
+
   const loadLearners = useCallback(async () => {
     try {
       const res = await fetch("/api/teacher/learners");
@@ -257,14 +284,14 @@ export default function LearnersPage() {
               <FilterSelect
                 label="All Grades"
                 value={gradeFilter}
-                onChange={setGradeFilter}
+                onChange={handleGradeChange}
                 options={["Grade 7", "Grade 8", "Grade 9", "Grade 10"]}
               />
               <FilterSelect
                 label="All Sections"
                 value={sectionFilter}
                 onChange={setSectionFilter}
-                options={["Rosal", "Sampaguita", "Ilang-Ilang"]}
+                options={availableSections}
               />
               <div className="col-span-2 sm:col-span-1">
                 <FilterSelect

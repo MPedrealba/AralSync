@@ -46,6 +46,21 @@ export async function GET(req: NextRequest) {
         ...new Set(records.map((r: any) => r.section).filter(Boolean)),
       ].sort((a, b) => a.localeCompare(b));
 
+      const sectionsByGrade: Record<string, string[]> = {};
+      for (const r of records) {
+        const g = r.gradeLevel != null ? String(r.gradeLevel).replace(/\D/g, '') : '';
+        const s = (r.section || '').trim();
+        if (g && s) {
+          if (!sectionsByGrade[g]) sectionsByGrade[g] = [];
+          if (!sectionsByGrade[g].includes(s)) {
+            sectionsByGrade[g].push(s);
+          }
+        }
+      }
+      for (const g of Object.keys(sectionsByGrade)) {
+        sectionsByGrade[g].sort((a, b) => a.localeCompare(b));
+      }
+
       const gradeFilter = searchParams.get('grade') || '';
       const sectionFilter = searchParams.get('section') || '';
 
@@ -140,7 +155,7 @@ export async function GET(req: NextRequest) {
           byMaterial,
           byLearner,
         },
-        filters: { grades: availableGrades, sections: availableSections },
+        filters: { grades: availableGrades, sections: availableSections, sectionsByGrade },
       });
     }
 

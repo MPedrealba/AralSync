@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -29,6 +29,43 @@ const riskConfig: Record<string, { bg: string; text: string; border: string }> =
 export default function LearningRecoveryPage() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
+  const [gradeSectionsMap, setGradeSectionsMap] = useState<Record<string, string[]>>({});
+  const [allSections, setAllSections] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/class-record/cohorts")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.gradeSectionsMap) {
+          setGradeSectionsMap(json.gradeSectionsMap);
+          const all = new Set<string>();
+          Object.values(json.gradeSectionsMap).forEach((secs: any) => {
+            if (Array.isArray(secs)) {
+              secs.forEach((s: string) => all.add(s));
+            }
+          });
+          setAllSections(Array.from(all).sort());
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const availableSections = useMemo(() => {
+    if (!gradeFilter) return allSections;
+    const digits = gradeFilter.replace(/\D/g, "");
+    return gradeSectionsMap[digits] || gradeSectionsMap[gradeFilter] || [];
+  }, [gradeFilter, gradeSectionsMap, allSections]);
+
+  const handleGradeChange = (newGrade: string) => {
+    setGradeFilter(newGrade);
+    if (sectionFilter && newGrade) {
+      const digits = newGrade.replace(/\D/g, "");
+      const valid = gradeSectionsMap[digits] || gradeSectionsMap[newGrade] || [];
+      if (!valid.includes(sectionFilter)) {
+        setSectionFilter("");
+      }
+    }
+  };
   const [data, setData] = useState<{
     stats: { flagged: number; readingFrustration: number; lowOmr: number };
     flaggedStudents: Flagged[];
@@ -81,7 +118,7 @@ export default function LearningRecoveryPage() {
             </button>
             <select
               value={gradeFilter}
-              onChange={(e) => setGradeFilter(e.target.value)}
+              onChange={(e) => handleGradeChange(e.target.value)}
               className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
               <option value="">All Grades</option>
@@ -96,9 +133,17 @@ export default function LearningRecoveryPage() {
               className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
             >
               <option value="">All Sections</option>
-              <option>Rosal</option>
-              <option>Sampaguita</option>
-              <option>Ilang-Ilang</option>
+              {availableSections.length === 0 && gradeFilter ? (
+                <option value="" disabled>No sections enrolled</option>
+              ) : (
+                availableSections.map((sec) => (
+                  <option key={sec} value={sec}>
+                    {sec}
+                  </option>
+                ))
+              )}
+
+
             </select>
           </div>
         </div>

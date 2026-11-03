@@ -140,7 +140,7 @@ interface DynamicLearningMaterial {
   }>;
 }
 
-const SECTIONS_LIST = ["Rosal", "Sampaguita", "Ilang-Ilang", "Daisy", "Camia"];
+
 
 const getSubjectIcon = (subject: string = "") => {
   const s = subject.toLowerCase();
@@ -168,10 +168,15 @@ export default function InterventionsPage() {
   const [viewMode, setViewMode] = useState<"classwork" | "grading">("classwork");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
 
+  // Dynamic cohorts from database
+  const [gradeSectionsMap, setGradeSectionsMap] = useState<Record<string, string[]>>({});
+  const [availableGrades, setAvailableGrades] = useState<string[]>(["7", "8", "9", "10"]);
+
   // Assignments state (View A)
   const [assignments, setAssignments] = useState<AssignmentGroup[]>([]);
   const [assignedSubject, setAssignedSubject] = useState("All");
   const [subjectFilter, setSubjectFilter] = useState("All");
+  const [gradeFilter, setGradeFilter] = useState("All");
   const [sectionFilter, setSectionFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -235,7 +240,8 @@ export default function InterventionsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createSubject, setCreateSubject] = useState<"Reading" | "Math" | "Science">("Reading");
-  const [createSection, setCreateSection] = useState("Rosal");
+  const [createGrade, setCreateGrade] = useState("7");
+  const [createSection, setCreateSection] = useState("");
   const [createTargetMode, setCreateTargetMode] = useState<"all" | "custom">("all");
   const [sectionLearners, setSectionLearners] = useState<LearnerOption[]>([]);
   const [selectedLearnerIds, setSelectedLearnerIds] = useState<string[]>([]);
@@ -673,6 +679,88 @@ export default function InterventionsPage() {
   };
 
   /* -------------------------------------------------------------------------
+     Cohorts & Section Dynamic Helpers
+     ------------------------------------------------------------------------- */
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCohorts = async () => {
+      try {
+        const res = await fetch("/api/class-record/cohorts");
+        const json = await parseJsonResponse(res);
+        if (isMounted && res.ok && json.success) {
+          const map: Record<string, string[]> = json.gradeSectionsMap || json.data?.gradeSectionsMap || {};
+          const grades: (string | number)[] = json.availableGrades || json.data?.availableGrades || [];
+          setGradeSectionsMap(map);
+          if (Array.isArray(grades) && grades.length > 0) {
+            setAvailableGrades(grades.map(String));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load cohorts:", e);
+      }
+    };
+    fetchCohorts();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const allCohortSections = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(gradeSectionsMap).forEach((secs) => {
+      if (Array.isArray(secs)) {
+        secs.forEach((s) => set.add(s));
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [gradeSectionsMap]);
+
+  const filterAvailableSections = useMemo(() => {
+    if (gradeFilter === "All") {
+      return allCohortSections;
+    }
+    const gKey = gradeFilter.replace(/\D/g, "");
+    return gradeSectionsMap[gradeFilter] || gradeSectionsMap[gKey] || [];
+  }, [gradeFilter, gradeSectionsMap, allCohortSections]);
+
+  const handleFilterGradeChange = (newGrade: string) => {
+    setGradeFilter(newGrade);
+    if (newGrade !== "All" && sectionFilter !== "All") {
+      const gKey = newGrade.replace(/\D/g, "");
+      const valid = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
+      if (!valid.includes(sectionFilter)) {
+        setSectionFilter("All");
+      }
+    }
+  };
+
+  const createAvailableSections = useMemo(() => {
+    const gKey = createGrade.replace(/\D/g, "");
+    return gradeSectionsMap[createGrade] || gradeSectionsMap[gKey] || [];
+  }, [createGrade, gradeSectionsMap]);
+
+  const handleCreateGradeChange = (newGrade: string) => {
+    setCreateGrade(newGrade);
+    setSelectedLearnerIds([]);
+    const gKey = newGrade.replace(/\D/g, "");
+    const valid = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
+    if (valid.length > 0) {
+      if (!valid.includes(createSection)) {
+        setCreateSection(valid[0]);
+      }
+    } else {
+      setCreateSection("");
+    }
+  };
+
+  useEffect(() => {
+    if (createAvailableSections.length > 0 && (!createSection || !createAvailableSections.includes(createSection))) {
+      setCreateSection(createAvailableSections[0]);
+    }
+  }, [createAvailableSections, createSection]);
+
+  /* -------------------------------------------------------------------------
      Filtered Assignments (View A)
      ------------------------------------------------------------------------- */
 
@@ -689,6 +777,13 @@ export default function InterventionsPage() {
         if (!itemSubj.includes(targetSubj)) return false;
       }
 
+      // Grade filter
+      if (gradeFilter !== "All") {
+        const gKey = gradeFilter.replace(/\D/g, "");
+        const validSections = gradeSectionsMap[gradeFilter] || gradeSectionsMap[gKey] || [];
+        if (item.section && !validSections.includes(item.section)) return false;
+      }
+
       // Section filter
       if (sectionFilter !== "All") {
         if (item.section && item.section !== sectionFilter) return false;
@@ -703,7 +798,7 @@ export default function InterventionsPage() {
       }
       return true;
     });
-  }, [assignments, assignedSubject, subjectFilter, sectionFilter, searchQuery]);
+  }, [assignments, assignedSubject, subjectFilter, gradeFilter, sectionFilter, gradeSectionsMap, searchQuery]);
 
   /* -------------------------------------------------------------------------
      Filtered Submissions Roster (View B)
@@ -940,6 +1035,20 @@ export default function InterventionsPage() {
                       </div>
                     )}
 
+                    {/* Grade Filter */}
+                    <select
+                      value={gradeFilter}
+                      onChange={(e) => handleFilterGradeChange(e.target.value)}
+                      className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                    >
+                      <option value="All">All Grades</option>
+                      {availableGrades.map((g) => (
+                        <option key={g} value={g}>
+                          Grade {g}
+                        </option>
+                      ))}
+                    </select>
+
                     {/* Section Filter */}
                     <select
                       value={sectionFilter}
@@ -947,11 +1056,15 @@ export default function InterventionsPage() {
                       className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
                     >
                       <option value="All">All Sections</option>
-                      {SECTIONS_LIST.map((sec) => (
-                        <option key={sec} value={sec}>
-                          {sec}
-                        </option>
-                      ))}
+                      {filterAvailableSections.length === 0 && gradeFilter !== "All" ? (
+                        <option value="" disabled>No sections enrolled</option>
+                      ) : (
+                        filterAvailableSections.map((sec) => (
+                          <option key={sec} value={sec}>
+                            {sec}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
@@ -1967,7 +2080,7 @@ export default function InterventionsPage() {
               </div>
 
               {/* Subject & Section Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Subject with Teacher Restriction Enforcement */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -2008,6 +2121,24 @@ export default function InterventionsPage() {
                   )}
                 </div>
 
+                {/* Target Grade Level */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Target Grade
+                  </label>
+                  <select
+                    value={createGrade}
+                    onChange={(e) => handleCreateGradeChange(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                  >
+                    {availableGrades.map((g) => (
+                      <option key={g} value={g}>
+                        Grade {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Target Section */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700">
@@ -2019,13 +2150,17 @@ export default function InterventionsPage() {
                       setCreateSection(e.target.value);
                       setSelectedLearnerIds([]);
                     }}
-                    className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
+                    className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
                   >
-                    {SECTIONS_LIST.map((sec) => (
-                      <option key={sec} value={sec}>
-                        {sec}
-                      </option>
-                    ))}
+                    {createAvailableSections.length === 0 ? (
+                      <option value="" disabled>No sections enrolled</option>
+                    ) : (
+                      createAvailableSections.map((sec) => (
+                        <option key={sec} value={sec}>
+                          {sec}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>

@@ -187,11 +187,15 @@ export default function SkillGapPage() {
               className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
             >
               <option value="">All Sections</option>
-              {availableSections.map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec}
-                </option>
-              ))}
+              {availableSections.length === 0 && gradeFilter ? (
+                <option value="" disabled>No sections enrolled</option>
+              ) : (
+                availableSections.map((sec) => (
+                  <option key={sec} value={sec}>
+                    {sec}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>

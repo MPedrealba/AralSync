@@ -70,7 +70,7 @@ function CoordinatorLearnersContent() {
 
   // Global Cohort Mappings from server
   const [allGrades, setAllGrades] = useState<string[]>(["7", "8", "9", "10"]);
-  const [allSections, setAllSections] = useState<string[]>(["Rosal", "Sampaguita", "Ilang-Ilang", "Camia"]);
+  const [allSections, setAllSections] = useState<string[]>([]);
   const [gradeSectionsMap, setGradeSectionsMap] = useState<Record<string, string[]>>({});
 
   // Filters initialized from URL params if present
@@ -119,7 +119,7 @@ function CoordinatorLearnersContent() {
 
   // Batch Assignment State (3 Subject Remedial Teachers)
   const [batchGrade, setBatchGrade] = useState("7");
-  const [batchSection, setBatchSection] = useState("Rosal");
+  const [batchSection, setBatchSection] = useState("");
   const [isBatchCustomSection, setIsBatchCustomSection] = useState(false);
   const [batchCustomSectionText, setBatchCustomSectionText] = useState("");
   const [batchReadingTeacherId, setBatchReadingTeacherId] = useState("");
@@ -235,42 +235,52 @@ function CoordinatorLearnersContent() {
 
   // Sections available for Batch Assignment (strictly scoped to batchGrade)
   const batchAvailableSections = useMemo(() => {
-    const mapped = gradeSectionsMap[batchGrade];
-    if (mapped && mapped.length > 0) return mapped;
-    return allSections.length > 0 ? allSections : ["Rosal", "Sampaguita", "Ilang-Ilang", "Camia"];
-  }, [gradeSectionsMap, batchGrade, allSections]);
+    const gKey = batchGrade.replace(/\D/g, "");
+    const mapped = gradeSectionsMap[batchGrade] || gradeSectionsMap[gKey] || [];
+    return mapped;
+  }, [gradeSectionsMap, batchGrade]);
 
   // Synchronize batchSection whenever batchAvailableSections changes
   useEffect(() => {
-    if (!isBatchCustomSection && batchAvailableSections.length > 0 && !batchAvailableSections.includes(batchSection)) {
-      setBatchSection(batchAvailableSections[0]);
+    if (!isBatchCustomSection) {
+      if (batchAvailableSections.length > 0 && !batchAvailableSections.includes(batchSection)) {
+        setBatchSection(batchAvailableSections[0]);
+      } else if (batchAvailableSections.length === 0) {
+        setBatchSection("");
+      }
     }
   }, [batchAvailableSections, batchSection, isBatchCustomSection]);
 
   const handleBatchGradeChange = (newGrade: string) => {
     setBatchGrade(newGrade);
-    const valid = gradeSectionsMap[newGrade];
-    if (valid && valid.length > 0 && !isBatchCustomSection) {
-      setBatchSection(valid[0]);
+    const gKey = newGrade.replace(/\D/g, "");
+    const valid = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
+    if (!isBatchCustomSection) {
+      if (valid.length > 0) {
+        setBatchSection(valid[0]);
+      } else {
+        setBatchSection("");
+      }
     }
   };
 
   // Sections available for Filter Bar
   const filterAvailableSections = useMemo(() => {
     if (selectedGrade === "all") {
-      return allSections.length > 0 ? allSections : ["Rosal", "Sampaguita", "Ilang-Ilang", "Camia"];
+      return allSections;
     }
-    const mapped = gradeSectionsMap[selectedGrade];
-    if (mapped && mapped.length > 0) return mapped;
-    return allSections;
+    const gKey = selectedGrade.replace(/\D/g, "");
+    const mapped = gradeSectionsMap[selectedGrade] || gradeSectionsMap[gKey] || [];
+    return mapped;
   }, [selectedGrade, gradeSectionsMap, allSections]);
 
   // When changing grade filter, clear section filter if the selected section is not in the new grade
   const handleFilterGradeChange = (newGrade: string) => {
     setSelectedGrade(newGrade);
     if (newGrade !== "all" && selectedSection !== "all") {
-      const valid = gradeSectionsMap[newGrade];
-      if (valid && !valid.includes(selectedSection)) {
+      const gKey = newGrade.replace(/\D/g, "");
+      const valid = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
+      if (!valid.includes(selectedSection)) {
         setSelectedSection("all");
       }
     }
@@ -631,11 +641,15 @@ function CoordinatorLearnersContent() {
                         }}
                         className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                       >
-                        {batchAvailableSections.map((sec) => (
-                          <option key={sec} value={sec}>
-                            {sec}
-                          </option>
-                        ))}
+                        {batchAvailableSections.length === 0 ? (
+                          <option value="" disabled>No sections enrolled</option>
+                        ) : (
+                          batchAvailableSections.map((sec) => (
+                            <option key={sec} value={sec}>
+                              {sec}
+                            </option>
+                          ))
+                        )}
                         <option value="__custom__">+ Enter Custom Section...</option>
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -847,11 +861,15 @@ function CoordinatorLearnersContent() {
                   className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                 >
                   <option value="all">All Sections</option>
-                  {filterAvailableSections.map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec}
-                    </option>
-                  ))}
+                  {filterAvailableSections.length === 0 && selectedGrade !== "all" ? (
+                    <option value="" disabled>No sections enrolled</option>
+                  ) : (
+                    filterAvailableSections.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))
+                  )}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               </div>

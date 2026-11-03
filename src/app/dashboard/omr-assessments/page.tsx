@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
@@ -33,6 +33,7 @@ import {
   TrendingUp,
   Calendar,
   Users,
+  Layers,
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -1562,7 +1563,7 @@ function AssignOnlineModal({
   const [dueDateInput, setDueDateInput] = useState<string>(toDatetimeLocal(examKey?.dueDate));
   const [targetGradeInput, setTargetGradeInput] = useState<number | null>(examKey?.targetGrade ?? null);
   const [targetSectionInput, setTargetSectionInput] = useState<string>(examKey?.targetSection ?? "");
-  const [sectionsList, setSectionsList] = useState<string[]>([]);
+  const [learnersList, setLearnersList] = useState<Array<{ gradeLevel?: number | string; section?: string }>>([]);
   const [customSectionMode, setCustomSectionMode] = useState<boolean>(false);
   const [savingOnline, setSavingOnline] = useState<boolean>(false);
   const [onlineError, setOnlineError] = useState<string | null>(null);
@@ -1573,12 +1574,12 @@ function AssignOnlineModal({
       .then((r) => r.json())
       .then((d) => {
         if (isMounted && d.success && Array.isArray(d.data)) {
-          const set = new Set<string>();
+          setLearnersList(d.data);
+          const allSecs = new Set<string>();
           d.data.forEach((l: any) => {
-            if (l.section && typeof l.section === "string") set.add(l.section.trim());
+            if (l.section && typeof l.section === "string") allSecs.add(l.section.trim());
           });
-          const list = Array.from(set).filter(Boolean).sort();
-          setSectionsList(list);
+          const list = Array.from(allSecs).filter(Boolean).sort();
           if (examKey?.targetSection && !list.includes(examKey.targetSection) && examKey.targetSection !== "") {
             setCustomSectionMode(true);
           }
@@ -1589,6 +1590,26 @@ function AssignOnlineModal({
       isMounted = false;
     };
   }, [examKey?.targetSection]);
+
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    learnersList
+      .filter((l) => {
+        if (!targetGradeInput) return true;
+        const gNum = Number(String(l.gradeLevel).replace(/\D/g, ""));
+        return gNum === targetGradeInput;
+      })
+      .forEach((l) => {
+        if (l.section && typeof l.section === "string") set.add(l.section.trim());
+      });
+    return Array.from(set).filter(Boolean).sort();
+  }, [learnersList, targetGradeInput]);
+
+  useEffect(() => {
+    if (targetSectionInput && !customSectionMode && !availableSections.includes(targetSectionInput)) {
+      setTargetSectionInput("");
+    }
+  }, [availableSections, targetSectionInput, customSectionMode]);
 
   if (!examKey) return null;
 
@@ -1693,6 +1714,27 @@ function AssignOnlineModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Target Grade Level
+                </label>
+                <select
+                  value={targetGradeInput ?? ""}
+                  onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
+                  disabled={!isOnlineToggle}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer shadow-2xs"
+                >
+                  <option value="">All Grade Levels</option>
+                  <option value={7}>Grade 7</option>
+                  <option value={8}>Grade 8</option>
+                  <option value={9}>Grade 9</option>
+                  <option value={10}>Grade 10</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Filters availability and sections to this grade level.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   Assigned Section
                 </label>
                 {customSectionMode ? (
@@ -1731,8 +1773,12 @@ function AssignOnlineModal({
                       disabled={!isOnlineToggle}
                       className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer"
                     >
-                      <option value="">All Sections (Entire Grade Level)</option>
-                      {sectionsList.map((sec) => (
+                      <option value="">
+                        {targetGradeInput
+                          ? `All Sections (Grade ${targetGradeInput})`
+                          : "All Sections (Entire School)"}
+                      </option>
+                      {availableSections.map((sec: string) => (
                         <option key={sec} value={sec}>
                           Section: {sec}
                         </option>
@@ -1742,31 +1788,12 @@ function AssignOnlineModal({
                     <p className="text-[10px] text-slate-400">
                       {targetSectionInput
                         ? `Only students in Section "${targetSectionInput}" will receive this online test.`
-                        : "Open to all student sections in the selected grade."}
+                        : targetGradeInput
+                        ? `Open to all Grade ${targetGradeInput} sections (${availableSections.length} available).`
+                        : "Open to all student sections in the school."}
                     </p>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Target Grade Level
-                </label>
-                <select
-                  value={targetGradeInput ?? ""}
-                  onChange={(e) => setTargetGradeInput(e.target.value ? Number(e.target.value) : null)}
-                  disabled={!isOnlineToggle}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 disabled:opacity-50 cursor-pointer"
-                >
-                  <option value="">All Grade Levels</option>
-                  <option value={7}>Grade 7</option>
-                  <option value={8}>Grade 8</option>
-                  <option value={9}>Grade 9</option>
-                  <option value={10}>Grade 10</option>
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1.5">
-                  Filters availability to students in this grade level.
-                </p>
               </div>
             </div>
           </div>
@@ -2251,7 +2278,8 @@ function sanitizeDoc(d: any): GeneratedDoc {
   };
 }
 
-type GenType = "aral" | "extract" | "reading" | "upload";
+type GenType = "aral" | "extract" | "upload";
+type AralMethod = "bank" | "extract";
 
 function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: string }) {
   const [assessmentType, setAssessmentType] = useState<AssessmentType>("quiz");
@@ -2259,6 +2287,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
   const [genType, setGenType] = useState<GenType>("aral");
+  const [aralMethod, setAralMethod] = useState<AralMethod>("bank");
   const [subject, setSubject] = useState(
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
@@ -2271,9 +2300,6 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [allowRetake, setAllowRetake] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
-  const [passages, setPassages] = useState<PassageOption[]>([]);
-  const [passageId, setPassageId] = useState("");
-  const [aralPassageId, setAralPassageId] = useState("");
   const [aralMaterialId, setAralMaterialId] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -2295,6 +2321,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       subject: string;
       fileUrl: string;
       edition?: string;
+      gradeLevels?: number[];
       sessionDirectory?: Array<{
         sessionName: string;
         pageStart: number;
@@ -2303,21 +2330,47 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       }>;
     }>
   >([]);
-  const [extractMaterialId, setExtractMaterialId] = useState("");
   const [extractPageNumber, setExtractPageNumber] = useState(5);
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null);
   const [editingInstructionText, setEditingInstructionText] = useState("");
 
   const activeBubbleSheet = getSubjectBubbleSheet(
-    doc?.subject || (genType === "reading" || genType === "aral" ? "Reading" : subject)
+    doc?.subject || (subject === "All" ? "Reading" : subject)
   );
+
+  // Strictly filter learning materials so only materials matching the selected grade appear
+  const availableMaterials = useMemo(() => {
+    return learningMaterials.filter((m) => {
+      const matchSubj = subject === "All" || m.subject === subject || m.subject === "General";
+      let matchGrade = false;
+      if (Array.isArray(m.gradeLevels) && m.gradeLevels.length > 0) {
+        const titleMatch = m.title?.match(/Grade[s]?\s*(\d+)(?:\s*(?:to|&|-)\s*(\d+))?/i);
+        if (titleMatch) {
+          const start = Number(titleMatch[1]);
+          const end = titleMatch[2] ? Number(titleMatch[2]) : start;
+          matchGrade = grade >= start && grade <= end;
+        } else {
+          matchGrade = m.gradeLevels.includes(grade);
+        }
+      } else if (m.title) {
+        const titleMatch = m.title?.match(/Grade[s]?\s*(\d+)(?:\s*(?:to|&|-)\s*(\d+))?/i);
+        if (titleMatch) {
+          const start = Number(titleMatch[1]);
+          const end = titleMatch[2] ? Number(titleMatch[2]) : start;
+          matchGrade = grade >= start && grade <= end;
+        }
+      }
+      return matchSubj && matchGrade;
+    });
+  }, [learningMaterials, subject, grade]);
 
   useEffect(() => {
     (async () => {
       try {
         const querySubj = subject && subject !== "All" ? `&subject=${encodeURIComponent(subject)}` : "";
-        const res = await fetch(`/api/learning-materials?active=true${querySubj}`);
+        const queryGrade = grade ? `&grade=${grade}` : "";
+        const res = await fetch(`/api/learning-materials?active=true${querySubj}${queryGrade}`);
         const data = await parseJsonResponse(res);
         const list = Array.isArray(data?.data)
           ? data.data
@@ -2326,18 +2379,28 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           : [];
         if (data?.success && Array.isArray(list)) {
           setLearningMaterials(list);
-          if (list.length > 0) {
-            setExtractMaterialId((prev) => prev || list[0]._id);
-            if (list[0].sessionDirectory && list[0].sessionDirectory.length > 0) {
-              setExtractPageNumber((prev) => prev || list[0].sessionDirectory[0].pageStart);
-            }
-          }
         }
       } catch (err) {
         console.error("Failed to load reference materials", err);
       }
     })();
-  }, [subject]);
+  }, [subject, grade]);
+
+  // Synchronize selected material when availableMaterials or grade changes
+  useEffect(() => {
+    if (availableMaterials.length > 0) {
+      if (!availableMaterials.some((m: any) => (m._id || m.id) === aralMaterialId)) {
+        const first = availableMaterials[0];
+        const firstId = first._id || (first as any).id;
+        setAralMaterialId(firstId);
+        if (first.sessionDirectory && first.sessionDirectory.length > 0) {
+          setExtractPageNumber(first.sessionDirectory[0].pageStart);
+        }
+      }
+    } else {
+      setAralMaterialId("");
+    }
+  }, [availableMaterials, aralMaterialId]);
 
   useEffect(() => {
     if (assignedSubjectProp && assignedSubjectProp !== "All") {
@@ -2408,23 +2471,6 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     }
   };
 
-  // Load the passage bank for legacy reading checks
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/teacher/reading/passages");
-        const json = await parseJsonResponse(res);
-        if (json.success) {
-          const list: PassageOption[] = json.data || [];
-          setPassages(list);
-          const firstAral = list.find((p) => p.title.startsWith("ARAL"));
-          if (firstAral) setAralPassageId(firstAral.id);
-        }
-      } catch {
-        // silent
-      }
-    })();
-  }, []);
 
   // Trigger a browser print whenever a printable document is opened.
   useEffect(() => {
@@ -2607,7 +2653,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: doc.title,
-          subject: doc.subject || (genType === "reading" || genType === "aral" ? "Reading" : subject),
+          subject: doc.subject || (genType === "aral" ? "Reading" : subject),
           gradeLevel: doc.gradeLevel || grade || 7,
           assessmentType: doc.assessmentType || assessmentType,
           topics: doc.topics || (doc.topic ? [doc.topic] : []),
@@ -2664,130 +2710,109 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     setSaveNotification(null);
     try {
       if (genType === "aral") {
-        if (assessmentType === "quiz") {
-          if (selectedTopics.length === 0) {
-            setGenError("Select 1 or 2 topics for your weekly quiz.");
-            setGenerating(false);
-            return;
-          }
-          if (selectedTopics.length > 2) {
-            setGenError("A quiz can cover at most 2 topics. For all topics, choose Comprehensive Exam.");
-            setGenerating(false);
-            return;
-          }
-          const hasAlreadyAssessed = selectedTopics.some((t) => usedTopics.includes(t));
-          if (hasAlreadyAssessed && !allowRetake) {
-            setGenError(
-              'One or more selected topics were already assessed. Check "Allow Retake" to create another quiz for them.'
-            );
-            setGenerating(false);
-            return;
-          }
-        }
-
-        const isMathOrScience = subject === "Math" || subject === "Science";
-        const endpoint = isMathOrScience
-          ? "/api/teacher/questionnaire/generate"
-          : "/api/teacher/questionnaire/generate-reading";
-
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            isMathOrScience
-              ? {
-                  title: customTitle.trim() || undefined,
-                  subject,
-                  grade,
-                  count,
-                  writtenCount,
-                  assessmentType,
-                  topics: assessmentType === "quiz" ? selectedTopics : topics,
-                  topic: selectedTopics[0] || "",
-                  materialId: aralMaterialId || undefined,
-                }
-              : {
-                  title: customTitle.trim() || undefined,
-                  assessmentType,
-                  topics: assessmentType === "quiz" ? selectedTopics : topics,
-                  topic: selectedTopics[0] || "",
-                  count,
-                  writtenCount,
-                  allowRetake,
-                  materialId: aralMaterialId || undefined,
-                }
-          ),
-        });
-        const json = await parseJsonResponse(res);
-        if (json.success) {
-          setDoc(sanitizeDoc(json.data));
-          setEditedTitle(json.data.title);
-          setIsEditingTitle(false);
-          setFallbackNotice(json.fallbackNotice || null);
+        if (aralMethod === "bank") {
           if (assessmentType === "quiz") {
-            setUsedTopics((prev) => Array.from(new Set([...prev, ...selectedTopics])));
+            if (selectedTopics.length === 0) {
+              setGenError("Select 1 or 2 topics for your weekly quiz.");
+              setGenerating(false);
+              return;
+            }
+            if (selectedTopics.length > 2) {
+              setGenError("A quiz can cover at most 2 topics. For all topics, choose Comprehensive Exam.");
+              setGenerating(false);
+              return;
+            }
+            const hasAlreadyAssessed = selectedTopics.some((t) => usedTopics.includes(t));
+            if (hasAlreadyAssessed && !allowRetake) {
+              setGenError(
+                'One or more selected topics were already assessed. Check "Allow Retake" to create another quiz for them.'
+              );
+              setGenerating(false);
+              return;
+            }
           }
-        } else {
-          setGenError(json.error || "Failed to generate ARAL questionnaire.");
-        }
-        return;
-      }
 
-      if (genType === "extract") {
-        if (!extractMaterialId) {
-          setGenError("Please select a learning material to extract questions from.");
-          setGenerating(false);
+          const isMathOrScience = subject === "Math" || subject === "Science";
+          const endpoint = isMathOrScience
+            ? "/api/teacher/questionnaire/generate"
+            : "/api/teacher/questionnaire/generate-reading";
+
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              isMathOrScience
+                ? {
+                    title: customTitle.trim() || undefined,
+                    subject,
+                    grade,
+                    gradeLevel: grade,
+                    count,
+                    writtenCount,
+                    assessmentType,
+                    topics: assessmentType === "quiz" ? selectedTopics : topics,
+                    topic: selectedTopics[0] || "",
+                    materialId: aralMaterialId || undefined,
+                  }
+                : {
+                    title: customTitle.trim() || undefined,
+                    grade,
+                    gradeLevel: grade,
+                    assessmentType,
+                    topics: assessmentType === "quiz" ? selectedTopics : topics,
+                    topic: selectedTopics[0] || "",
+                    count,
+                    writtenCount,
+                    allowRetake,
+                    materialId: aralMaterialId || undefined,
+                  }
+            ),
+          });
+          const json = await parseJsonResponse(res);
+          if (json.success) {
+            setDoc(sanitizeDoc(json.data));
+            setEditedTitle(json.data.title);
+            setIsEditingTitle(false);
+            setFallbackNotice(json.fallbackNotice || null);
+            if (assessmentType === "quiz") {
+              setUsedTopics((prev) => Array.from(new Set([...prev, ...selectedTopics])));
+            }
+          } else {
+            setGenError(json.error || "Failed to generate ARAL questionnaire.");
+          }
           return;
         }
 
-        const res = await fetch("/api/teacher/questionnaire/extract-material", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            materialId: extractMaterialId,
-            pageNumber: extractPageNumber,
-            customTitle: customTitle.trim() || undefined,
-            count: count > 0 ? count : undefined,
-          }),
-        });
-        const json = await parseJsonResponse(res);
-        if (json.success) {
-          setDoc(sanitizeDoc(json.data));
-          setEditedTitle(json.data.title);
-          setIsEditingTitle(false);
-          setFallbackNotice(json.fallbackNotice || null);
-        } else {
-          setGenError(json.error || "Failed to extract exercises from the material.");
-        }
-        return;
-      }
+        if (aralMethod === "extract") {
+          if (!aralMaterialId) {
+            setGenError(`Please select an official DepEd ARAL material for Grade ${grade} to extract questions from.`);
+            setGenerating(false);
+            return;
+          }
 
-      if (genType === "reading") {
-        if (!passageId) {
-          setGenError("Select a reading passage first.");
-          setGenerating(false);
+          const res = await fetch("/api/teacher/questionnaire/extract-material", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              materialId: aralMaterialId,
+              pageNumber: extractPageNumber,
+              customTitle: customTitle.trim() || undefined,
+              grade,
+              gradeLevel: grade,
+              count: count > 0 ? count : undefined,
+            }),
+          });
+          const json = await parseJsonResponse(res);
+          if (json.success) {
+            setDoc(sanitizeDoc(json.data));
+            setEditedTitle(json.data.title);
+            setIsEditingTitle(false);
+            setFallbackNotice(json.fallbackNotice || null);
+          } else {
+            setGenError(json.error || "Failed to extract exercises from the material.");
+          }
           return;
         }
-
-        const res = await fetch("/api/teacher/questionnaire/generate-reading", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: customTitle.trim() || undefined,
-            passageId,
-            count,
-          }),
-        });
-        const json = await parseJsonResponse(res);
-        if (json.success) {
-          setDoc(sanitizeDoc(json.data));
-          setEditedTitle(json.data.title);
-          setIsEditingTitle(false);
-          setFallbackNotice(json.fallbackNotice || null);
-        } else {
-          setGenError(json.error || "Failed to generate reading questionnaire.");
-        }
-        return;
       }
     } catch {
       setGenError("Failed to generate questionnaire.");
@@ -2810,59 +2835,55 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             </p>
           </div>
 
-          {/* Source toggle */}
-          <div className={`mb-3.5 grid ${assignedSubject === "Math" || assignedSubject === "Science" ? "grid-cols-3" : "grid-cols-4"} gap-1 rounded-xl bg-slate-100 p-1`}>
+          {/* Source toggle: Unified DepEd ARAL vs Custom Upload */}
+          <div className="mb-3.5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => setGenType("aral")}
-              className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+              className={`h-9 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                 genType === "aral"
                   ? "bg-white text-slate-900 shadow-xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <span>ARAL</span>
-              <span className="rounded bg-red-100 px-1 py-0.2 text-[9px] font-bold text-red-800">DepEd</span>
-            </button>
-            {(assignedSubject === "All" || assignedSubject === "Reading") && (
-              <button
-                type="button"
-                onClick={() => setGenType("reading")}
-                className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
-                  genType === "reading"
-                    ? "bg-white text-slate-900 shadow-xs font-bold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Reading Story
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setGenType("extract")}
-              className={`h-8.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
-                genType === "extract"
-                  ? "bg-white text-red-900 shadow-xs font-bold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Wand2 className="h-3.5 w-3.5 text-red-800" />
-              <span>Extract</span>
+              <BookOpen className="h-3.5 w-3.5 text-red-800" />
+              <span>DepEd ARAL Materials</span>
             </button>
             <button
               type="button"
               onClick={() => setGenType("upload")}
-              className={`h-8.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`h-9 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                 genType === "upload"
                   ? "bg-white text-slate-900 shadow-xs font-bold"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Upload
+              <Upload className="h-3.5 w-3.5 text-slate-700" />
+              <span>Custom Upload</span>
             </button>
           </div>
 
           <div className="space-y-3.5">
+            {genType !== "upload" && (
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Grade Level
+                </label>
+                <select
+                  value={grade}
+                  onChange={(e) => {
+                    const newGrade = parseInt(e.target.value) || 7;
+                    setGrade(newGrade);
+                  }}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer shadow-2xs"
+                >
+                  <option value={7}>Grade 7</option>
+                  <option value={8}>Grade 8</option>
+                  <option value={9}>Grade 9</option>
+                  <option value={10}>Grade 10</option>
+                </select>
+              </div>
+            )}
             {genType === "aral" ? (
               <>
                 {/* Subject Info Banner */}
@@ -2873,7 +2894,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       <p className="font-bold text-slate-900">
                         Subject: {assignedSubject === "Math" ? "Mathematics" : assignedSubject === "Science" ? "Science" : (subject === "All" ? "Reading" : subject)}
                       </p>
-                      <p className="text-[11px] text-slate-500">Official DepEd ARAL Materials</p>
+                      <p className="text-[11px] text-slate-500">Official DepEd ARAL Materials • Grade {grade}</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -2885,7 +2906,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Source Learning Material
+                      Source Learning Material (Grade {grade})
                     </label>
                     {aralMaterialId && (
                       <a
@@ -2904,92 +2925,374 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     onChange={(e) => {
                       const id = e.target.value;
                       setAralMaterialId(id);
-                      const chosen = learningMaterials.find((m) => (m._id || (m as any).id) === id);
+                      const chosen = availableMaterials.find((m: any) => (m._id || m.id) === id);
                       if (chosen && !customTitle) {
                         setCustomTitle(`${chosen.title} Assessment`);
+                      }
+                      if (chosen?.sessionDirectory && chosen.sessionDirectory.length > 0) {
+                        setExtractPageNumber(chosen.sessionDirectory[0].pageStart);
                       }
                     }}
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
                   >
-                    <option value="">All DepEd ARAL Materials ({subject})</option>
-                    {learningMaterials
-                      .filter((m) => subject === "All" || m.subject === subject || m.subject === "General")
-                      .map((m) => (
-                        <option key={m._id || (m as any).id} value={m._id || (m as any).id}>
-                          {m.title} ({m.subject})
-                        </option>
-                      ))}
+                    <option value="">
+                      {availableMaterials.length === 0
+                        ? `No materials found for Grade ${grade}`
+                        : `All DepEd ARAL Materials (${assignedSubject === "Math" ? "Math" : assignedSubject === "Science" ? "Science" : "Reading"} • Grade ${grade})`}
+                    </option>
+                    {availableMaterials.map((m: any) => (
+                      <option key={m._id || m.id} value={m._id || m.id}>
+                        {m.title} ({m.subject})
+                      </option>
+                    ))}
                   </select>
                   <p className="mt-1 text-[10px] text-slate-400">
-                    Optionally align questions to an approved ARAL learning material module.
+                    {aralMethod === "bank"
+                      ? `Optionally align questions to an approved Grade ${grade} ARAL material.`
+                      : `Selected Grade ${grade} ARAL workbook to scan pages and extract exercises.`}
                   </p>
                 </div>
 
-                {/* Assessment Scope Switcher (Chronological: Pre-Test -> Weekly Quiz -> Periodical Exam -> Post-Test) */}
+                {/* Generation Method Toggle: Bank vs AI Page Scanner */}
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Assessment Scope
+                    Question Generation Method
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
-                    {/* 1. Pre-Test (Baseline Diagnostic at start) */}
+                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
                     <button
                       type="button"
-                      onClick={() => switchAssessmentType("pre-test")}
-                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                        assessmentType === "pre-test"
-                          ? "bg-amber-600 text-white shadow-xs"
+                      onClick={() => setAralMethod("bank")}
+                      className={`h-8 flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        aralMethod === "bank"
+                          ? "bg-white text-slate-900 shadow-xs font-bold"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
-                      <FileCheck2 className="h-3.5 w-3.5" />
-                      <span>Pre-Test</span>
+                      <Layers className="h-3.5 w-3.5 text-red-800" />
+                      <span>Curriculum Bank</span>
                     </button>
-
-                    {/* 2. Weekly Quiz (Formative ongoing checks) */}
                     <button
                       type="button"
-                      onClick={() => switchAssessmentType("quiz")}
-                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                        assessmentType === "quiz"
-                          ? "bg-red-800 text-white shadow-xs"
+                      onClick={() => setAralMethod("extract")}
+                      className={`h-8 flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        aralMethod === "extract"
+                          ? "bg-white text-slate-900 shadow-xs font-bold"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
-                      <FileText className="h-3.5 w-3.5" />
-                      <span>Weekly Quiz</span>
-                    </button>
-
-                    {/* 3. Periodical Exam (Quarterly milestone examination) */}
-                    <button
-                      type="button"
-                      onClick={() => switchAssessmentType("exam")}
-                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                        assessmentType === "exam"
-                          ? "bg-purple-700 text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      <Award className="h-3.5 w-3.5" />
-                      <span>Periodical Exam</span>
-                    </button>
-
-                    {/* 4. Post-Test (Culminating summative evaluation at end) */}
-                    <button
-                      type="button"
-                      onClick={() => switchAssessmentType("post-test")}
-                      className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                        assessmentType === "post-test"
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      <span>Post-Test</span>
+                      <ScanLine className="h-3.5 w-3.5 text-red-800" />
+                      <span>AI Page Scanner</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Assessment Title (Optional / Custom) */}
+                {/* Method Specific Controls: Bank */}
+                {aralMethod === "bank" && (
+                  <>
+                    {/* Assessment Scope Switcher (Chronological: Pre-Test -> Weekly Quiz -> Periodical Exam -> Post-Test) */}
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Assessment Scope
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
+                        {/* 1. Pre-Test (Baseline Diagnostic at start) */}
+                        <button
+                          type="button"
+                          onClick={() => switchAssessmentType("pre-test")}
+                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                            assessmentType === "pre-test"
+                              ? "bg-amber-600 text-white shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <FileCheck2 className="h-3.5 w-3.5" />
+                          <span>Pre-Test</span>
+                        </button>
+
+                        {/* 2. Weekly Quiz (Formative ongoing checks) */}
+                        <button
+                          type="button"
+                          onClick={() => switchAssessmentType("quiz")}
+                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                            assessmentType === "quiz"
+                              ? "bg-red-800 text-white shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          <span>Weekly Quiz</span>
+                        </button>
+
+                        {/* 3. Periodical Exam (Quarterly milestone examination) */}
+                        <button
+                          type="button"
+                          onClick={() => switchAssessmentType("exam")}
+                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                            assessmentType === "exam"
+                              ? "bg-purple-700 text-white shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <Award className="h-3.5 w-3.5" />
+                          <span>Periodical Exam</span>
+                        </button>
+
+                        {/* 4. Post-Test (Culminating summative evaluation at end) */}
+                        <button
+                          type="button"
+                          onClick={() => switchAssessmentType("post-test")}
+                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                            assessmentType === "post-test"
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          <span>Post-Test</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quiz Mode: 1-2 Topics Selector */}
+                    {assessmentType === "quiz" ? (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Competencies (Choose 1 or 2)
+                          </label>
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                            {selectedTopics.length}/2 Selected
+                          </span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 p-1.5 scrollbar-thin scrollbar-thumb-slate-200">
+                          {topics.map((t) => {
+                            const isSelected = selectedTopics.includes(t);
+                            const isUsed = usedTopics.includes(t);
+                            const isMaxed = !isSelected && selectedTopics.length >= 2;
+                            const isDisabled = (isUsed && !allowRetake) || isMaxed;
+
+                            return (
+                              <label
+                                key={t}
+                                className={`flex items-start gap-2 rounded-lg border p-1.5 text-xs transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "border-red-300 bg-red-50 text-red-950 font-semibold"
+                                    : isDisabled
+                                    ? "border-slate-100 bg-white/60 text-slate-400 cursor-not-allowed opacity-60"
+                                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={isDisabled}
+                                  onChange={() => toggleTopic(t)}
+                                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <span className="truncate block">{t}</span>
+                                  {isUsed && !allowRetake && (
+                                    <p className="text-[10px] text-amber-700 mt-0.5">Assessed (enable retake to re-use)</p>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Exam / Pre-Test / Post-Test Mode: Whole Curriculum Display */
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs text-slate-800">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                            {assessmentType === "pre-test" ? (
+                              <>
+                                <FileCheck2 className="h-4 w-4 text-amber-600" />
+                                <span>Pre-Test Diagnostic Coverage</span>
+                              </>
+                            ) : assessmentType === "post-test" ? (
+                              <>
+                                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                                <span>Post-Test Growth Assessment</span>
+                              </>
+                            ) : (
+                              <>
+                                <Award className="h-4 w-4 text-purple-600" />
+                                <span>Whole Curriculum Coverage</span>
+                              </>
+                            )}
+                          </div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                            assessmentType === "pre-test"
+                              ? "bg-amber-50 border-amber-200 text-amber-700"
+                              : assessmentType === "post-test"
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                              : "bg-purple-50 border-purple-200 text-purple-700"
+                          }`}>
+                            All {topics.length} Topics
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+                          {topics.map((t) => (
+                            <span
+                              key={t}
+                              className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700 shadow-2xs"
+                            >
+                              <Check className="h-3 w-3 text-emerald-600" />
+                              <span>{t}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200">
+                          {assessmentType === "pre-test"
+                            ? "Baseline diagnostic: questions sample across competencies to establish student entry level."
+                            : assessmentType === "post-test"
+                            ? "Endline evaluation: questions match diagnostic competencies to measure net learning recovery."
+                            : `Even distribution: ~${Math.floor(count / Math.max(1, topics.length))} items per topic for a ${count}-item balanced exam.`}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Retake Checkbox for Quiz */}
+                    {assessmentType === "quiz" && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={allowRetake}
+                            onChange={(e) => setAllowRetake(e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
+                          />
+                          <div className="text-xs">
+                            <span className="font-semibold text-slate-900">Allow Retake / Re-assess</span>
+                            <p className="text-slate-500 text-[10px]">
+                              Enable previously assessed topics for another quiz administration.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Written Items */}
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Written Items (Teacher-Graded)
+                      </label>
+                      <select
+                        value={writtenCount}
+                        onChange={(e) => setWrittenCount(parseInt(e.target.value) || 0)}
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                      >
+                        {[0, 2, 5].filter((n) => n <= count).map((n) => (
+                          <option key={n} value={n}>
+                            {n === 0 ? "None (All MC auto-graded)" : `${n} written response items`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {/* Method Specific Controls: Extract (AI Page Scanner) */}
+                {aralMethod === "extract" && (
+                  <>
+                    {/* AI Vision Extraction Banner */}
+                    <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-xs text-red-950 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-red-900">
+                          <Wand2 className="h-4 w-4 text-red-700 shrink-0" />
+                          <span>Verbatim AI Worksheet Scanner</span>
+                        </div>
+                        <span className="rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-bold text-red-800">
+                          PyMuPDF + Vision
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-red-800/90 leading-relaxed">
+                        Select any page from the selected Grade {grade} ARAL workbook above. The AI scans the high-resolution page image and extracts the exact printed exercises verbatim into your assessment.
+                      </p>
+                    </div>
+
+                    {/* Session Directory Quick Pick (if present) */}
+                    {(() => {
+                      const selectedMat = availableMaterials.find((m: any) => (m._id || m.id) === aralMaterialId);
+                      const sessions = selectedMat?.sessionDirectory || [];
+                      if (sessions.length === 0) return null;
+                      return (
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Session Directory / Chapter (Quick Jump)
+                          </label>
+                          <select
+                            onChange={(e) => {
+                              const idx = parseInt(e.target.value);
+                              if (!isNaN(idx) && sessions[idx]) {
+                                setExtractPageNumber(sessions[idx].pageStart);
+                              }
+                            }}
+                            className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 cursor-pointer"
+                          >
+                            <option value="">Jump to session start page…</option>
+                            {sessions.map((s: any, idx: number) => (
+                              <option key={idx} value={idx}>
+                                {s.sessionName} (Pages {s.pageStart}–{s.pageEnd}) {s.topic ? `• ${s.topic}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Target Page Stepper & Preview */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          Worksheet Page Number
+                        </label>
+                        {aralMaterialId && (
+                          <a
+                            href={`/api/learning-materials/view?id=${aralMaterialId}#page=${extractPageNumber}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-red-800 hover:text-red-900 underline flex items-center gap-1 font-semibold"
+                          >
+                            <Eye className="h-3 w-3" />
+                            <span>Preview Page in New Tab</span>
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExtractPageNumber((p) => Math.max(1, p - 1))}
+                          className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={500}
+                          value={extractPageNumber}
+                          onChange={(e) => setExtractPageNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-xs font-bold text-slate-800 outline-none focus:border-red-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setExtractPageNumber((p) => p + 1)}
+                          className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        Scans this page at 144 DPI and parses each numbered problem into structured questions.
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Common / Shared Settings: Title */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -3010,7 +3313,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
                     placeholder={
-                      assessmentType === "quiz"
+                      aralMethod === "extract"
+                        ? "e.g. Activity 1: Operations on Integers Quiz"
+                        : assessmentType === "quiz"
                         ? "e.g. Weekly Quiz #1 — Vocabulary & Context Clues"
                         : assessmentType === "pre-test"
                         ? "e.g. ARAL Diagnostic Pre-Test in Reading"
@@ -3025,140 +3330,63 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </p>
                 </div>
 
-                {/* Quiz Mode: 1-2 Topics Selector */}
-                {assessmentType === "quiz" ? (
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Competencies (Choose 1 or 2)
-                      </label>
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                        {selectedTopics.length}/2 Selected
-                      </span>
-                    </div>
-
-                    <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 p-1.5 scrollbar-thin scrollbar-thumb-slate-200">
-                      {topics.map((t) => {
-                        const isSelected = selectedTopics.includes(t);
-                        const isUsed = usedTopics.includes(t);
-                        const isMaxed = !isSelected && selectedTopics.length >= 2;
-                        const isDisabled = (isUsed && !allowRetake) || isMaxed;
-
-                        return (
-                          <label
-                            key={t}
-                            className={`flex items-start gap-2 rounded-lg border p-1.5 text-xs transition-all cursor-pointer ${
-                              isSelected
-                                ? "border-red-300 bg-red-50 text-red-950 font-semibold"
-                                : isDisabled
-                                ? "border-slate-100 bg-white/60 text-slate-400 cursor-not-allowed opacity-60"
-                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              disabled={isDisabled}
-                              onChange={() => toggleTopic(t)}
-                              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <span className="truncate block">{t}</span>
-                              {isUsed && !allowRetake && (
-                                <p className="text-[10px] text-amber-700 mt-0.5">Assessed (enable retake to re-use)</p>
-                              )}
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  /* Exam / Pre-Test / Post-Test Mode: Whole Curriculum Display */
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs text-slate-800">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                        {assessmentType === "pre-test" ? (
-                          <>
-                            <FileCheck2 className="h-4 w-4 text-amber-600" />
-                            <span>Pre-Test Diagnostic Coverage</span>
-                          </>
-                        ) : assessmentType === "post-test" ? (
-                          <>
-                            <TrendingUp className="h-4 w-4 text-emerald-600" />
-                            <span>Post-Test Growth Assessment</span>
-                          </>
-                        ) : (
-                          <>
-                            <Award className="h-4 w-4 text-purple-600" />
-                            <span>Whole Curriculum Coverage</span>
-                          </>
-                        )}
-                      </div>
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                        assessmentType === "pre-test"
-                          ? "bg-amber-50 border-amber-200 text-amber-700"
-                          : assessmentType === "post-test"
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                          : "bg-purple-50 border-purple-200 text-purple-700"
-                      }`}>
-                        All {topics.length} Topics
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-                      {topics.map((t) => (
-                        <span
-                          key={t}
-                          className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700 shadow-2xs"
-                        >
-                          <Check className="h-3 w-3 text-emerald-600" />
-                          <span>{t}</span>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200">
-                      {assessmentType === "pre-test"
-                        ? "Baseline diagnostic: questions sample across competencies to establish student entry level."
-                        : assessmentType === "post-test"
-                        ? "Endline evaluation: questions match diagnostic competencies to measure net learning recovery."
-                        : `Even distribution: ~${Math.floor(count / Math.max(1, topics.length))} items per topic for a ${count}-item balanced exam.`}
-                    </div>
-                  </div>
-                )}
-
-                {/* Retake Checkbox for Quiz */}
-                {assessmentType === "quiz" && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={allowRetake}
-                        onChange={(e) => setAllowRetake(e.target.checked)}
-                        className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
-                      />
-                      <div className="text-xs">
-                        <span className="font-semibold text-slate-900">Allow Retake / Re-assess</span>
-                        <p className="text-slate-500 text-[10px]">
-                          Enable previously assessed topics for another quiz administration.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                )}
+                {/* Common / Shared Settings: Items Count */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Items Count
+                  </label>
+                  <select
+                    value={count}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 10)}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                  >
+                    {aralMethod === "extract" ? (
+                      <>
+                        <option value={0}>All Extracted Items (From page)</option>
+                        <option value={5}>5 items</option>
+                        <option value={10}>10 items • Standard Weekly Quiz</option>
+                        <option value={15}>15 items</option>
+                        <option value={20}>20 items</option>
+                        <option value={25}>25 items</option>
+                        <option value={30}>30 items</option>
+                        <option value={40}>40 items</option>
+                        <option value={50}>50 items • Full 50-Item DepEd Exam Sheet</option>
+                      </>
+                    ) : assessmentType === "quiz" ? (
+                      [5, 10, 15, 20].map((n) => (
+                        <option key={n} value={n}>
+                          {n} items {n === 10 ? "• Standard Weekly Quiz" : ""}
+                        </option>
+                      ))
+                    ) : assessmentType === "pre-test" || assessmentType === "post-test" ? (
+                      [10, 20, 25, 30, 40, 50].map((n) => (
+                        <option key={n} value={n}>
+                          {n} items {n === 20 ? "• Standard Baseline/Endline" : n === 50 ? "• Comprehensive Evaluation" : ""}
+                        </option>
+                      ))
+                    ) : (
+                      [20, 25, 30, 40, 50].map((n) => (
+                        <option key={n} value={n}>
+                          {n} items {n === 50 ? "• Full 50-Item DepEd Exam Sheet" : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
                 {/* ARAL Reference Documents */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <p className="font-bold text-slate-900 text-[10px] uppercase tracking-wider">
-                      DepEd ARAL Reference Materials:
+                      DepEd ARAL Reference Materials (Grade {grade}):
                     </p>
                     <span className="text-[10px] text-slate-400 font-medium">Curriculum Repo</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {learningMaterials.length > 0 ? (
-                      learningMaterials.slice(0, 6).map((mat) => (
+                    {availableMaterials.length > 0 ? (
+                      availableMaterials.slice(0, 6).map((mat: any) => (
                         <a
-                          key={mat._id}
+                          key={mat._id || mat.id}
                           href={
                             mat._id
                               ? `/api/learning-materials/view?id=${mat._id}`
@@ -3175,249 +3403,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       ))
                     ) : (
                       <span className="text-[11px] text-slate-400 italic">
-                        No materials uploaded yet in ARAL Coordinator Portal
+                        No materials uploaded yet for Grade {grade}
                       </span>
                     )}
                   </div>
-                </div>
-
-                {/* Items Count */}
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Items Count
-                  </label>
-                  <select
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                  >
-                    {assessmentType === "quiz"
-                      ? [5, 10, 15, 20].map((n) => (
-                          <option key={n} value={n}>
-                            {n} items {n === 10 ? "• Standard Weekly Quiz" : ""}
-                          </option>
-                        ))
-                      : assessmentType === "pre-test" || assessmentType === "post-test"
-                      ? [10, 20, 25, 30, 40, 50].map((n) => (
-                          <option key={n} value={n}>
-                            {n} items {n === 20 ? "• Standard Baseline/Endline" : n === 50 ? "• Comprehensive Evaluation" : ""}
-                          </option>
-                        ))
-                      : [20, 25, 30, 40, 50].map((n) => (
-                          <option key={n} value={n}>
-                            {n} items {n === 50 ? "• Full 50-Item DepEd Exam Sheet" : ""}
-                          </option>
-                        ))}
-                  </select>
-                </div>
-
-                {/* Written Items */}
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Written Items (Teacher-Graded)
-                  </label>
-                  <select
-                    value={writtenCount}
-                    onChange={(e) => setWrittenCount(parseInt(e.target.value) || 0)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                  >
-                    {[0, 2, 5].filter((n) => n <= count).map((n) => (
-                      <option key={n} value={n}>
-                        {n === 0 ? "None (All MC auto-graded)" : `${n} written response items`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            ) : genType === "reading" ? (
-              <>
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Reading Passage / Story</label>
-                  <select
-                    value={passageId}
-                    onChange={(e) => setPassageId(e.target.value)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                  >
-                    <option value="">Select a passage…</option>
-                    {passages.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title} (Gr {p.gradeLevel ?? "—"})
-                        {p.questionCount > 0 ? ` — ${p.questionCount} Qs` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Items</label>
-                  <select
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value) || 20)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                  >
-                    {[10, 20, 25, 50].map((n) => (
-                      <option key={n} value={n}>{n} items</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            ) : genType === "extract" ? (
-              <>
-                {/* AI Vision Extraction Banner */}
-                <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-xs text-red-950 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold text-red-900">
-                      <Wand2 className="h-4 w-4 text-red-700 shrink-0" />
-                      <span>Verbatim AI Worksheet Scanner</span>
-                    </div>
-                    <span className="rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-bold text-red-800">
-                      PyMuPDF + Vision
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-red-800/90 leading-relaxed">
-                    Select any uploaded DepEd ARAL workbook or worksheet PDF page. The AI scans the high-resolution page image and extracts the exact printed exercises verbatim into your assessment.
-                  </p>
-                </div>
-
-                {/* Material Selector */}
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Source Learning Material
-                  </label>
-                  <select
-                    value={extractMaterialId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setExtractMaterialId(id);
-                      const chosen = learningMaterials.find((m) => (m._id || (m as any).id) === id);
-                      if (chosen?.sessionDirectory && chosen.sessionDirectory.length > 0) {
-                        setExtractPageNumber(chosen.sessionDirectory[0].pageStart);
-                      }
-                    }}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                  >
-                    <option value="">Select an uploaded material…</option>
-                    {learningMaterials.map((m) => (
-                      <option key={m._id || (m as any).id} value={m._id || (m as any).id}>
-                        {m.title} ({m.subject})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Session Directory Quick Pick (if present) */}
-                {(() => {
-                  const selectedMat = learningMaterials.find((m) => (m._id || (m as any).id) === extractMaterialId);
-                  const sessions = selectedMat?.sessionDirectory || [];
-                  if (sessions.length === 0) return null;
-                  return (
-                    <div>
-                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Session Directory / Chapter (Quick Jump)
-                      </label>
-                      <select
-                        onChange={(e) => {
-                          const idx = parseInt(e.target.value);
-                          if (!isNaN(idx) && sessions[idx]) {
-                            setExtractPageNumber(sessions[idx].pageStart);
-                          }
-                        }}
-                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800"
-                      >
-                        <option value="">Jump to session start page…</option>
-                        {sessions.map((s, idx) => (
-                          <option key={idx} value={idx}>
-                            {s.sessionName} (Pages {s.pageStart}–{s.pageEnd}) {s.topic ? `• ${s.topic}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })()}
-
-                {/* Target Page Stepper & Preview */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Worksheet Page Number
-                    </label>
-                    {extractMaterialId && (
-                      <a
-                        href={`/api/learning-materials/view?id=${extractMaterialId}#page=${extractPageNumber}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-red-800 hover:text-red-900 underline flex items-center gap-1 font-semibold"
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>Preview Page in New Tab</span>
-                      </a>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setExtractPageNumber((p) => Math.max(1, p - 1))}
-                      className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={1}
-                      max={500}
-                      value={extractPageNumber}
-                      onChange={(e) => setExtractPageNumber(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-xs font-bold text-slate-800 outline-none focus:border-red-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setExtractPageNumber((p) => p + 1)}
-                      className="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Scans this page at 144 DPI and parses each numbered problem into structured questions.
-                  </p>
-                </div>
-
-                {/* Target Items Count */}
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Number of Items
-                  </label>
-                  <select
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value) || 10)}
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
-                  >
-                    <option value={0}>All Extracted Items (From page)</option>
-                    <option value={5}>5 items</option>
-                    <option value={10}>10 items — Standard Weekly Quiz</option>
-                    <option value={15}>15 items</option>
-                    <option value={20}>20 items</option>
-                    <option value={25}>25 items</option>
-                    <option value={30}>30 items</option>
-                    <option value={40}>40 items</option>
-                    <option value={50}>50 items — Full 50-Item DepEd Exam Sheet</option>
-                  </select>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Target item count for this questionnaire.
-                  </p>
-                </div>
-
-                {/* Optional Custom Assessment Title */}
-                <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Assessment Title (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="e.g. Activity 1: Operations on Integers Quiz"
-                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 placeholder:text-slate-400"
-                  />
                 </div>
               </>
             ) : (
@@ -3437,8 +3426,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               onClick={handleGenerate}
               disabled={
                 generating ||
-                (genType === "extract" && !extractMaterialId) ||
+                (genType === "aral" && aralMethod === "extract" && !aralMaterialId) ||
                 (genType === "aral" &&
+                  aralMethod === "bank" &&
                   assessmentType === "quiz" &&
                   (selectedTopics.length === 0 ||
                     (selectedTopics.some((t) => usedTopics.includes(t)) && !allowRetake)))
@@ -3451,11 +3441,12 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 <Wand2 className="h-4 w-4" />
               )}
               {generating
-                ? (genType === "extract" ? "Scanning & Extracting Exercises…" : "Generating Questionnaire…")
-                : genType === "extract"
+                ? aralMethod === "extract"
+                  ? "Scanning & Extracting Exercises…"
+                  : "Generating Questionnaire…"
+                : aralMethod === "extract"
                 ? `Scan & Extract Exercises from Page ${extractPageNumber}`
-                : genType === "aral" &&
-                  assessmentType === "quiz" &&
+                : assessmentType === "quiz" &&
                   selectedTopics.some((t) => usedTopics.includes(t)) &&
                   !allowRetake
                 ? "Topic Already Assessed"
