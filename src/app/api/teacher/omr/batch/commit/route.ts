@@ -97,12 +97,20 @@ export async function POST(req: NextRequest) {
 
       // Check teacher assignment or cohort access
       const isDirectlyAssigned =
-        learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr;
+        (learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr) ||
+        learner.assignedTeachers?.reading?.toString() === teacherIdStr ||
+        learner.assignedTeachers?.math?.toString() === teacherIdStr ||
+        learner.assignedTeachers?.science?.toString() === teacherIdStr;
 
       let isSectionAssigned = false;
       if (!isDirectlyAssigned && learner.section) {
         const sectionMatch = await LearnerRecord.exists({
-          assignedTeacherId: teacherIdObj,
+          $or: [
+            { assignedTeacherId: teacherIdObj },
+            { 'assignedTeachers.reading': teacherIdObj },
+            { 'assignedTeachers.math': teacherIdObj },
+            { 'assignedTeachers.science': teacherIdObj },
+          ],
           section: learner.section,
           ...(learner.gradeLevel ? { gradeLevel: learner.gradeLevel } : {}),
         });

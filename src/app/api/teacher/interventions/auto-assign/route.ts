@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../../database/db';
@@ -40,7 +41,40 @@ export async function POST(req: NextRequest) {
 
     const teacherSubject = await getTeacherSubject(authUser);
 
-    const records = await LearnerRecord.find().populate('studentId', 'name');
+    const teacherIdObj = mongoose.Types.ObjectId.isValid(authUser.id)
+      ? new mongoose.Types.ObjectId(authUser.id)
+      : authUser.id;
+
+    // Discover any sections taught by or assigned to this teacher
+    const teacherSections = await LearnerRecord.distinct('section', {
+      $or: [
+        { assignedTeacherId: authUser.id },
+        { assignedTeacherId: teacherIdObj },
+        { 'assignedTeachers.reading': authUser.id },
+        { 'assignedTeachers.reading': teacherIdObj },
+        { 'assignedTeachers.math': authUser.id },
+        { 'assignedTeachers.math': teacherIdObj },
+        { 'assignedTeachers.science': authUser.id },
+        { 'assignedTeachers.science': teacherIdObj },
+      ],
+      section: { $ne: null, $exists: true },
+    });
+
+    const teacherMatchConditions: any[] = [
+      { assignedTeacherId: authUser.id },
+      { assignedTeacherId: teacherIdObj },
+      { 'assignedTeachers.reading': authUser.id },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.math': authUser.id },
+      { 'assignedTeachers.math': teacherIdObj },
+      { 'assignedTeachers.science': authUser.id },
+      { 'assignedTeachers.science': teacherIdObj },
+    ];
+    if (teacherSections.length > 0) {
+      teacherMatchConditions.push({ section: { $in: teacherSections } });
+    }
+
+    const records = await LearnerRecord.find({ $or: teacherMatchConditions }).populate('studentId', 'name');
     const studentIds = records.map((r: any) => r.studentId?._id).filter(Boolean);
 
     const assessmentQuery: Record<string, any> = { studentId: { $in: studentIds } };

@@ -1,10 +1,12 @@
 import User from '../../models/User';
 
-export type TeacherSubject = 'Reading' | 'Math' | 'Science' | 'All';
+export type TeacherSubject = 'Reading' | 'Math' | 'Science' | 'English' | 'Filipino' | 'All';
 
 /**
  * Resolves the logged-in teacher's assigned subject according to DepEd ARAL rules:
  * - If assignedSubject === "Reading" (or specialization === "reading"), strictly scope to "Reading".
+ * - If assignedSubject === "English", scope to "English".
+ * - If assignedSubject === "Filipino", scope to "Filipino".
  * - If assignedSubject === "Math", strictly scope to "Math".
  * - If assignedSubject === "Science", strictly scope to "Science".
  * - If assignedSubject === "All" or "all-subjects", allow all subjects ("All").
@@ -16,6 +18,8 @@ export async function getTeacherSubject(authUser: { id: string; specialization?:
     const spec = (user as any)?.specialization || authUser.specialization;
 
     if (assigned === 'Reading' || spec === 'reading') return 'Reading';
+    if (assigned === 'English' || spec === 'english') return 'English';
+    if (assigned === 'Filipino' || spec === 'filipino') return 'Filipino';
     if (assigned === 'Math') return 'Math';
     if (assigned === 'Science') return 'Science';
     if (assigned === 'All' || spec === 'all-subjects') return 'All';
@@ -30,11 +34,34 @@ export async function getTeacherSubject(authUser: { id: string; specialization?:
  * Returns a MongoDB query filter for models that have a `subject` field (Recommendation, Assessment, AnswerKey).
  */
 export function getSubjectFilter(teacherSubject: TeacherSubject, requestedSubject?: string | null): Record<string, any> {
+  if (teacherSubject === 'Filipino') {
+    return { subject: { $in: ['Filipino', 'Reading - Filipino'] } };
+  }
+  if (teacherSubject === 'English') {
+    return { subject: { $in: ['English', 'Reading', 'Reading - English'] } };
+  }
+  if (teacherSubject === 'Reading') {
+    if (requestedSubject === 'Filipino') {
+      return { subject: { $in: ['Filipino', 'Reading - Filipino'] } };
+    }
+    if (requestedSubject === 'English') {
+      return { subject: { $in: ['English', 'Reading', 'Reading - English'] } };
+    }
+    return { subject: { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] } };
+  }
   if (teacherSubject !== 'All') {
     return { subject: teacherSubject };
   }
-  if (requestedSubject && ['Reading', 'Math', 'Science'].includes(requestedSubject)) {
-    return { subject: requestedSubject };
+  if (requestedSubject) {
+    if (requestedSubject === 'Filipino') {
+      return { subject: { $in: ['Filipino', 'Reading - Filipino'] } };
+    }
+    if (requestedSubject === 'English') {
+      return { subject: { $in: ['English', 'Reading', 'Reading - English'] } };
+    }
+    if (['Reading', 'Math', 'Science'].includes(requestedSubject)) {
+      return { subject: requestedSubject };
+    }
   }
   return {};
 }

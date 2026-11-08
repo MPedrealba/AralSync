@@ -5,6 +5,7 @@ import AnswerKey from '../../../../../../models/AnswerKey';
 import User from '../../../../../../models/User';
 import LearningMaterial from '../../../../../../models/LearningMaterial';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
+import { PHIL_IRI_REFERENCES_BY_GRADE, PHIL_IRI_FILIPINO_REFERENCES_BY_GRADE } from '@/lib/questionnaireSections';
 
 /**
  * GET /api/teacher/questionnaire/topics
@@ -29,21 +30,158 @@ export async function GET(req: NextRequest) {
     const mathMaterialCount = await LearningMaterial.countDocuments({ subject: 'Math', isActive: true });
     const scienceMaterialCount = await LearningMaterial.countDocuments({ subject: 'Science', isActive: true });
 
-    // 3. Fetch distinct topics from official Question Bank for target subject
+    // 3. Fetch distinct topics from official Question Bank or Material for target subject & grade
     const requestedSubject = req.nextUrl.searchParams.get('subject');
+    const requestedGrade = Number(req.nextUrl.searchParams.get('grade')) || 7;
+    const requestedMaterialId = req.nextUrl.searchParams.get('materialId');
+
     const targetSubject =
       requestedSubject && requestedSubject !== 'All'
         ? requestedSubject
         : (assignedSubject !== 'All' ? assignedSubject : 'Reading');
 
-    const topicFilter: Record<string, any> = { subject: targetSubject };
-    if (targetSubject === 'Reading') {
-      topicFilter.source = { $regex: /ARAL/i };
+    let sortedTopics: string[] = [];
+    let coverageItems: any[] = [];
+
+    if (targetSubject === 'Reading' || targetSubject === 'English') {
+      const g = requestedGrade >= 7 && requestedGrade <= 10 ? requestedGrade : 7;
+      const gradeRefs = PHIL_IRI_REFERENCES_BY_GRADE[g] || PHIL_IRI_REFERENCES_BY_GRADE[7];
+
+      coverageItems = [
+        {
+          id: 'selection-a',
+          letter: 'A',
+          name: `Selection A: ${gradeRefs['selection-a'].passageTitle}`,
+          topic: gradeRefs['selection-a'].passageTitle,
+          type: gradeRefs['selection-a'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-a'].author,
+        },
+        {
+          id: 'selection-b',
+          letter: 'B',
+          name: `Selection B: ${gradeRefs['selection-b'].passageTitle}`,
+          topic: gradeRefs['selection-b'].passageTitle,
+          type: gradeRefs['selection-b'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-b'].author,
+        },
+        {
+          id: 'selection-c',
+          letter: 'C',
+          name: `Selection C: ${gradeRefs['selection-c'].passageTitle}`,
+          topic: gradeRefs['selection-c'].passageTitle,
+          type: gradeRefs['selection-c'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-c'].author,
+        },
+        {
+          id: 'selection-d',
+          letter: 'D',
+          name: `Selection D: ${gradeRefs['selection-d'].passageTitle}`,
+          topic: gradeRefs['selection-d'].passageTitle,
+          type: gradeRefs['selection-d'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-d'].author,
+        },
+      ];
+      sortedTopics = coverageItems.map((c) => c.topic);
+    } else if (targetSubject === 'Filipino' || targetSubject === 'Reading - Filipino') {
+      const g = requestedGrade >= 7 && requestedGrade <= 10 ? requestedGrade : 7;
+      const gradeRefs = PHIL_IRI_FILIPINO_REFERENCES_BY_GRADE[g] || PHIL_IRI_FILIPINO_REFERENCES_BY_GRADE[7];
+
+      coverageItems = [
+        {
+          id: 'selection-a',
+          letter: 'A',
+          name: `Sipi A: ${gradeRefs['selection-a'].passageTitle}`,
+          topic: gradeRefs['selection-a'].passageTitle,
+          type: gradeRefs['selection-a'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-a'].author,
+        },
+        {
+          id: 'selection-b',
+          letter: 'B',
+          name: `Sipi B: ${gradeRefs['selection-b'].passageTitle}`,
+          topic: gradeRefs['selection-b'].passageTitle,
+          type: gradeRefs['selection-b'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-b'].author,
+        },
+        {
+          id: 'selection-c',
+          letter: 'C',
+          name: `Sipi C: ${gradeRefs['selection-c'].passageTitle}`,
+          topic: gradeRefs['selection-c'].passageTitle,
+          type: gradeRefs['selection-c'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-c'].author,
+        },
+        {
+          id: 'selection-d',
+          letter: 'D',
+          name: `Sipi D: ${gradeRefs['selection-d'].passageTitle}`,
+          topic: gradeRefs['selection-d'].passageTitle,
+          type: gradeRefs['selection-d'].referenceType.toUpperCase(),
+          count: 10,
+          author: gradeRefs['selection-d'].author,
+        },
+      ];
+      sortedTopics = coverageItems.map((c) => c.topic);
+    } else {
+      const topicFilter: Record<string, any> = { subject: targetSubject };
+      if (requestedGrade) {
+        topicFilter.gradeLevel = requestedGrade;
+      }
+      if (requestedMaterialId) {
+        topicFilter.materialId = requestedMaterialId;
+      }
+
+      const subjectTopics = await Question.distinct('topic', topicFilter);
+      sortedTopics = subjectTopics
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+        .sort((a, b) => a.localeCompare(b));
+
+      // Calculate question count per topic
+      const counts = await Question.aggregate([
+        { $match: topicFilter },
+        { $group: { _id: '$topic', count: { $sum: 1 } } },
+      ]);
+      const countMap = new Map<string, number>(counts.map((c: any) => [c._id, c.count]));
+
+      coverageItems = sortedTopics.map((t, idx) => ({
+        id: `topic-${idx}`,
+        letter: undefined,
+        name: t,
+        topic: t,
+        type: targetSubject === 'Math' ? 'COMPETENCY' : 'TOPIC',
+        count: countMap.get(t) || 10,
+        author: undefined,
+      }));
+
+      // Fallback to material's session directory / chapters if Question bank has no questions for this material yet
+      if (coverageItems.length === 0 && requestedMaterialId) {
+        const mat = await LearningMaterial.findById(requestedMaterialId).lean();
+        if (mat?.sessionDirectory && mat.sessionDirectory.length > 0) {
+          const sessions = mat.sessionDirectory.filter((s: any) =>
+            !s.sessionName.toLowerCase().includes('full') &&
+            (!requestedGrade || !s.sessionName.includes('Grade') || s.sessionName.includes(`Grade ${requestedGrade}`))
+          );
+          const sessionsToUse = sessions.length > 0 ? sessions : mat.sessionDirectory;
+          coverageItems = sessionsToUse.map((s: any, idx: number) => ({
+            id: `session-${idx}`,
+            letter: undefined,
+            name: s.sessionName,
+            topic: s.topic || s.sessionName,
+            type: targetSubject === 'Math' ? 'CHAPTER' : 'TOPIC',
+            count: 10,
+            author: undefined,
+          }));
+          sortedTopics = coverageItems.map((c) => c.topic);
+        }
+      }
     }
-    const subjectTopics = await Question.distinct('topic', topicFilter);
-    const sortedTopics = subjectTopics
-      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
-      .sort((a, b) => a.localeCompare(b));
 
     // 4. Find topics this specific teacher has already generated an assessment for
     const teacherAnswerKeys = await AnswerKey.find({
@@ -94,8 +232,10 @@ export async function GET(req: NextRequest) {
       success: true,
       assignedSubject,
       targetSubject,
+      grade: requestedGrade,
       subjects,
       topics: sortedTopics,
+      coverageItems,
       usedTopics,
       totalAvailableTopics: sortedTopics.length,
     });

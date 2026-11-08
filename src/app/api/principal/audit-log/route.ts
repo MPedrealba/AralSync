@@ -4,7 +4,37 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import AuditLog from '../../../../../models/AuditLog';
 
-const ACTIONS = ['login', 'omr_sheet_uploaded', 'reading_fluency_analyzed', 'reading_self_assessed', 'assessment_validated', 'intervention_updated', 'intervention_marked_done'];
+const ACTIONS = [
+  'login',
+  'change_password',
+  'password_change',
+  'profile_update',
+  'staff_password_reset',
+  'student_password_reset',
+  'teacher_assigned_to_learner',
+  'learner_import',
+  'learner_enrolled',
+  'learner_update',
+  'learning_material_created',
+  'learning_material_updated',
+  'learning_material_deleted',
+  'learning_material_archived',
+  'online_exam_submitted',
+  'intervention_marked_done',
+  'intervention_submitted',
+  'intervention_graded',
+  'intervention_updated',
+  'intervention_assigned',
+  'assignment_created',
+  'reading_self_assessed',
+  'reading_fluency_analyzed',
+  'assessment_validated',
+  'assessment_written_graded',
+  'offline_sync_assessment',
+  'batch_omr_sheets_committed',
+  'omr_sheet_uploaded',
+  'omr_assessment_finalized',
+];
 
 /**
  * GET /api/principal/audit-log

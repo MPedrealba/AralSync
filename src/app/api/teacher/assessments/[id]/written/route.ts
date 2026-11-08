@@ -54,16 +54,21 @@ export async function PATCH(
 
     // Clamp every score to [0, item.max]
     let writtenScore = 0;
+    let calculatedWrittenMax = 0;
     scores.forEach((raw: any, i: number) => {
       const max = writtenItems[i]?.max ?? 1;
+      calculatedWrittenMax += max;
       const val = Math.max(0, Math.min(max, Number(raw) || 0));
       writtenScore += val;
     });
 
-    const totalItems = assessment.totalItems || assessment.mcTotal || writtenItems.length || 50;
+    const writtenMax = assessment.writtenMax || calculatedWrittenMax;
+    const mcAvailable = assessment.mcTotal ?? Math.max(0, (assessment.totalItems || 0) - writtenItems.length);
+    const maxPossiblePoints = (mcAvailable + writtenMax) || assessment.totalItems || 50;
+    const totalItems = assessment.totalItems || (mcAvailable + writtenItems.length) || 50;
     const mcCorrect = assessment.scoredItems ?? 0;
     const scoredPoints = mcCorrect + writtenScore;
-    const pct = Math.round((scoredPoints / totalItems) * 100);
+    const pct = Math.min(100, Math.max(0, Math.round((scoredPoints / maxPossiblePoints) * 100)));
 
     const updated = await Assessment.findByIdAndUpdate(
       id,

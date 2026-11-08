@@ -58,9 +58,11 @@ export async function GET(req: NextRequest) {
         id: i._id.toString(),
         title: i.title || 'Intervention',
         learner: i.studentId?.name || 'Unknown',
+        gradeLevel: rec?.gradeLevel ?? null,
+        section: rec?.section || i.section || '',
         gradeSection: rec
           ? `Grade ${rec.gradeLevel} - ${rec.section}`
-          : '',
+          : (i.section ? `Section ${i.section}` : ''),
         category: i.category || '',
         type: i.type || '',
         typeIcon: iconFor(i),

@@ -3,7 +3,7 @@ import connectDB from "../../../../../../database/db";
 import Question from "../../../../../../models/Question";
 import LearningMaterial from "../../../../../../models/LearningMaterial";
 import AnswerKey from "../../../../../../models/AnswerKey";
-import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { requireAuth, authErrorResponse, AuthError } from "@/lib/auth";
 import { buildTopicSections, getTopicInstructions, ROMAN_NUMERALS } from "@/lib/questionnaireSections";
 
 const SUBJECTS = ["Math", "Science"];
@@ -366,6 +366,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error("Teacher Questionnaire Generate Error:", e);
+    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -34,6 +34,10 @@ export async function PATCH(
       wordsAttempted,
       masteryLevel,
       notes,
+      combinedLevel,
+      comprehension,
+      comprehensionScore,
+      comprehensionLevel,
     } = body || {};
 
     const updateFields: Record<string, any> = {};
@@ -56,6 +60,18 @@ export async function PATCH(
     if (typeof wordsAttempted === 'number') updateFields.wordsAttempted = wordsAttempted;
     if (masteryLevel) updateFields.masteryLevel = masteryLevel;
     if (notes !== undefined) updateFields.notes = notes;
+    if (combinedLevel) updateFields.combinedLevel = combinedLevel;
+    if (comprehension) {
+      updateFields.comprehension = comprehension;
+      if (typeof comprehension.score === 'number') {
+        updateFields.comprehensionScore = comprehension.score;
+      }
+      if (comprehension.masteryLevel) {
+        updateFields.comprehensionLevel = comprehension.masteryLevel;
+      }
+    }
+    if (typeof comprehensionScore === 'number') updateFields.comprehensionScore = comprehensionScore;
+    if (comprehensionLevel) updateFields.comprehensionLevel = comprehensionLevel;
 
     if (Object.keys(updateFields).length === 0) {
       return fail('No valid fields to update', 400);

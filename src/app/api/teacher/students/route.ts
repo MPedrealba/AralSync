@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import mongoose from 'mongoose';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import connectDB from '../../../../../database/db';
 import User from '../../../../../models/User';
@@ -10,9 +11,24 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    // Find learners assigned to this teacher
+    const teacherIdObj = mongoose.Types.ObjectId.isValid(teacher.id)
+      ? new mongoose.Types.ObjectId(teacher.id)
+      : teacher.id;
+
+    // Find learners assigned to this teacher (as adviser or subject teacher)
     const assignedRecords = await LearnerRecord.find(
-      { assignedTeacherId: teacher.id },
+      {
+        $or: [
+          { assignedTeacherId: teacher.id },
+          { assignedTeacherId: teacherIdObj },
+          { 'assignedTeachers.reading': teacher.id },
+          { 'assignedTeachers.reading': teacherIdObj },
+          { 'assignedTeachers.math': teacher.id },
+          { 'assignedTeachers.math': teacherIdObj },
+          { 'assignedTeachers.science': teacher.id },
+          { 'assignedTeachers.science': teacherIdObj },
+        ],
+      },
       { studentId: 1 }
     ).lean();
 

@@ -3,7 +3,7 @@ import connectDB from "../../../../../database/db";
 import Assessment from "../../../../../models/Assessment";
 import LearnerRecord from "../../../../../models/LearnerRecord";
 import User from "../../../../../models/User";
-import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { requireAuth, authErrorResponse, AuthError } from "@/lib/auth";
 import { getTeacherSubject } from "@/lib/teacherScope";
 import { logAudit } from "@/lib/audit";
 import { syncLearnerPhilIriMetrics } from "@/lib/philIriSync";
@@ -112,7 +112,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: formatted });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error("Teacher Assessments GET Error:", e);
+    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
   }
 }
 
@@ -228,7 +230,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: assessment });
 
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error("Teacher Assessments POST Error:", e);
+    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
   }
 }
 

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const AssessmentSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   type: { type: String, enum: ['OMR', 'READING_FLUENCY', 'COMPREHENSION'] },
-  subject: { type: String, enum: ['Math', 'Reading', 'Science'] },
+  subject: { type: String, enum: ['Math', 'Reading', 'Science', 'English', 'Filipino', 'Reading - Filipino', 'Reading - English'] },
   title: { type: String },
   score: { type: Number },
   wpm: { type: Number }, // Optional, mainly for oral reading
@@ -47,6 +47,16 @@ const AssessmentSchema = new mongoose.Schema({
   competency: { type: String },
   masteryLevel: { type: String },
   combinedLevel: { type: String }, // Phil-IRI combined level (WR accuracy + comprehension)
+  comprehensionScore: { type: Number },
+  comprehensionLevel: { type: String },
+  comprehension: {
+    score: { type: Number },
+    masteryLevel: { type: String },
+    combinedLevel: { type: String },
+    totalQuestions: { type: Number },
+    correctAnswers: { type: Number },
+    answers: { type: mongoose.Schema.Types.Mixed },
+  },
   passageTitle: { type: String }, // comprehension passage
   // ── Hybrid scoring (MC auto-graded + manual written items) ──
   totalItems: { type: Number }, // all items (MC + written)
@@ -56,7 +66,9 @@ const AssessmentSchema = new mongoose.Schema({
   writtenScore: { type: Number, default: 0 }, // points the teacher awarded on written items
   gradingStatus: { type: String, enum: ['complete', 'partial'], default: 'complete' },
   answerKeyRef: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
-  assessmentCategory: { type: String, enum: ['quiz', 'exam', 'pre-test', 'post-test'], default: 'quiz' },
+  assessmentCategory: { type: String, enum: ['quiz', 'exam', 'pre-test', 'post-test', 'gst'], default: 'quiz' },
+  gstRawScore: { type: Number, default: null },
+  gstStage: { type: Number, enum: [1, 2], default: null },
   topics: { type: [String], default: [] },
   writtenItems: { type: [{ index: Number, prompt: String, max: Number }], default: [] },
   // ── OMR Scanned Sheet Image & Detected Answers ──
@@ -76,5 +88,16 @@ const AssessmentSchema = new mongoose.Schema({
   timeSpentSec: { type: Number, default: 0 },
   date: { type: Date, default: Date.now }
 }, { timestamps: true });
+
+AssessmentSchema.index(
+  { studentId: 1, answerKeyRef: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { answerKeyRef: { $exists: true, $type: 'objectId' } },
+  }
+);
+AssessmentSchema.index({ studentId: 1, date: -1 });
+AssessmentSchema.index({ subject: 1, date: -1 });
+AssessmentSchema.index({ type: 1, status: 1 });
 
 module.exports = mongoose.models.Assessment || mongoose.model('Assessment', AssessmentSchema);

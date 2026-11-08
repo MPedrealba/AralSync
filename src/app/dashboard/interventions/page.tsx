@@ -7,7 +7,6 @@ import {
   BookOpen,
   Calculator,
   FlaskConical,
-  Wand2,
   Plus,
   ArrowLeft,
   CheckCircle2,
@@ -88,6 +87,8 @@ export interface SubmissionItem {
   id: string;
   title: string;
   learner: string;
+  gradeLevel?: number | null;
+  section?: string;
   gradeSection: string;
   category: string;
   type: string;
@@ -182,10 +183,6 @@ export default function InterventionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Auto-assign action state
-  const [assigning, setAssigning] = useState(false);
-  const [assignMsg, setAssignMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
   // Top-level View A tabs: "assignments" | "submissions" | "matrix"
   const [classworkTab, setClassworkTab] = useState<"assignments" | "submissions" | "matrix">(
     searchParams.get("tab") === "matrix" ? "matrix" : "assignments"
@@ -196,6 +193,8 @@ export default function InterventionsPage() {
   const [loadingAllSubmissions, setLoadingAllSubmissions] = useState(false);
   const [allSubmissionsError, setAllSubmissionsError] = useState("");
   const [subSearch, setSubSearch] = useState("");
+  const [subGradeFilter, setSubGradeFilter] = useState("All");
+  const [subSectionFilter, setSubSectionFilter] = useState("All");
   const [subStatusFilter, setSubStatusFilter] = useState("All");
   const [subSubjectFilter, setSubSubjectFilter] = useState("All");
 
@@ -501,44 +500,6 @@ export default function InterventionsPage() {
   }, [isCreateOpen, createSection, createTargetMode]);
 
   /* -------------------------------------------------------------------------
-     Auto-Assign Action
-     ------------------------------------------------------------------------- */
-
-  const runAutoAssign = async () => {
-    setAssigning(true);
-    setAssignMsg(null);
-    try {
-      const res = await fetch("/api/teacher/interventions/auto-assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const json = await parseJsonResponse(res);
-      if (json.success) {
-        const s = json.data.summary;
-        setAssignMsg({
-          ok: true,
-          text: `Auto-assigned ${s.assigned} activity intervention${
-            s.assigned === 1 ? "" : "s"
-          } based on learner diagnostics${
-            s.skippedActive ? ` · ${s.skippedActive} already covered` : ""
-          }${s.noMaterial ? ` · ${s.noMaterial} had no matching material` : ""}.`,
-        });
-        loadAssignments();
-        loadAllSubmissions();
-      } else {
-        setAssignMsg({
-          ok: false,
-          text: json.error || "Auto-assignment failed.",
-        });
-      }
-    } catch {
-      setAssignMsg({ ok: false, text: "Auto-assignment failed." });
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  /* -------------------------------------------------------------------------
      Create Assignment Action
      ------------------------------------------------------------------------- */
 
@@ -735,6 +696,25 @@ export default function InterventionsPage() {
     }
   };
 
+  const subAvailableSections = useMemo(() => {
+    if (subGradeFilter === "All") {
+      return allCohortSections;
+    }
+    const gKey = subGradeFilter.replace(/\D/g, "");
+    return gradeSectionsMap[subGradeFilter] || gradeSectionsMap[gKey] || [];
+  }, [subGradeFilter, gradeSectionsMap, allCohortSections]);
+
+  const handleSubGradeChange = (newGrade: string) => {
+    setSubGradeFilter(newGrade);
+    if (newGrade !== "All" && subSectionFilter !== "All") {
+      const gKey = newGrade.replace(/\D/g, "");
+      const valid = gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || [];
+      if (!valid.includes(subSectionFilter)) {
+        setSubSectionFilter("All");
+      }
+    }
+  };
+
   const createAvailableSections = useMemo(() => {
     const gKey = createGrade.replace(/\D/g, "");
     return gradeSectionsMap[createGrade] || gradeSectionsMap[gKey] || [];
@@ -854,6 +834,31 @@ export default function InterventionsPage() {
       } else if (subSubjectFilter !== "All") {
         if (!s.category.toLowerCase().includes(subSubjectFilter.toLowerCase())) return false;
       }
+
+      // Grade Level filter
+      if (subGradeFilter !== "All") {
+        const targetGrade = parseInt(subGradeFilter.replace(/\D/g, ""), 10);
+        if (s.gradeLevel != null) {
+          if (Number(s.gradeLevel) !== targetGrade) return false;
+        } else if (s.gradeSection) {
+          const m = s.gradeSection.match(/Grade\s*(\d+)/i);
+          if (m && parseInt(m[1], 10) !== targetGrade) return false;
+        } else {
+          return false;
+        }
+      }
+
+      // Dynamic Section filter
+      if (subSectionFilter !== "All") {
+        if (s.section) {
+          if (s.section.toLowerCase() !== subSectionFilter.toLowerCase()) return false;
+        } else if (s.gradeSection) {
+          if (!s.gradeSection.toLowerCase().includes(subSectionFilter.toLowerCase())) return false;
+        } else {
+          return false;
+        }
+      }
+
       if (subSearch.trim()) {
         const q = subSearch.toLowerCase();
         const matchLearner = (s.learner || "").toLowerCase().includes(q);
@@ -863,7 +868,7 @@ export default function InterventionsPage() {
       }
       return true;
     });
-  }, [allSubmissions, subStatusFilter, assignedSubject, subSubjectFilter, subSearch]);
+  }, [allSubmissions, subStatusFilter, assignedSubject, subSubjectFilter, subGradeFilter, subSectionFilter, subSearch]);
 
   /* =========================================================================
      RENDER
@@ -905,17 +910,6 @@ export default function InterventionsPage() {
 
               {/* Actions */}
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* Auto Assign Button */}
-                <button
-                  onClick={runAutoAssign}
-                  disabled={assigning}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-800 px-3.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-slate-900 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                  title="Automatically assign interventions based on lowest diagnostic competencies"
-                >
-                  <Wand2 className={`h-4 w-4 ${assigning ? "animate-spin" : "text-amber-300"}`} />
-                  {assigning ? "Assigning..." : "Run Auto-Assign"}
-                </button>
-
                 {/* Create Activity Button */}
                 <button
                   onClick={() => {
@@ -937,25 +931,6 @@ export default function InterventionsPage() {
               <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-2xs">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span>{submissionFeedbackToast}</span>
-              </div>
-            )}
-
-            {/* Auto Assign Feedback Banner */}
-            {assignMsg && (
-              <div
-                className={`flex items-center justify-between rounded-xl border p-4 text-sm font-semibold transition-all ${
-                  assignMsg.ok
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    : "border-rose-200 bg-rose-50 text-rose-800"
-                }`}
-              >
-                <span>{assignMsg.text}</span>
-                <button
-                  onClick={() => setAssignMsg(null)}
-                  className="rounded-lg p-1 text-slate-500 hover:bg-black/5"
-                >
-                  <X className="h-4 w-4" />
-                </button>
               </div>
             )}
 
@@ -1111,7 +1086,7 @@ export default function InterventionsPage() {
                 <p className="mt-1 max-w-md text-xs text-slate-500">
                   {searchQuery || subjectFilter !== "All" || sectionFilter !== "All"
                     ? "Try adjusting your filters or search terms."
-                    : "Get started by creating your first ARAL learning activity or running auto-assign."}
+                    : "Get started by creating your first ARAL learning activity."}
                 </p>
                 <div className="mt-5 flex items-center gap-3">
                   <button
@@ -1121,17 +1096,10 @@ export default function InterventionsPage() {
                       }
                       setIsCreateOpen(true);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-800 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-900 cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
                     Create Activity
-                  </button>
-                  <button
-                    onClick={runAutoAssign}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    <Wand2 className="h-4 w-4 text-amber-500" />
-                    Run Auto-Assign
                   </button>
                 </div>
               </div>
@@ -1274,6 +1242,39 @@ export default function InterventionsPage() {
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-red-800"
                   />
                 </div>
+                {/* Grade Level Filter */}
+                <select
+                  value={subGradeFilter}
+                  onChange={(e) => handleSubGradeChange(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                >
+                  <option value="All">All Grades</option>
+                  <option value="Grade 7">Grade 7</option>
+                  <option value="Grade 8">Grade 8</option>
+                  <option value="Grade 9">Grade 9</option>
+                  <option value="Grade 10">Grade 10</option>
+                </select>
+                {/* Dynamic Cascading Section Filter */}
+                <select
+                  value={subSectionFilter}
+                  onChange={(e) => setSubSectionFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800 cursor-pointer"
+                >
+                  <option value="All">
+                    {subGradeFilter !== "All"
+                      ? `All Sections (${subGradeFilter})`
+                      : "All Sections"}
+                  </option>
+                  {subAvailableSections.length === 0 && subGradeFilter !== "All" ? (
+                    <option value="" disabled>No sections enrolled</option>
+                  ) : (
+                    subAvailableSections.map((sec) => (
+                      <option key={sec} value={sec}>
+                        Section: {sec}
+                      </option>
+                    ))
+                  )}
+                </select>
                 <select
                   value={subStatusFilter}
                   onChange={(e) => setSubStatusFilter(e.target.value)}

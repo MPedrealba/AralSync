@@ -42,8 +42,7 @@ const allNavSections = [
     items: [
       { name: "OMR Assessments", href: "/dashboard/omr-assessments", icon: ScanLine },
       { name: "OMR Scan", href: "/dashboard/omr-scan?scan=1", icon: Camera },
-      { name: "Reading Fluency", href: "/dashboard/reading-fluency", icon: Mic },
-      { name: "Comprehension Check", href: "/dashboard/comprehension", icon: BookOpen },
+      { name: "Oral Reading & Comprehension", href: "/dashboard/reading-fluency", icon: Mic },
     ],
   },
   {
@@ -65,6 +64,45 @@ const allNavSections = [
     label: "REPORTING",
     items: [
       { name: "Reports & PDF", href: "/dashboard/reports", icon: FileText },
+    ],
+  },
+];
+
+const filipinoNavSections = [
+  {
+    label: "PANGKALAHATAN",
+    items: [
+      { name: "Tahanan", href: "/dashboard/filipino-reading", icon: LayoutDashboard },
+      { name: "Mga Mag-aaral", href: "/dashboard/learners", icon: Users },
+    ],
+  },
+  {
+    label: "MGA PAGTATASA",
+    items: [
+      { name: "OMR Pagtatasa", href: "/dashboard/omr-assessments?stream=filipino", icon: ScanLine },
+      { name: "OMR Scan", href: "/dashboard/omr-scan?scan=1&stream=filipino", icon: Camera },
+      { name: "Pagbasa at Pag-unawa", href: "/dashboard/reading-fluency?stream=filipino", icon: Mic },
+    ],
+  },
+  {
+    label: "ANALITIKA",
+    items: [
+      { name: "Kasanayan", href: "/dashboard/skill-gap?stream=filipino", icon: BarChart3 },
+      { name: "Pagbawi sa Pagkatuto", href: "/dashboard/learning-recovery?stream=filipino", icon: TrendingUp },
+      { name: "Pagsubaybay", href: "/dashboard/progress-monitoring?stream=filipino", icon: Target },
+    ],
+  },
+  {
+    label: "INTERBENSYON AT MARKA",
+    items: [
+      { name: "Interbensyon", href: "/dashboard/interventions?stream=filipino", icon: BookMarked },
+      { name: "e-Class Record Matrix", href: "/dashboard/interventions?tab=matrix&stream=filipino", icon: FileSpreadsheet },
+    ],
+  },
+  {
+    label: "MGA ULAT",
+    items: [
+      { name: "Mga Ulat at PDF", href: "/dashboard/reports?stream=filipino", icon: FileText },
     ],
   },
 ];
@@ -96,10 +134,21 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
       .catch(() => /* ignore — default to all-subjects */ {});
   }, []);
 
-  const isReading = specialization === "reading" || assignedSubject === "Reading";
+  const isFilipino =
+    pathname?.includes("filipino-reading") ||
+    assignedSubject === "Filipino" ||
+    (typeof window !== "undefined" && window.location.search.includes("stream=filipino"));
+
+  const isReading =
+    isFilipino ||
+    specialization === "reading" ||
+    assignedSubject === "Reading" ||
+    assignedSubject === "English";
 
   // Filter out reading-only items for non-reading teachers
-  const navSections = isReading
+  const navSections = isFilipino
+    ? filipinoNavSections
+    : isReading
     ? allNavSections
     : allNavSections
         .map((section) => ({
@@ -110,12 +159,13 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
         }))
         .filter((section) => section.items.length > 0);
 
-  const portalLabel =
-    ["Math", "Science", "Reading"].includes(assignedSubject)
-      ? `${assignedSubject} Teacher`
-      : specialization === "reading"
-      ? "Reading Teacher"
-      : "Subject Teacher";
+  const portalLabel = isFilipino
+    ? "Filipino Reading Teacher"
+    : ["Math", "Science", "Reading", "English"].includes(assignedSubject)
+    ? `${assignedSubject} Teacher`
+    : specialization === "reading"
+    ? "Reading Teacher"
+    : "Subject Teacher";
 
   const handleLogout = async () => {
     try {

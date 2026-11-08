@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "../../../../../database/db";
 import Question from "../../../../../models/Question";
-import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { requireAuth, authErrorResponse, AuthError } from "@/lib/auth";
 import { getTeacherSubject } from "@/lib/teacherScope";
 
 /**
@@ -53,7 +53,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: rows });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error("Teacher Questions GET Error:", e);
+    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
   }
 }
 
@@ -115,6 +117,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error("Teacher Questions POST Error:", e);
+    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
   }
 }

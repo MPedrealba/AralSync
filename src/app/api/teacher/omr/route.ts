@@ -22,6 +22,26 @@ import { getRecommendationsForLearner, Subject } from '@/lib/dynamicRecommendati
  *  the Python service is unavailable.
  * ────────────────────────────────────────────────────────────── */
 
+export function extractKeyAnswers(keyDoc: any): string[] {
+  if (!keyDoc) return [];
+  const raw = keyDoc.answers || keyDoc.answerLetters || [];
+  if (Array.isArray(raw)) {
+    return raw.map((item: any) => {
+      if (typeof item === 'string') return item.trim().toUpperCase();
+      if (item && typeof item === 'object') {
+        const val = item.correctKey || item.correctAnswer || item.answer || item.key || '';
+        return String(val).trim().toUpperCase();
+      }
+      return '';
+    });
+  }
+  if (typeof raw === 'object') {
+    const keys = Object.keys(raw).sort((a, b) => Number(a) - Number(b));
+    return keys.map((k) => String(raw[k] || '').trim().toUpperCase());
+  }
+  return [];
+}
+
 export class OMRServiceError extends Error {
   code: string;
   status: number;
@@ -149,7 +169,10 @@ export async function POST(req: NextRequest) {
 
     const teacherIdStr = teacher.id.toString();
     const isDirectlyAssigned =
-      learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr;
+      (learner.assignedTeacherId && learner.assignedTeacherId.toString() === teacherIdStr) ||
+      learner.assignedTeachers?.reading?.toString() === teacherIdStr ||
+      learner.assignedTeachers?.math?.toString() === teacherIdStr ||
+      learner.assignedTeachers?.science?.toString() === teacherIdStr;
 
     // Allow teachers to scan for students in their assigned sections/cohorts
     let isSectionAssigned = false;
@@ -158,7 +181,12 @@ export async function POST(req: NextRequest) {
         ? new mongoose.Types.ObjectId(teacher.id)
         : teacher.id;
       const sectionMatch = await LearnerRecord.exists({
-        assignedTeacherId: teacherIdObj,
+        $or: [
+          { assignedTeacherId: teacherIdObj },
+          { 'assignedTeachers.reading': teacherIdObj },
+          { 'assignedTeachers.math': teacherIdObj },
+          { 'assignedTeachers.science': teacherIdObj },
+        ],
         section: learner.section,
         ...(learner.gradeLevel ? { gradeLevel: learner.gradeLevel } : {}),
       });
@@ -187,7 +215,7 @@ export async function POST(req: NextRequest) {
       keyDoc = await AnswerKey.findOne({ subject }).sort({ created: -1 }).lean();
     }
 
-    const keyAnswers: string[] = keyDoc?.answers ?? [];
+    const keyAnswers: string[] = extractKeyAnswers(keyDoc);
     const keyModes: string[] = keyDoc?.modes ?? [];
     const totalItems = keyAnswers.length || 20;
 
@@ -231,7 +259,7 @@ export async function POST(req: NextRequest) {
       } else {
         mcTotal++;
         const ans = answersToGrade[i];
-        if (ans && ans === keyAnswers[i]) {
+        if (ans && ans.toUpperCase() === keyAnswers[i]?.toUpperCase()) {
           mcCorrect++;
         }
         // Flag blank/unshaded or faint/unrecognized bubbles

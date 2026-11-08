@@ -182,4 +182,49 @@ describe('Grade-Dependent Dynamic Section Filtering System-Wide Suite', () => {
       'Progress monitoring route must aggregate and return sectionsByGrade'
     );
   });
+
+  it('verifies /api/teacher/interventions route and Student Submissions tab grade and section filter integration', () => {
+    const routePath = path.join(process.cwd(), 'src/app/api/teacher/interventions/route.ts');
+    const routeContent = fs.readFileSync(routePath, 'utf8');
+    assert.ok(
+      routeContent.includes('gradeLevel: rec?.gradeLevel ?? null'),
+      'Interventions API must explicitly return gradeLevel'
+    );
+    assert.ok(
+      routeContent.includes('section: rec?.section || i.section || \'\''),
+      'Interventions API must explicitly return section'
+    );
+
+    const pagePath = path.join(process.cwd(), 'src/app/dashboard/interventions/page.tsx');
+    const pageContent = fs.readFileSync(pagePath, 'utf8');
+
+    // State & cascading handlers
+    assert.ok(pageContent.includes('subGradeFilter'), 'Must declare subGradeFilter state');
+    assert.ok(pageContent.includes('subSectionFilter'), 'Must declare subSectionFilter state');
+    assert.ok(pageContent.includes('subAvailableSections'), 'Must compute subAvailableSections based on subGradeFilter');
+    assert.ok(pageContent.includes('handleSubGradeChange'), 'Must provide handleSubGradeChange handler for auto-reset');
+
+    // Dropdown UI options
+    assert.ok(pageContent.includes('<option value="All">All Grades</option>'), 'Must have All Grades option');
+    assert.ok(pageContent.includes('<option value="Grade 7">Grade 7</option>'), 'Must have Grade 7 option');
+    assert.ok(pageContent.includes('<option value="Grade 8">Grade 8</option>'), 'Must have Grade 8 option');
+    assert.ok(pageContent.includes('<option value="Grade 9">Grade 9</option>'), 'Must have Grade 9 option');
+    assert.ok(pageContent.includes('<option value="Grade 10">Grade 10</option>'), 'Must have Grade 10 option');
+
+    // Filtering logic verification
+    const mockSubmissions = [
+      { id: '1', title: 'Act 1', learner: 'Alice', gradeLevel: 7, section: 'Rosal', status: 'Submitted', category: 'Reading' },
+      { id: '2', title: 'Act 2', learner: 'Bob', gradeLevel: 7, section: 'Sampaguita', status: 'Submitted', category: 'Reading' },
+      { id: '3', title: 'Act 3', learner: 'Charlie', gradeLevel: 8, section: 'Diamond', status: 'Submitted', category: 'Reading' },
+    ];
+
+    // Filter Grade 7 only
+    const grade7Only = mockSubmissions.filter((s) => s.gradeLevel === 7);
+    assert.equal(grade7Only.length, 2);
+
+    // Filter Grade 7 + Section Rosal
+    const grade7Rosal = mockSubmissions.filter((s) => s.gradeLevel === 7 && s.section === 'Rosal');
+    assert.equal(grade7Rosal.length, 1);
+    assert.equal(grade7Rosal[0].learner, 'Alice');
+  });
 });

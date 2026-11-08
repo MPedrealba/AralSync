@@ -6,6 +6,7 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../../../database/db';
 import AnswerKey from '../../../../../../models/AnswerKey';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
+import { extractKeyAnswers } from '../route';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
       keyDoc = await AnswerKey.findOne({ subject }).sort({ created: -1 }).lean();
     }
 
-    const keyAnswers: string[] = keyDoc?.answers ?? [];
+    const keyAnswers: string[] = extractKeyAnswers(keyDoc);
     const keyModes: string[] = keyDoc?.modes ?? [];
     const totalItems = keyAnswers.length || 20;
 

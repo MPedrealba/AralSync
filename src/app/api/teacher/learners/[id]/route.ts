@@ -8,6 +8,7 @@ import Intervention from '../../../../../../models/Intervention';
 import User from '../../../../../../models/User';
 import { Types } from 'mongoose';
 import { logAudit } from '@/lib/audit';
+import { evaluateGstScore } from '@/lib/reading';
 
 /**
  * GET /api/teacher/learners/[id]
@@ -173,6 +174,10 @@ export async function GET(
         combinedReadingLevel: record.combinedReadingLevel || null,
         status: record.philIriStatus || 'unassessed',
         lastAssessmentDate: record.lastReadingAssessmentDate || null,
+        gstScore: record.gstScore ?? null,
+        gstStatus: record.gstStatus || 'Unassessed',
+        recommendedStartingLevel: record.recommendedStartingLevel ?? null,
+        needsIndividualAssessment: Boolean(record.needsIndividualAssessment),
       },
       omrAssessments,
       prePostGrowth,
@@ -267,6 +272,26 @@ export async function PATCH(
     ];
     for (const f of recordFields) {
       if (body[f] !== undefined) record[f] = body[f] === '' ? undefined : body[f];
+    }
+
+    if (body.gstScore !== undefined) {
+      if (body.gstScore === null || body.gstScore === '') {
+        record.gstScore = null;
+        record.gstStatus = 'Unassessed';
+        record.recommendedStartingLevel = null;
+        record.needsIndividualAssessment = false;
+      } else {
+        const rawScore = Number(body.gstScore);
+        if (Number.isNaN(rawScore) || rawScore < 0 || rawScore > 40) {
+          return NextResponse.json({ error: 'GST score must be a number between 0 and 40.' }, { status: 400 });
+        }
+        const effectiveGrade = body.gradeLevel ? Number(body.gradeLevel) : (record.gradeLevel || 7);
+        const gstEval = evaluateGstScore(rawScore, effectiveGrade);
+        record.gstScore = rawScore;
+        record.gstStatus = gstEval.gstStatus;
+        record.recommendedStartingLevel = gstEval.recommendedStartingGrade;
+        record.needsIndividualAssessment = !gstEval.isGradeReady;
+      }
     }
     await record.save();
 

@@ -108,11 +108,11 @@ async function start() {
 
   // 2. Start Next.js development server
   console.log('\x1b[35m[Next.js]\x1b[0m Starting Next.js development server on http://localhost:3000...');
-  const nextCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const nextProcess = spawn(nextCmd, ['next', 'dev'], {
+  const nextBin = require.resolve('next/dist/bin/next');
+  const nextProcess = spawn(process.execPath, [nextBin, 'dev'], {
     cwd: rootDir,
     stdio: 'inherit',
-    shell: true,
+    shell: false,
   });
 
   nextProcess.on('error', (err) => {

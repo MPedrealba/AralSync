@@ -22,6 +22,11 @@ import {
   Shield,
   Pause,
   WifiOff,
+  Sparkles,
+  CheckCheck,
+  FileText,
+  HelpCircle,
+  Filter,
 } from "lucide-react";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
@@ -33,7 +38,14 @@ import {
   cacheLearners,
   computeLocalPhilIriEvaluation,
 } from "@/lib/offlineStorage";
-import { evaluateReadingPerformance, classifyMiscues } from "@/lib/reading";
+import {
+  evaluateReadingPerformance,
+  classifyMiscues,
+  evaluateGstScore,
+  comprehensionLevel,
+  compilePassageComprehensionQuestions,
+  type CompQuestion,
+} from "@/lib/reading";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
@@ -82,6 +94,7 @@ interface FluencyRow {
   notes: string | null;
   masteryLevel: string;
   date: string;
+  type?: string;
   // Phil-IRI measured output.
   miscueBreakdown?: MiscueCounts | null;
   miscueItems?: MiscueItem[];
@@ -94,6 +107,20 @@ interface FluencyRow {
   pauseTotalSec?: number | null;
   pauseAvgSec?: number | null;
   silentSec?: number | null;
+  // DepEd Phil-IRI Stage 2 Comprehension & Joint Matrix
+  comprehension?: {
+    id?: string;
+    score?: number;
+    masteryLevel?: string;
+    combinedLevel?: string;
+    totalQuestions?: number;
+    correctAnswers?: number;
+    answers?: Record<string | number, boolean>;
+    questions?: Array<{ question: string; category?: string; answer?: string }>;
+  } | null;
+  comprehensionScore?: number | null;
+  comprehensionLevel?: string | null;
+  combinedLevel?: string | null;
 }
 
 const fmtShort = (d: string) => {
@@ -109,16 +136,16 @@ export default function ReadingFluencyPage() {
 
   return (
     <>
-      <Header title="Reading Fluency" />
+      <Header title="Oral Reading & Comprehension" />
       <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Title */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-              AI Reading Fluency Screener
+              Phil-IRI Stage 2: Oral Reading & Comprehension Workstation
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Record a learner&apos;s oral reading session, analyze Phil-IRI 2024 metrics with speech-to-text, and track mastery.
+              Unified DepEd Phil-IRI Stage 2: Record learner oral reading, calibrate miscues in real time, score comprehension questions, and derive the Table 3 Joint Profile.
             </p>
           </div>
         </div>
@@ -183,6 +210,10 @@ interface LearnerOption {
   name: string;
   gradeLevel: number;
   section: string;
+  gstScore?: number | null;
+  gstStatus?: "Grade-Ready" | "Needs Individualized Assessment" | "Unassessed";
+  recommendedStartingLevel?: number | null;
+  needsIndividualAssessment?: boolean;
 }
 interface PassageQuestion {
   question: string;
@@ -215,7 +246,19 @@ interface AnalyzeResult {
   philIriLevel?: string;
   level?: string;
   simulation?: boolean;
-  comprehension?: { id: string; score: number; masteryLevel: string; combinedLevel?: string } | null;
+  comprehension?: {
+    id?: string;
+    score?: number;
+    masteryLevel?: string;
+    combinedLevel?: string;
+    totalQuestions?: number;
+    correctAnswers?: number;
+    answers?: Record<string | number, boolean>;
+    questions?: Array<{ question: string; category?: string; answer?: string }>;
+  } | null;
+  comprehensionScore?: number;
+  comprehensionLevel?: string;
+  combinedLevel?: string;
   miscueBreakdown?: MiscueCounts;
   miscueItems?: MiscueItem[];
   miscueTotal?: number;
@@ -230,55 +273,55 @@ function getMiscueStyle(type: MiscueItem["type"]) {
   switch (type) {
     case "match":
       return {
-        bg: "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100",
+        bg: "text-slate-800 hover:bg-slate-100/70 rounded transition-colors px-0.5",
         label: "Correct",
         badge: "text-emerald-700 bg-emerald-50",
       };
     case "mispronunciation":
       return {
-        bg: "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 ring-1 ring-amber-300 font-medium",
+        bg: "text-amber-900 underline decoration-amber-400 decoration-wavy rounded-xs px-0.5 hover:bg-amber-50/70 transition-colors",
         label: "Mispronunciation",
         badge: "text-amber-800 bg-amber-50",
       };
     case "substitution":
       return {
-        bg: "bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200 ring-1 ring-rose-300 font-medium",
+        bg: "bg-rose-50 text-rose-900 border-b-2 border-rose-400 rounded-xs px-1 hover:bg-rose-100/70 transition-colors",
         label: "Substitution",
         badge: "text-rose-800 bg-rose-50",
       };
     case "omission":
       return {
-        bg: "bg-rose-50 text-rose-700 border-dashed border-rose-300 line-through opacity-75 hover:bg-rose-100",
+        bg: "line-through text-rose-700 decoration-rose-400 decoration-dashed rounded-xs px-0.5 opacity-80 hover:bg-rose-50/70 transition-colors",
         label: "Omission",
         badge: "text-rose-800 bg-rose-50",
       };
     case "insertion":
       return {
-        bg: "bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200 ring-1 ring-blue-300 italic font-medium",
+        bg: "bg-blue-50 text-blue-800 text-xs px-1.5 py-0.5 rounded font-sans italic hover:bg-blue-100/70 transition-colors",
         label: "Insertion",
         badge: "text-blue-800 bg-blue-50",
       };
     case "repetition":
       return {
-        bg: "bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200 ring-1 ring-blue-300 font-medium",
+        bg: "bg-blue-50 text-blue-800 text-xs px-1.5 py-0.5 rounded font-sans italic hover:bg-blue-100/70 transition-colors",
         label: "Repetition",
         badge: "text-blue-800 bg-blue-50",
       };
     case "hesitation":
       return {
-        bg: "bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 italic opacity-85",
+        bg: "text-purple-700 italic opacity-75 px-0.5 hover:bg-purple-50/70 transition-colors",
         label: "Hesitation (Filler)",
         badge: "text-purple-800 bg-purple-50",
       };
     case "unattempted":
       return {
-        bg: "bg-slate-50 text-slate-400 border-slate-200 opacity-50 cursor-default",
+        bg: "text-slate-300 select-none px-0.5 cursor-default",
         label: "Unread Suffix",
         badge: "text-slate-500 bg-slate-50",
       };
     default:
       return {
-        bg: "bg-slate-100 text-slate-800 border-slate-200",
+        bg: "text-slate-800",
         label: "Unknown",
         badge: "text-slate-600 bg-slate-50",
       };
@@ -522,6 +565,32 @@ function WordByWordReader({
     };
   }, [audioUrl]);
 
+  /* Close floating action toolbar when clicking outside any word or on Escape */
+  useEffect(() => {
+    if (activeWordIdx === null) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        !target?.closest("[data-word-chip]") &&
+        !target?.closest("[data-floating-pill]") &&
+        !target?.closest("[data-word-popover]")
+      ) {
+        setActiveWordIdx(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setActiveWordIdx(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeWordIdx, setActiveWordIdx]);
+
   const handlePlayPause = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -584,38 +653,31 @@ function WordByWordReader({
         />
       )}
 
-      {/* ── Legend ── */}
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] font-medium border-b border-slate-200/80 pb-2.5">
-        <span className="text-slate-400 font-semibold mr-1">Legend:</span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-          Green: Correct
+      {/* ── Clean Book Legend ── */}
+      <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500 border-b border-slate-200/80 pb-2.5">
+        <span className="font-semibold text-slate-400 mr-1">Legend:</span>
+        <span className="inline-flex items-center gap-1.5 text-slate-700">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          Natural: Correct
         </span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-          Orange: Mispronunciation
+        <span className="inline-flex items-center gap-1.5 text-rose-800">
+          <span className="h-2 w-2 rounded-xs bg-rose-400" />
+          Subtle Tint: Substitution
         </span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-          Red: Substitution / Omission
+        <span className="inline-flex items-center gap-1.5 text-rose-700 line-through decoration-rose-400 decoration-dashed">
+          Strikethrough: Omission
         </span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-          Blue: Repeat / Insert
+        <span className="inline-flex items-center gap-1.5 text-amber-800 underline decoration-amber-400 decoration-wavy">
+          Wavy: Mispronunciation
         </span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-purple-800">
-          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-          Purple: Filler
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-          Gray: Unread Suffix
+        <span className="inline-flex items-center gap-1 text-blue-800 bg-blue-50 text-[11px] px-1.5 py-0.5 rounded font-sans italic">
+          Badge: Insertion
         </span>
       </div>
 
-      {/* ── Word Grid ── */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 shadow-xs">
-        <div className="font-serif text-base sm:text-lg leading-loose flex flex-wrap gap-1.5 items-center">
+      {/* ── Passage Reader (Clean Book-Style Typography) ── */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs">
+        <div className="font-serif text-lg leading-relaxed text-slate-800 flex flex-wrap gap-x-1.5 gap-y-2 items-baseline select-none">
           {items.map((item, idx) => {
             const style = getMiscueStyle(item.type);
             const isSelected = activeWordIdx === idx;
@@ -627,6 +689,7 @@ function WordByWordReader({
             return (
               <span
                 key={idx}
+                data-word-chip={idx}
                 onClick={() => {
                   if (readOnly) return;
                   setActiveWordIdx(isSelected ? null : idx);
@@ -634,174 +697,174 @@ function WordByWordReader({
                     jumpToWord(idx, true);
                   }
                 }}
-                className={`relative inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-sm sm:text-base transition-all select-none ${
-                  readOnly ? "cursor-default" : "cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                className={`relative inline-flex items-center transition-all ${
+                  readOnly ? "cursor-default" : "cursor-pointer"
                 } ${style.bg} ${
-                  isSelected ? "ring-2 ring-slate-900 shadow-sm" : ""
+                  isSelected ? "ring-2 ring-slate-900/40 rounded-sm z-30" : ""
                 } ${
-                  isCurrentlyPlaying ? "ring-2 ring-emerald-500 bg-emerald-100 shadow-xs" : ""
+                  isCurrentlyPlaying ? "bg-emerald-100/80 text-emerald-900 rounded-sm" : ""
                 }`}
-                title={`Word #${idx + 1}: ${style.label}${item.spoken ? ` (Spoken: "${item.spoken}")` : ""}${audioUrl ? ` • Click to jump audio (${fmtAudioTime(wordEstimatedSec)})` : ""}`}
               >
                 <span>{item.expected || item.spoken}</span>
-                {item.type !== "match" && item.type !== "unattempted" && (
-                  <span className="text-[10px] font-bold opacity-80">
-                    {item.type === "mispronunciation"
-                      ? "⚡"
-                      : item.type === "substitution"
-                      ? "⇄"
-                      : item.type === "omission"
-                      ? "✕"
-                      : item.type === "hesitation"
-                      ? "…"
-                      : "+"}
-                  </span>
+
+                {/* ── Sleek Notion-Style Floating Action Pill ── */}
+                {isSelected && !readOnly && onOverrideWord && (
+                  <div
+                    role="toolbar"
+                    data-floating-pill
+                    data-word-popover={idx}
+                    aria-label={`Action toolbar for word ${idx + 1}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`absolute z-50 h-9 flex items-center gap-1 px-1.5 rounded-full bg-slate-900 text-white shadow-xl ring-1 ring-white/10 select-none normal-case tracking-normal font-sans cursor-default animate-in fade-in-50 zoom-in-95 duration-100 whitespace-nowrap ${
+                      idx < 6 ? "top-full mt-2" : "bottom-full mb-2"
+                    } ${
+                      (idx % 10) < 2
+                        ? "left-0"
+                        : (idx % 10) > 8
+                        ? "right-0"
+                        : "left-1/2 -translate-x-1/2"
+                    }`}
+                  >
+                    {/* Caret Arrow */}
+                    <div
+                      className={`absolute w-2 h-2 bg-slate-900 rotate-45 pointer-events-none ${
+                        idx < 6 ? "-top-1" : "-bottom-1"
+                      } ${
+                        (idx % 10) < 2
+                          ? "left-4"
+                          : (idx % 10) > 8
+                          ? "right-4"
+                          : "left-1/2 -translate-x-1/2"
+                      }`}
+                    />
+
+                    {/* Left: Single Prominent Mark Correct Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOverrideWord(idx, "match");
+                        setActiveWordIdx(null);
+                      }}
+                      className="h-7 px-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Mark Correct</span>
+                    </button>
+
+                    {/* Center Divider */}
+                    <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
+
+                    {/* Center: 3 Compact Toggle Buttons */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOverrideWord(idx, "substitution");
+                        setActiveWordIdx(null);
+                      }}
+                      className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
+                        item.type === "substitution"
+                          ? "bg-rose-500/30 text-rose-300 ring-1 ring-rose-400/50"
+                          : "hover:bg-rose-500/20 text-rose-300 hover:text-rose-200"
+                      }`}
+                      title="Substitution"
+                    >
+                      <span>⇄</span>
+                      <span>Sub</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOverrideWord(idx, "omission");
+                        setActiveWordIdx(null);
+                      }}
+                      className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
+                        item.type === "omission"
+                          ? "bg-rose-500/30 text-rose-300 ring-1 ring-rose-400/50"
+                          : "hover:bg-rose-500/20 text-rose-300 hover:text-rose-200"
+                      }`}
+                      title="Omission"
+                    >
+                      <span>✕</span>
+                      <span>Omit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOverrideWord(idx, "mispronunciation");
+                        setActiveWordIdx(null);
+                      }}
+                      className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
+                        item.type === "mispronunciation"
+                          ? "bg-amber-500/30 text-amber-300 ring-1 ring-amber-400/50"
+                          : "hover:bg-amber-500/20 text-amber-300 hover:text-amber-200"
+                      }`}
+                      title="Mispronunciation"
+                    >
+                      <span>⚡</span>
+                      <span>Mispron</span>
+                    </button>
+
+                    {/* Right: Audio Replay Timestamp */}
+                    {audioUrl && (
+                      <>
+                        <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            jumpToWord(idx, true);
+                          }}
+                          className="h-7 px-2 rounded-full hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-mono inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Replay audio at ${fmtAudioTime(wordEstimatedSec)}`}
+                        >
+                          <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>{fmtAudioTime(wordEstimatedSec)}</span>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Close Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveWordIdx(null);
+                      }}
+                      className="h-7 w-7 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white inline-flex items-center justify-center transition-colors cursor-pointer ml-0.5"
+                      title="Close (Esc)"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
               </span>
             );
           })}
         </div>
       </div>
-
-      {/* ── Active Word Override Popover ── */}
-      {activeWordIdx !== null && items[activeWordIdx] && !readOnly && onOverrideWord && (
-        <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 duration-150">
-          <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                  Word #{activeWordIdx + 1}
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${getMiscueStyle(items[activeWordIdx].type).bg}`}>
-                  {getMiscueStyle(items[activeWordIdx].type).label}
-                </span>
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-3">
-                <div>
-                  <span className="text-[11px] text-slate-400">Passage Word: </span>
-                  <span className="font-serif text-base font-bold text-slate-900">
-                    {items[activeWordIdx].expected || "— (Inserted Word)"}
-                  </span>
-                </div>
-                {items[activeWordIdx].spoken && (
-                  <div>
-                    <span className="text-[11px] text-slate-400">Spoken: </span>
-                    <span className="font-serif text-base font-bold text-red-900">
-                      &ldquo;{items[activeWordIdx].spoken}&rdquo;
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveWordIdx(null)}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Replay Word Audio at calculated timestamp */}
-          {audioUrl && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200/80 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <Volume2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span className="text-xs font-semibold text-slate-700">
-                  Hear spoken audio for this word:
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => jumpToWord(activeWordIdx, true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>Replay at {fmtAudioTime(activeWordTimestamp)}</span>
-              </button>
-            </div>
-          )}
-
-          <p className="mt-2.5 text-xs text-slate-500">
-            Click to calibrate AI classification. Accept regional accents or dialect pronunciation as correct:
-          </p>
-
-          {/* Quick Override Button: Accept as Correct */}
-          <div className="mt-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "match");
-                setActiveWordIdx(null);
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-[0.98] transition-all"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>Accept as Correct (Regional Accent / Valid Reading)</span>
-            </button>
-          </div>
-
-          {/* Alternate Manual Categories */}
-          <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-5">
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "mispronunciation");
-                setActiveWordIdx(null);
-              }}
-              className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-1.5 font-semibold text-amber-800 hover:bg-amber-100 transition-colors text-center"
-            >
-              ⚡ Mispronounce
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "substitution");
-                setActiveWordIdx(null);
-              }}
-              className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 font-semibold text-rose-800 hover:bg-rose-100 transition-colors text-center"
-            >
-              ⇄ Substitution
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "omission");
-                setActiveWordIdx(null);
-              }}
-              className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 font-semibold text-rose-800 hover:bg-rose-100 transition-colors text-center"
-            >
-              ✕ Omission
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "repetition");
-                setActiveWordIdx(null);
-              }}
-              className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-1.5 font-semibold text-blue-800 hover:bg-blue-100 transition-colors text-center"
-            >
-              ↻ Repetition
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onOverrideWord(activeWordIdx, "hesitation");
-                setActiveWordIdx(null);
-              }}
-              className="rounded-xl border border-purple-200 bg-purple-50 px-2 py-1.5 font-semibold text-purple-800 hover:bg-purple-100 transition-colors text-center"
-            >
-              … Filler/Hesitate
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 const fmtTimer = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+const levelColor = (lv?: string) =>
+  lv === "Independent" || lv === "Proficient"
+    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+    : lv === "Instructional" || lv === "Approaching"
+    ? "text-amber-700 bg-amber-50 border-amber-200"
+    : lv === "Developing"
+    ? "text-orange-700 bg-orange-50 border-orange-200"
+    : lv === "Non-Reader"
+    ? "text-slate-800 bg-slate-100 border-slate-200"
+    : "text-rose-700 bg-rose-50 border-rose-200";
 
 function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [learners, setLearners] = useState<LearnerOption[]>([]);
@@ -812,6 +875,14 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   const [passageTitle, setPassageTitle] = useState("Oral Reading Passage");
   const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
   const [isEditingPassage, setIsEditingPassage] = useState(false);
+
+  /* DepEd Phil-IRI Stage 2: Immediate Comprehension Check State */
+  const [compAnswers, setCompAnswers] = useState<Record<number, boolean>>({});
+
+  /* Reset comprehension answers when passage or student changes */
+  useEffect(() => {
+    setCompAnswers({});
+  }, [passageTitle, studentId]);
 
   /* Derive unique sorted grade levels */
   const availableGrades = useMemo(() => {
@@ -839,6 +910,35 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       setSelectedSection("");
     }
   }, [availableSections, selectedSection]);
+
+  /* Selected learner object for Phil-IRI 2024 Stage 1 GST recommendations */
+  const selectedStudentObj = useMemo(
+    () => learners.find((l) => l.studentId === studentId) || null,
+    [learners, studentId]
+  );
+
+  /* Auto-select Phil-IRI recommended starting grade passage when student is selected */
+  useEffect(() => {
+    if (!selectedStudentObj) return;
+
+    let targetGrade: number | null = selectedStudentObj.recommendedStartingLevel ?? null;
+    if (targetGrade === null && selectedStudentObj.gstScore !== null && selectedStudentObj.gstScore !== undefined) {
+      const evalRes = evaluateGstScore(selectedStudentObj.gstScore, selectedStudentObj.gradeLevel);
+      if (!evalRes.isGradeReady && evalRes.recommendedStartingGrade) {
+        targetGrade = evalRes.recommendedStartingGrade;
+      }
+    } else if (targetGrade === null && selectedStudentObj.gstStatus === "Needs Individualized Assessment") {
+      targetGrade = Math.max(4, (selectedStudentObj.gradeLevel || 7) - 2);
+    }
+
+    if (targetGrade !== null) {
+      const match = passages.find((p) => p.gradeLevel === targetGrade);
+      if (match) {
+        setPassageTitle(match.title);
+        setPassageText(match.text);
+      }
+    }
+  }, [selectedStudentObj, passages]);
 
   /* Filter learners by grade and section */
   const filteredLearners = useMemo(() => {
@@ -948,6 +1048,10 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               name: l.name,
               gradeLevel: l.gradeLevel,
               section: l.section,
+              gstScore: l.gstScore ?? null,
+              gstStatus: l.gstStatus || "Unassessed",
+              recommendedStartingLevel: l.recommendedStartingLevel ?? null,
+              needsIndividualAssessment: Boolean(l.needsIndividualAssessment),
             }));
           setLearners(mapped);
           cacheLearners(mapped);
@@ -960,7 +1064,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         if (cached.length > 0) setLearners(cached);
       }
       try {
-        const res = await fetch("/api/teacher/reading/passages?keyStage=KS3");
+        const res = await fetch("/api/teacher/reading/passages?keyStage=All");
         const json = await parseJsonResponse(res);
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setPassages(json.data);
@@ -1001,6 +1105,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     setResult(null);
     setCalibratedItems([]);
     setViewMode("passage");
+    setIsEditingPassage(false);
     setActiveWordIdx(null);
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
@@ -1152,6 +1257,17 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         miscueTotal: localEval.miscueTotal,
         wordsAttempted: localEval.wordsAttempted,
         wordsTotal: localEval.wordsTotal,
+        comprehension: {
+          score: compScorePct,
+          masteryLevel: compLevel,
+          combinedLevel: combinedLevel,
+          totalQuestions: compTotal,
+          correctAnswers: compCorrectCount,
+          answers: compAnswers,
+        },
+        comprehensionScore: compScorePct,
+        comprehensionLevel: compLevel,
+        combinedLevel: combinedLevel,
       };
 
       setResult(mockResult);
@@ -1228,6 +1344,17 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         miscueTotal: localEval.miscueTotal,
         wordsAttempted: localEval.wordsAttempted,
         wordsTotal: localEval.wordsTotal,
+        comprehension: {
+          score: compScorePct,
+          masteryLevel: compLevel,
+          combinedLevel: combinedLevel,
+          totalQuestions: compTotal,
+          correctAnswers: compCorrectCount,
+          answers: compAnswers,
+        },
+        comprehensionScore: compScorePct,
+        comprehensionLevel: compLevel,
+        combinedLevel: combinedLevel,
       };
 
       setResult(mockResult);
@@ -1252,6 +1379,13 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       if (next[index]) {
         next[index] = { ...next[index], type: newType };
       }
+      const updatedMiscues: Miscues = {
+        substitutions: next.filter((it) => it.type === "substitution").length,
+        omissions: next.filter((it) => it.type === "omission").length,
+        insertions: next.filter((it) => it.type === "insertion").length,
+        repetitions: next.filter((it) => it.type === "repetition").length,
+      };
+      setMiscues(updatedMiscues);
       return next;
     });
     setOverrideCount((c) => c + 1);
@@ -1259,7 +1393,55 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
   };
 
   const wordCount = passageText.split(/\s+/).filter(Boolean).length;
-  const currentPassageObj = passages.find((p) => p.title === passageTitle);
+  const currentPassageObj = useMemo(
+    () => passages.find((p) => p.title === passageTitle),
+    [passages, passageTitle]
+  );
+
+  // Compile official 5-8 Phil-IRI comprehension questions (Literal, Inferential, Critical)
+  const compQuestions: CompQuestion[] = useMemo(() => {
+    return compilePassageComprehensionQuestions(
+      currentPassageObj?.questions,
+      passageText,
+      passageTitle,
+      6
+    );
+  }, [currentPassageObj, passageText, passageTitle]);
+
+  const compTotal = compQuestions.length;
+  const compCorrectCount = useMemo(
+    () => compQuestions.filter((q) => compAnswers[q.id] === true).length,
+    [compQuestions, compAnswers]
+  );
+  const compAnsweredCount = Object.keys(compAnswers).length;
+  const compScorePct = compTotal > 0 ? Math.round((compCorrectCount / compTotal) * 100) : 0;
+  const compLevel = comprehensionLevel(compScorePct);
+
+  const handleSetQuestionScore = (questionId: number, isCorrect: boolean) => {
+    setCompAnswers((prev) => {
+      if (prev[questionId] === isCorrect) {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      }
+      return { ...prev, [questionId]: isCorrect };
+    });
+    setFinalizeSuccess(false);
+  };
+
+  const handleMarkAllCompCorrect = () => {
+    const all: Record<number, boolean> = {};
+    compQuestions.forEach((q) => {
+      all[q.id] = true;
+    });
+    setCompAnswers(all);
+    setFinalizeSuccess(false);
+  };
+
+  const handleResetCompScores = () => {
+    setCompAnswers({});
+    setFinalizeSuccess(false);
+  };
 
   const liveMetrics = useMemo(() => {
     if (!result) return null;
@@ -1292,6 +1474,16 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     );
   }, [result, calibratedItems, wordCount, recTime]);
 
+  // DepEd Table 3 Joint Matrix Evaluation
+  const oralAccuracy = liveMetrics?.accuracy ?? result?.accuracy ?? 100;
+  const wordsAttempted = result?.wordsAttempted ?? result?.wordsTotal ?? wordCount;
+  const wordsDecoded = oralAccuracy > 0 ? 1 : 0;
+  const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
+  const combinedEval = useMemo(() => {
+    return evaluateReadingPerformance(oralAccuracy, effectiveCompScore, wordsAttempted, wordsDecoded);
+  }, [oralAccuracy, effectiveCompScore, wordsAttempted, wordsDecoded]);
+  const combinedLevel = combinedEval.combinedLevel;
+
   const handleFinalizeAssessment = async () => {
     if (!result?.id || !liveMetrics) return;
     setIsFinalizing(true);
@@ -1310,16 +1502,34 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
       accuracy: liveMetrics.accuracy,
       wpm: liveMetrics.wpm,
       masteryLevel: liveMetrics.masteryLevel,
+      philIriLevel: liveMetrics.philIriLevel,
       miscueBreakdown: liveMetrics.counts,
       miscueItems: calibratedItems,
       miscueTotal: liveMetrics.totalMiscues,
       wordsAttempted: result.wordsAttempted ?? wordCount,
       durationSec: result.durationSec || recTime || 60,
+      // DepEd Phil-IRI Stage 2: Unified Comprehension & Combined Matrix
+      comprehension: {
+        score: compScorePct,
+        masteryLevel: compLevel,
+        combinedLevel: combinedLevel,
+        totalQuestions: compTotal,
+        correctAnswers: compCorrectCount,
+        answers: compAnswers,
+        questions: compQuestions.map((q) => ({
+          question: q.question,
+          category: q.category,
+          answer: q.answer,
+        })),
+      },
+      comprehensionScore: compScorePct,
+      comprehensionLevel: compLevel,
+      combinedLevel: combinedLevel,
       status: "approved",
       notes:
         overrideCount > 0
-          ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Approved.`
-          : "Verified and approved by teacher.",
+          ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Comprehension: ${compCorrectCount}/${compTotal} (${compScorePct}% - ${compLevel}). Combined: ${combinedLevel}. Approved.`
+          : `Unified assessment approved. Comprehension: ${compCorrectCount}/${compTotal} (${compScorePct}% - ${compLevel}). Combined: ${combinedLevel}.`,
     };
 
     // If offline or if the assessment was computed locally offline:
@@ -1382,22 +1592,10 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     }
   };
 
-
-  const levelColor = (lv?: string) =>
-    lv === "Independent" || lv === "Proficient"
-      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-      : lv === "Instructional" || lv === "Approaching"
-      ? "text-amber-700 bg-amber-50 border-amber-200"
-      : lv === "Developing"
-      ? "text-orange-700 bg-orange-50 border-orange-200"
-      : lv === "Non-Reader"
-      ? "text-slate-800 bg-slate-100 border-slate-200"
-      : "text-rose-700 bg-rose-50 border-rose-200";
-
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-      {/* ── LEFT COLUMN (58%): Reading Passage Reader Card ── */}
-      <div className="lg:col-span-7">
+      {/* ── LEFT COLUMN (58%): Reading Passage Reader Card & Comprehension Check ── */}
+      <div className="lg:col-span-7 space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
           {/* Header & Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
@@ -1470,38 +1668,209 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
             </div>
           </div>
 
-          {/* Passage Selector Bar */}
-          <div className="mt-3 flex items-center gap-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-              Select Passage:
-            </label>
-            <select
-              value={passageTitle}
-              onChange={(e) => {
-                setPassageTitle(e.target.value);
-                const p = passages.find((x) => x.title === e.target.value);
-                if (p) setPassageText(p.text);
-              }}
-              className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-            >
-              <option value="Oral Reading Passage">Custom passage…</option>
-              {passages.map((p) => (
-                <option key={p.id} value={p.title}>
-                  {p.title} {p.gradeLevel ? `(Grade ${p.gradeLevel})` : ""}
+          {/* Dual Selectors: Learner Selector & Passage Selector */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Learner Selector */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Select Learner:
+                </label>
+                <div className="flex items-center gap-1">
+                  {availableGrades.length > 0 && (
+                    <select
+                      value={selectedGrade}
+                      onChange={(e) => setSelectedGrade(e.target.value)}
+                      className="h-5 rounded-md border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-medium text-slate-600 outline-none focus:border-red-800 cursor-pointer"
+                      title="Filter learners by Grade"
+                    >
+                      <option value="">All Grades</option>
+                      {availableGrades.map((g) => (
+                        <option key={g} value={String(g)}>
+                          Gr {g}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {availableSections.length > 0 && (
+                    <select
+                      value={selectedSection}
+                      onChange={(e) => setSelectedSection(e.target.value)}
+                      className="h-5 rounded-md border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-medium text-slate-600 outline-none focus:border-red-800 cursor-pointer"
+                      title="Filter learners by Section"
+                    >
+                      <option value="">All Sec</option>
+                      {availableSections.map((sec) => (
+                        <option key={sec} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+              <select
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">
+                  Select learner to assess ({filteredLearners.length})...
                 </option>
-              ))}
-            </select>
+                {filteredLearners.map((l) => (
+                  <option key={l.studentId} value={l.studentId}>
+                    {l.name} — Grade {l.gradeLevel} {l.section}
+                  </option>
+                ))}
+              </select>
+              {filteredLearners.length === 0 && (
+                <p className="mt-1 text-[11px] text-amber-600 font-medium">
+                  No learners found matching the selected grade and section.
+                </p>
+              )}
+            </div>
+
+            {/* Passage Selector */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Select Passage:
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {passages.length} passages
+                </span>
+              </div>
+              <select
+                value={passageTitle}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  setPassageTitle(title);
+                  const p = passages.find((item) => item.title === title);
+                  if (p) {
+                    setPassageText(p.text);
+                  }
+                }}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+              >
+                <option value="">Select Phil-IRI Graded Passage ({passages.length})...</option>
+                {passages.map((p) => {
+                  const wCount = p.text ? p.text.split(/\s+/).filter(Boolean).length : 0;
+                  return (
+                    <option key={p.id || p.title} value={p.title}>
+                      {p.gradeLevel ? `[Grade ${p.gradeLevel}] ` : ""}{p.title} ({wCount} words)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
           </div>
 
-          {/* Beautiful Reader Viewport */}
+          {/* DepEd Phil-IRI Stage 1 (GST) Recommendation Card */}
+          {selectedStudentObj && (
+            <div
+              className={`mt-3 rounded-xl border p-3.5 text-xs transition-all ${
+                selectedStudentObj.gstStatus === "Needs Individualized Assessment"
+                  ? "border-amber-200 bg-amber-50/90 text-amber-950"
+                  : selectedStudentObj.gstStatus === "Grade-Ready"
+                  ? "border-emerald-200 bg-emerald-50/90 text-emerald-950"
+                  : "border-slate-200 bg-slate-50 text-slate-700"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="font-bold text-[11px] tracking-wide uppercase flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-red-800" />
+                  Phil-IRI 2024 Stage 1 (GST)
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    selectedStudentObj.gstStatus === "Needs Individualized Assessment"
+                      ? "bg-amber-100 text-amber-800 border border-amber-300"
+                      : selectedStudentObj.gstStatus === "Grade-Ready"
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-slate-200 text-slate-700"
+                  }`}
+                >
+                  {selectedStudentObj.gstStatus || "Unassessed"}
+                </span>
+              </div>
+
+              {selectedStudentObj.gstStatus === "Needs Individualized Assessment" ? (
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <p>
+                    <strong>Raw Score:</strong>{" "}
+                    {selectedStudentObj.gstScore !== null && selectedStudentObj.gstScore !== undefined
+                      ? `${selectedStudentObj.gstScore}/40`
+                      : "< 28"}{" "}
+                    (Below cut-off)
+                    {" • "}
+                    <strong>Recommended Stage 2 Starting Passage:</strong>{" "}
+                    <span className="font-bold text-red-900 bg-red-100/80 px-1.5 py-0.5 rounded">
+                      Grade {selectedStudentObj.recommendedStartingLevel ?? Math.max(4, selectedStudentObj.gradeLevel - 2)}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-amber-800/90">
+                    DepEd Phil-IRI 2024 Step 1: Starting passage auto-selected at Grade{" "}
+                    {selectedStudentObj.recommendedStartingLevel ?? Math.max(4, selectedStudentObj.gradeLevel - 2)}.
+                  </p>
+                </div>
+              ) : selectedStudentObj.gstStatus === "Grade-Ready" ? (
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <p>
+                    <strong>Raw Score:</strong>{" "}
+                    {selectedStudentObj.gstScore !== null && selectedStudentObj.gstScore !== undefined
+                      ? `${selectedStudentObj.gstScore}/40`
+                      : "≥ 28"}{" "}
+                    (Met cut-off)
+                  </p>
+                  <p className="text-[10px] text-emerald-800/90">
+                    Learner is Grade-Ready. Individualized graded passages are optional under DepEd Phil-IRI guidelines.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-500">
+                  GST score not recorded. Defaulting to current grade level (Grade {selectedStudentObj.gradeLevel}).
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Prominent Reading Passage Reader Box */}
           {isEditingPassage ? (
             <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">
+                  Custom Reading Passage Text:
+                </label>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {wordCount} words
+                </span>
+              </div>
               <textarea
-                rows={9}
+                rows={8}
                 value={passageText}
                 onChange={(e) => setPassageText(e.target.value)}
-                placeholder="Paste or type the reading passage here..."
-                className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 font-serif text-base leading-relaxed text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
+                placeholder="Paste or edit the passage text here..."
+                className="w-full rounded-xl border border-slate-200 bg-white p-3.5 font-serif text-base text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 leading-relaxed shadow-inner"
+              />
+              <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                <span>Edit or paste text directly. Changes apply immediately to the reading session.</span>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPassage(false)}
+                  className="font-semibold text-red-800 hover:text-red-900 cursor-pointer"
+                >
+                  Done Editing
+                </button>
+              </div>
+            </div>
+          ) : viewMode === "calibration" && calibratedItems.length > 0 ? (
+            <div className="mt-4">
+              <WordByWordReader
+                items={calibratedItems}
+                audioUrl={audioUrl}
+                onOverrideWord={handleOverrideWord}
+                activeWordIdx={activeWordIdx}
+                setActiveWordIdx={setActiveWordIdx}
               />
             </div>
           ) : isRecording ? (
@@ -1515,126 +1884,173 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 isListening={liveIsListening}
                 isSupported={liveIsSupported}
                 elapsedSec={recTime}
-                miscueItems={liveMiscueResult?.items || null}
-              />
-            </div>
-          ) : viewMode === "calibration" && calibratedItems.length > 0 ? (
-            <div className="mt-4">
-              <WordByWordReader
-                items={calibratedItems}
-                audioUrl={audioUrl}
-                onOverrideWord={handleOverrideWord}
-                activeWordIdx={activeWordIdx}
-                setActiveWordIdx={setActiveWordIdx}
+                miscueItems={liveMiscueResult?.items}
               />
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
               <div className="font-serif text-lg sm:text-xl leading-relaxed text-slate-800 tracking-normal space-y-4">
-                {passageText.split("\n\n").map((para, i) => (
+                {passageText.split(/\n\s*\n/).map((para, i) => (
                   <p key={i}>{para}</p>
                 ))}
               </div>
             </div>
           )}
+        </div>
 
+        {/* ── DepEd Phil-IRI Stage 2: Immediate Comprehension Check Section ── */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-red-800" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Phil-IRI Comprehension Check
+                </h3>
+                <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                  DepEd Form 2
+                </span>
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${levelColor(
+                    compLevel
+                  )}`}
+                >
+                  Table 2: {compLevel} ({compScorePct}%)
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Score learner&apos;s oral responses to passage comprehension questions (Literal, Inferential, Critical)
+              </p>
+            </div>
+
+            {/* Quick Scoring Actions */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">
+                {compCorrectCount} / {compTotal} Correct
+              </span>
+              <button
+                type="button"
+                onClick={handleMarkAllCompCorrect}
+                className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                title="Mark all questions as correct"
+              >
+                <Check className="h-3 w-3" />
+                <span>Mark All Correct</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetCompScores}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                title="Reset comprehension scores"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Question List */}
+          <div className="mt-4 space-y-3.5">
+            {compQuestions.map((q, idx) => {
+              const status = compAnswers[q.id];
+              return (
+                <div
+                  key={q.id}
+                  className={`rounded-xl border p-4 transition-all ${
+                    status === true
+                      ? "border-emerald-200 bg-emerald-50/40"
+                      : status === false
+                      ? "border-rose-200 bg-rose-50/40"
+                      : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white">
+                          {idx + 1}
+                        </span>
+                        <span
+                          className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            q.category === "Literal"
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : q.category === "Inferential"
+                              ? "border-purple-200 bg-purple-50 text-purple-700"
+                              : "border-amber-200 bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {q.category}
+                        </span>
+                        {status === true && (
+                          <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
+                            <Check className="h-3 w-3" /> Correct
+                          </span>
+                        )}
+                        {status === false && (
+                          <span className="text-[10px] font-bold text-rose-700 flex items-center gap-0.5">
+                            <X className="h-3 w-3" /> Incorrect
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-snug">
+                        {q.question}
+                      </p>
+                      {q.answer && (
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          <span className="font-semibold text-slate-600">Expected:</span> {q.answer}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 1-Click Scoring Pill */}
+                    <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSetQuestionScore(q.id, true)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          status === true
+                            ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600/30"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
+                        }`}
+                        title="Mark answer as correct"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Correct</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetQuestionScore(q.id, false)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          status === false
+                            ? "bg-rose-600 text-white shadow-xs ring-2 ring-rose-600/30"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-800"
+                        }`}
+                        title="Mark answer as incorrect"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span>Incorrect</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DepEd Table 2 Scale Footer */}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
+            <span>
+              <strong>DepEd Table 2 Standard:</strong> Independent (&ge;80%) &bull; Instructional (59–79%) &bull; Frustration (&le;58%)
+            </span>
+            <span className="font-mono font-medium">
+              Score: {compCorrectCount}/{compTotal} ({compScorePct}%)
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* ── RIGHT COLUMN (42%): Screener & Recording Controls Deck ── */}
+      {/* ── RIGHT COLUMN (42%): Audio Screener & Workstation ── */}
       <div className="lg:col-span-5 space-y-6">
-        {/* Learner Selection Card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Assigned Learner
-              </label>
-              <span className="text-[10px] text-slate-400 font-semibold">
-                {filteredLearners.length} available
-              </span>
-            </div>
-            {(selectedGrade || selectedSection) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedGrade("");
-                  setSelectedSection("");
-                }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-800 hover:text-red-900 transition-colors"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* Filter Controls Row */}
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Grade Level
-              </label>
-              <select
-                value={selectedGrade}
-                onChange={(e) => setSelectedGrade(e.target.value)}
-                className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs font-medium text-slate-700 outline-none transition-all focus:border-red-800 focus:bg-white focus:ring-2 focus:ring-red-800/10 cursor-pointer"
-              >
-                <option value="">All Grades</option>
-                {availableGrades.map((g) => (
-                  <option key={g} value={String(g)}>
-                    Grade {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Section
-              </label>
-              <select
-                value={selectedSection}
-                onChange={(e) => setSelectedSection(e.target.value)}
-                className="h-9 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs font-medium text-slate-700 outline-none transition-all focus:border-red-800 focus:bg-white focus:ring-2 focus:ring-red-800/10 cursor-pointer"
-              >
-                <option value="">All Sections</option>
-                {availableSections.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Filtered Learner Dropdown */}
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Select Student
-            </label>
-            <select
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
-            >
-              <option value="">
-                Select learner to assess ({filteredLearners.length})...
-              </option>
-              {filteredLearners.map((l) => (
-                <option key={l.studentId} value={l.studentId}>
-                  {l.name} — Grade {l.gradeLevel} {l.section}
-                </option>
-              ))}
-            </select>
-            {filteredLearners.length === 0 && (
-              <p className="mt-2 text-[11px] text-amber-600 font-medium">
-                No learners found matching the selected grade and section.
-              </p>
-            )}
-          </div>
-        </div>
-
         {/* Recording Deck */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs text-center">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -1785,7 +2201,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 <input
                   type="number"
                   min={0}
-                  value={miscues[key]}
+                  value={liveMetrics?.counts ? (liveMetrics.counts as any)[key] ?? miscues[key] : miscues[key]}
                   onChange={(e) => setMiscue(key, e.target.value)}
                   className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                 />
@@ -1869,11 +2285,39 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               </div>
             )}
 
-            {/* Combined Phil-IRI level */}
-            {result.comprehension?.combinedLevel && (
+            {/* DepEd Phil-IRI Stage 2 Joint Assessment Matrix (Table 3) */}
+            <div className="mt-3 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50/80 to-white p-3.5 shadow-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-red-800" />
+                  Phil-IRI Table 3 Joint Profile
+                </span>
+                <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${levelColor(combinedLevel)}`}>
+                  {combinedLevel}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg border border-slate-200/70 bg-white p-2">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Oral Reading (Table 1)</p>
+                  <p className="text-base font-black text-slate-900 mt-0.5">{liveMetrics?.accuracy ?? result.accuracy}%</p>
+                  <p className="text-[10px] font-medium text-slate-500">{liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200/70 bg-white p-2">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Comprehension (Table 2)</p>
+                  <p className="text-base font-black text-slate-900 mt-0.5">{compScorePct}%</p>
+                  <p className="text-[10px] font-medium text-slate-500">{compLevel} ({compCorrectCount}/{compTotal})</p>
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] text-slate-500 leading-snug">
+                Official Phil-IRI Standard: Combined reading profile integrates Oral Accuracy + Comprehension check.
+              </p>
+            </div>
+
+            {/* Combined Phil-IRI level (if saved on assessment) */}
+            {result.comprehension?.combinedLevel && result.comprehension.combinedLevel !== combinedLevel && (
               <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
                 <span className="font-medium text-slate-700">
-                  Phil-IRI 2024 Combined Level:
+                  Recorded Combined Level:
                 </span>
                 <span className={`rounded-full border px-2.5 py-0.5 font-bold ${levelColor(result.comprehension.combinedLevel)}`}>
                   {result.comprehension.combinedLevel}
@@ -1894,7 +2338,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                <span>Save &amp; Approve Calibrated Assessment</span>
+                <span>Save &amp; Approve Calibrated Assessment (Fluency + Comprehension)</span>
               </button>
 
               {finalizeSuccess && (
@@ -1930,16 +2374,32 @@ function ResultHistoryTab({
   const [results, setResults] = useState<FluencyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [filterType, setFilterType] = useState<"ALL" | "ORAL" | "COMP">("ALL");
   const { query: search, setQuery: setSearch } = useSearch();
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/teacher/assessments?type=READING_FLUENCY");
-      const json = await parseJsonResponse(res);
-      if (json.success) setResults(json.data);
-      else setError(json.error || "Failed to load results.");
+      const [oralRes, compRes] = await Promise.all([
+        fetch("/api/teacher/assessments?type=READING_FLUENCY"),
+        fetch("/api/teacher/assessments?type=COMPREHENSION"),
+      ]);
+      const [oralJson, compJson] = await Promise.all([
+        parseJsonResponse(oralRes),
+        parseJsonResponse(compRes),
+      ]);
+      const oralItems: FluencyRow[] =
+        oralJson.success && Array.isArray(oralJson.data) ? oralJson.data : [];
+      const compItems: FluencyRow[] =
+        compJson.success && Array.isArray(compJson.data) ? compJson.data : [];
+
+      const combined = [...oralItems, ...compItems].sort((a, b) => {
+        const timeA = new Date(a.date || 0).getTime();
+        const timeB = new Date(b.date || 0).getTime();
+        return timeB - timeA;
+      });
+      setResults(combined);
     } catch {
       setError("Failed to load results.");
     } finally {
@@ -1949,17 +2409,26 @@ function ResultHistoryTab({
 
   useEffect(() => { load(); }, []);
 
-  const filtered = results.filter((r) =>
-    search
-      ? r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-        r.title.toLowerCase().includes(search.toLowerCase())
-      : true
-  );
+  const filtered = results.filter((r) => {
+    if (filterType === "ORAL" && r.type === "COMPREHENSION") return false;
+    if (filterType === "COMP" && r.type !== "COMPREHENSION") return false;
+
+    if (search) {
+      const s = search.toLowerCase();
+      const matchName = r.studentName.toLowerCase().includes(s);
+      const matchTitle = r.title.toLowerCase().includes(s);
+      return matchName || matchTitle;
+    }
+    return true;
+  });
+
+  const oralCount = results.filter((r) => r.type !== "COMPREHENSION").length;
+  const compCount = results.filter((r) => r.type === "COMPREHENSION").length;
 
   return (
     <div>
       {/* Filter bar */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -1970,6 +2439,43 @@ function ResultHistoryTab({
             className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
           />
         </div>
+      </div>
+
+      {/* Sub-filter switcher pills */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFilterType("ALL")}
+          className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            filterType === "ALL"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          All Reading Records ({results.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType("ORAL")}
+          className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            filterType === "ORAL"
+              ? "bg-red-800 text-white shadow-xs"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Oral Fluency &amp; Combined ({oralCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType("COMP")}
+          className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            filterType === "COMP"
+              ? "bg-blue-700 text-white shadow-xs"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Comprehension CBT ({compCount})
+        </button>
       </div>
 
       {loading ? (
@@ -1989,13 +2495,15 @@ function ResultHistoryTab({
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">
-          No reading fluency sessions recorded yet.
+          No reading assessment sessions recorded yet.
         </div>
       ) : (
         /* Cards Grid */
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((l) => {
-            const pct = l.accuracy ?? 0;
+            const isCompOnly = l.type === "COMPREHENSION";
+            const isUnified = Boolean(l.combinedLevel || l.comprehension?.combinedLevel || l.comprehension?.score != null);
+            const pct = l.accuracy ?? l.score ?? 0;
             const barColor =
               pct >= 75 ? "bg-emerald-600" : pct >= 60 ? "bg-amber-500" : "bg-rose-500";
             return (
@@ -2010,6 +2518,21 @@ function ResultHistoryTab({
               >
                 <div className="flex items-center justify-between">
                   <div>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                      {isCompOnly ? (
+                        <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                          Comprehension CBT
+                        </span>
+                      ) : isUnified ? (
+                        <span className="rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                          Stage 2 Unified
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                          Oral Fluency
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-semibold text-slate-900 group-hover:text-red-900 transition-colors">
                       {l.studentName}
                     </p>
@@ -2037,8 +2560,12 @@ function ResultHistoryTab({
 
                 <div className="mt-4">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-slate-400">Accuracy</span>
-                    <span className="text-xs font-bold text-slate-800">{pct}%</span>
+                    <span className="text-[11px] font-medium text-slate-400">
+                      {isCompOnly ? "Score" : "Accuracy"}
+                    </span>
+                    <span className="text-xs font-bold text-slate-800">
+                      {isCompOnly ? `${l.score}/${l.totalItems} (${Math.round((l.score / (l.totalItems || 1)) * 100)}%)` : `${pct}%`}
+                    </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
@@ -2048,8 +2575,26 @@ function ResultHistoryTab({
                   </div>
                 </div>
 
+                {/* Comprehension & Combined Badges */}
+                {(l.comprehension?.score != null || l.comprehensionScore != null) && (
+                  <div className="mt-2.5 flex items-center justify-between text-[11px] bg-slate-50 rounded-lg px-2.5 py-1 text-slate-600">
+                    <span>Comprehension Check:</span>
+                    <span className="font-bold text-slate-800">
+                      {l.comprehension?.score ?? l.comprehensionScore}% ({l.comprehension?.masteryLevel ?? l.comprehensionLevel ?? "Frustration"})
+                    </span>
+                  </div>
+                )}
+                {(l.combinedLevel || l.comprehension?.combinedLevel) && (
+                  <div className="mt-1 flex items-center justify-between text-[11px] bg-emerald-50/70 border border-emerald-100 rounded-lg px-2.5 py-1 text-emerald-900">
+                    <span className="font-semibold">Table 3 Combined:</span>
+                    <span className="font-bold text-emerald-800">
+                      {l.combinedLevel || l.comprehension?.combinedLevel}
+                    </span>
+                  </div>
+                )}
+
                 <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-semibold">{l.wpm ? `${l.wpm} WCPM` : "—"}</span>
+                  <span className="font-semibold">{l.wpm ? `${l.wpm} WCPM` : isCompOnly ? "CBT Assessment" : "—"}</span>
                   <span suppressHydrationWarning className="text-slate-400">{l.date ? fmtShort(l.date) : "—"}</span>
                 </div>
               </button>
@@ -2123,6 +2668,15 @@ function FluencyReportModal({
             ? `${learner.notes} | Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}).`
             : `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}).`;
         }
+      }
+      if (learner.comprehension?.score != null) {
+        const oralAcc = liveMetrics ? liveMetrics.accuracy : (learner.accuracy ?? 100);
+        const evalRes = evaluateReadingPerformance(oralAcc, learner.comprehension.score);
+        payload.combinedLevel = evalRes.combinedLevel;
+        payload.comprehension = {
+          ...learner.comprehension,
+          combinedLevel: evalRes.combinedLevel,
+        };
       }
       const res = await fetch(`/api/teacher/assessments/${learner.id}`, {
         method: "PATCH",
@@ -2261,6 +2815,101 @@ function FluencyReportModal({
                 activeWordIdx={activeWordIdx}
                 setActiveWordIdx={setActiveWordIdx}
               />
+            </div>
+          )}
+
+          {/* Phil-IRI Stage 2: Unified Comprehension & Combined Profile */}
+          {(learner.comprehension || learner.comprehensionScore != null || learner.combinedLevel) && (
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-xs">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 mb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <h4 className="text-sm font-bold text-slate-800">
+                    Phil-IRI Stage 2: Comprehension &amp; Combined Profile
+                  </h4>
+                </div>
+                {(learner.combinedLevel || learner.comprehension?.combinedLevel) && (
+                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${levelColor(
+                    learner.combinedLevel || learner.comprehension?.combinedLevel
+                  )}`}>
+                    Combined: {learner.combinedLevel || learner.comprehension?.combinedLevel}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Comprehension Score
+                  </p>
+                  <p className="mt-1 text-xl font-black text-slate-900">
+                    {learner.comprehension?.score ?? learner.comprehensionScore ?? 0}%
+                  </p>
+                  {learner.comprehension?.totalQuestions && (
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                      {learner.comprehension.correctAnswers ?? 0} of {learner.comprehension.totalQuestions} questions
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Comprehension Band (Table 2)
+                  </p>
+                  <p className="mt-1 text-base font-bold text-slate-900">
+                    {learner.comprehension?.masteryLevel ?? learner.comprehensionLevel ?? "Frustration"}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                    DepEd Form 2 Scale
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200/80 bg-white p-3 text-center col-span-2 sm:col-span-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Joint Matrix (Table 3)
+                  </p>
+                  <p className="mt-1 text-base font-bold text-slate-900">
+                    {learner.combinedLevel || learner.comprehension?.combinedLevel || "—"}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                    Oral Accuracy + Comprehension
+                  </p>
+                </div>
+              </div>
+
+              {/* Comprehension Questions Breakdown if recorded */}
+              {learner.comprehension?.questions && learner.comprehension.questions.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-200/60">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Question Response Breakdown
+                  </p>
+                  {learner.comprehension.questions.map((q, idx) => {
+                    const isCorrect = learner.comprehension?.answers
+                      ? learner.comprehension.answers[idx + 1] ?? learner.comprehension.answers[String(idx + 1)]
+                      : undefined;
+                    return (
+                      <div key={idx} className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-600">Q{idx + 1}.</span>
+                          <span className="text-slate-800 font-medium">{q.question}</span>
+                          {q.category && (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                              {q.category}
+                            </span>
+                          )}
+                        </div>
+                        {isCorrect !== undefined && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isCorrect ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                          }`}>
+                            {isCorrect ? "Correct" : "Incorrect"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

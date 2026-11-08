@@ -69,10 +69,11 @@ export async function POST(req: NextRequest) {
         skippedDuplicates++;
         continue;
       }
+      let userDoc: any = null;
       try {
         const trimmedLrn = data.lrn.trim();
         const defaultPassword = extractSurnamePassword(data.name, trimmedLrn);
-        const userDoc = await User.create({
+        userDoc = await User.create({
           username: trimmedLrn,
           password: await bcrypt.hash(defaultPassword, 10),
           name: data.name,
@@ -96,6 +97,9 @@ export async function POST(req: NextRequest) {
         existingLrns.add(lrnKey);
         createdLrns.push(data.lrn);
       } catch (e: any) {
+        if (userDoc?._id) {
+          await User.findByIdAndDelete(userDoc._id).catch(() => {});
+        }
         if (e && e.code === 11000) skippedDuplicates++;
         else failed.push({ row: r.row, reason: 'Database error' });
       }

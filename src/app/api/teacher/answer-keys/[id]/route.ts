@@ -134,6 +134,18 @@ export async function PATCH(
     if (typeof body.targetSection === "string") {
       updateData.targetSection = body.targetSection.trim();
     }
+    if (Array.isArray(body.sections)) {
+      updateData.sections = body.sections;
+    }
+    if (typeof body.passageTitle === "string") {
+      updateData.passageTitle = body.passageTitle;
+    }
+    if (typeof body.passageText === "string") {
+      updateData.passageText = body.passageText;
+    }
+    if (typeof body.passageImage === "string") {
+      updateData.passageImage = body.passageImage;
+    }
 
     const updated = await AnswerKey.findByIdAndUpdate(
       id,

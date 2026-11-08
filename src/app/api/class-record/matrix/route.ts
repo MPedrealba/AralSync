@@ -113,10 +113,20 @@ export async function GET(req: NextRequest) {
 
     const assignmentColumns = Array.from(assignmentMap.values());
 
-    // 3. Fetch Phil-IRI Diagnostics (Pre-Test & Post-Test)
+    // 3. Fetch Diagnostics (Pre-Test & Post-Test) scoped to subject
     const assessments = await Assessment.find({
       studentId: { $in: studentIds },
       assessmentCategory: { $in: ['pre-test', 'post-test'] },
+      ...(subject !== 'All'
+        ? subject === 'Reading'
+          ? {
+              $or: [
+                { subject: new RegExp(`^Reading$`, 'i') },
+                { type: { $in: ['READING_FLUENCY', 'COMPREHENSION'] } },
+              ],
+            }
+          : { subject: new RegExp(`^${subject}$`, 'i') }
+        : {}),
     }).lean();
 
     // 4. Construct Pivoted Student Rows

@@ -15,7 +15,17 @@ const LearningMaterialSchema = new mongoose.Schema(
     title: { type: String, required: true },
     subject: {
       type: String,
-      enum: ['Reading', 'Math', 'Science', 'All', 'General'],
+      enum: [
+        'Reading',
+        'Math',
+        'Science',
+        'English',
+        'Filipino',
+        'Reading - Filipino',
+        'Reading - English',
+        'All',
+        'General',
+      ],
       default: 'General',
     },
     keyStage: {

@@ -9,10 +9,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 function subjectOf(a: any): string | null {
   const s = a.subject;
-  if (a.type === 'OMR' && s === 'Math') return 'Math';
-  if (a.type === 'READING_FLUENCY' || s === 'Reading') return 'Reading';
-  if (a.type === 'COMPREHENSION' || s === 'Science') return 'Science';
-  return s === 'Math' ? 'Math' : s === 'Reading' ? 'Reading' : s === 'Science' ? 'Science' : null;
+  if (s === 'Math' || s === 'Reading' || s === 'Science') return s;
+  if (a.type === 'READING_FLUENCY' || a.type === 'COMPREHENSION') return 'Reading';
+  return null;
 }
 
 export async function GET(req: NextRequest) {

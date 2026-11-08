@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../../database/db';
 import CustomExam from '../../../../../models/CustomExam';
 import AnswerKey from '../../../../../models/AnswerKey';
-import { requireAuth, authErrorResponse } from '@/lib/auth';
+import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { getTeacherSubject } from '@/lib/teacherScope';
 
 /**
@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error('Teacher Exams GET Error:', e);
+    return NextResponse.json({ error: e.message || 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     const teacherSubject = await getTeacherSubject(teacher);
 
     const body = await req.json();
-    const { title, subject, gradeLevel, items, assessmentType, topics, answerKeyId } = body;
+    const { title, subject, gradeLevel, items, assessmentType, topics, answerKeyId, sections, passageTitle, passageText, passageImage } = body;
     const finalSubject = teacherSubject !== 'All' ? teacherSubject : subject;
 
     if (!title || !finalSubject || !gradeLevel || !Array.isArray(items) || items.length === 0) {
@@ -115,6 +117,13 @@ export async function POST(req: NextRequest) {
       answerKey.answers = answers;
       answerKey.modes = modes;
       answerKey.questions = normalizedItems;
+      if (Array.isArray(sections) && sections.length > 0) {
+        answerKey.sections = sections;
+        answerKey.markModified('sections');
+      }
+      if (passageTitle) answerKey.passageTitle = passageTitle;
+      if (passageText) answerKey.passageText = passageText;
+      if (passageImage) answerKey.passageImage = passageImage;
       if (writtenItems.length > 0) answerKey.writtenItems = writtenItems;
       if (!answerKey.teacherId) answerKey.teacherId = teacher.id;
       answerKey.markModified('answers');
@@ -133,6 +142,10 @@ export async function POST(req: NextRequest) {
         modes,
         writtenItems,
         questions: normalizedItems,
+        sections: Array.isArray(sections) ? sections : [],
+        passageTitle: passageTitle || '',
+        passageText: passageText || '',
+        passageImage: passageImage || '',
         teacherId: teacher.id,
         created: new Date(),
       });
@@ -168,6 +181,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return authErrorResponse(e);
+    if (e instanceof AuthError) return authErrorResponse(e);
+    console.error('Teacher Exams POST Error:', e);
+    return NextResponse.json({ error: e.message || 'Internal server error' }, { status: 500 });
   }
 }

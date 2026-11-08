@@ -13,9 +13,8 @@ const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8
 
 function subjectName(a: any): string | null {
   const s = a.subject;
-  if (a.type === 'READING_FLUENCY' || s === 'Reading') return 'Reading';
-  if (a.type === 'COMPREHENSION' || s === 'Science') return 'Science';
-  if (s === 'Math') return 'Math';
+  if (s === 'Math' || s === 'Reading' || s === 'Science') return s;
+  if (a.type === 'READING_FLUENCY' || a.type === 'COMPREHENSION') return 'Reading';
   return null;
 }
 

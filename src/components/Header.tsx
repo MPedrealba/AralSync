@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import {
   Bell,
@@ -62,6 +62,7 @@ const markRead = async (ids: string[]) => {
 
 export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const mobileNav = useMobileNav();
   const handleOpenMobile = onOpenMobileMenu || mobileNav?.open || (() => {});
   const [mounted, setMounted] = useState(false);
@@ -69,6 +70,57 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
   const [items, setItems] = useState<Notif[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasReadingAccess, setHasReadingAccess] = useState(false);
+  const [activeStream, setActiveStream] = useState<"english" | "filipino">("english");
+
+  useEffect(() => {
+    // Check current stream from pathname or search or storage
+    const isFil =
+      pathname?.includes("filipino-reading") ||
+      (typeof window !== "undefined" && window.location.search.includes("stream=filipino"));
+    setActiveStream(isFil ? "filipino" : "english");
+
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data) {
+          const user = json.data;
+          const assigned = user.assignedSubject || "";
+          const spec = user.specialization || "";
+          const isReadingAllowed =
+            ["Reading", "English", "Filipino", "All"].includes(assigned) ||
+            spec === "reading" ||
+            spec === "all-subjects" ||
+            ["principal", "coordinator", "admin"].includes(user.role);
+          setHasReadingAccess(isReadingAllowed);
+        }
+      })
+      .catch(() => {});
+  }, [pathname]);
+
+  const handleSwitchStream = (stream: "english" | "filipino") => {
+    setActiveStream(stream);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("aral_reading_stream", stream);
+    }
+    if (stream === "filipino") {
+      if (pathname === "/dashboard" || pathname === "/dashboard/reading-fluency") {
+        router.push("/dashboard/filipino-reading");
+      } else if (pathname === "/dashboard/omr-assessments") {
+        router.push("/dashboard/omr-assessments?stream=filipino");
+      } else {
+        router.push("/dashboard/filipino-reading");
+      }
+    } else {
+      if (pathname === "/dashboard/filipino-reading") {
+        router.push("/dashboard");
+      } else if (pathname === "/dashboard/omr-assessments") {
+        router.push("/dashboard/omr-assessments");
+      } else {
+        router.push("/dashboard");
+      }
+    }
+  };
 
   const fetchNotifs = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -134,8 +186,38 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
         </h2>
       </div>
 
-      {/* Right: Notification Bell */}
+      {/* Right: Stream Switcher Pill & Notification Bell */}
       <div className="flex items-center gap-3">
+        {mounted && hasReadingAccess && (
+          <div className="hidden sm:flex items-center rounded-full bg-slate-100 p-1 border border-slate-200 text-xs font-semibold shadow-xs">
+            <button
+              type="button"
+              onClick={() => handleSwitchStream("english")}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all cursor-pointer ${
+                activeStream === "english"
+                  ? "bg-white text-red-900 shadow-xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <BookOpen className="h-3 w-3" />
+              <span>English Reading</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchStream("filipino")}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all cursor-pointer ${
+                activeStream === "filipino"
+                  ? "bg-red-800 text-white shadow-xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              }`}
+            >
+              <BookOpen className="h-3 w-3" />
+              <span>Filipino Reading</span>
+            </button>
+          </div>
+        )}
+
+        {/* Notification Bell */}
         {/* Notification Bell */}
         <div className="relative">
           <button

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
@@ -59,7 +60,7 @@ async function buildChartData(teacherSubject: TeacherSubject): Promise<any[]> {
     if (!key || a.score == null) continue;
     const d = new Date(a.date).getTime();
     if (Number.isNaN(d)) continue;
-    let idx = Math.min(weeks - 1, Math.floor((max - d) / width));
+    let idx = Math.min(weeks - 1, Math.floor((d - min) / width));
     idx = Math.max(0, idx);
     buckets[idx].sums[key] += a.score;
     buckets[idx].counts[key] += 1;
@@ -137,12 +138,174 @@ export async function GET(req: NextRequest) {
 
     const teacherSubject = await getTeacherSubject(authUser);
 
-    // 1. Total Learners Count
-    const totalLearners = await LearnerRecord.countDocuments();
+    const teacherIdObj = mongoose.Types.ObjectId.isValid(authUser.id)
+      ? new mongoose.Types.ObjectId(authUser.id)
+      : authUser.id;
 
-    // 2. High Risk Learners
-    const highRiskCount = await LearnerRecord.countDocuments({ riskLevel: 'High Risk' });
-    const highRiskLearners = await LearnerRecord.find({ riskLevel: 'High Risk' })
+    // Discover any sections taught by or assigned to this teacher
+    const teacherSections = await LearnerRecord.distinct('section', {
+      $or: [
+        { assignedTeacherId: authUser.id },
+        { assignedTeacherId: teacherIdObj },
+        { 'assignedTeachers.reading': authUser.id },
+        { 'assignedTeachers.reading': teacherIdObj },
+        { 'assignedTeachers.math': authUser.id },
+        { 'assignedTeachers.math': teacherIdObj },
+        { 'assignedTeachers.science': authUser.id },
+        { 'assignedTeachers.science': teacherIdObj },
+      ],
+      section: { $ne: null, $exists: true },
+    });
+
+    const teacherMatchConditions: any[] = [
+      { assignedTeacherId: authUser.id },
+      { assignedTeacherId: teacherIdObj },
+      { 'assignedTeachers.reading': authUser.id },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.math': authUser.id },
+      { 'assignedTeachers.math': teacherIdObj },
+      { 'assignedTeachers.science': authUser.id },
+      { 'assignedTeachers.science': teacherIdObj },
+    ];
+    if (teacherSections.length > 0) {
+      teacherMatchConditions.push({ section: { $in: teacherSections } });
+    }
+
+    const learnerScopeQuery = { $or: teacherMatchConditions };
+
+    const isFilipinoStream =
+      req.nextUrl.searchParams.get('subject') === 'Filipino' ||
+      req.nextUrl.searchParams.get('stream') === 'filipino';
+
+    if (isFilipinoStream) {
+      const filipinoSubjectQuery = { subject: { $in: ['Filipino', 'Reading - Filipino'] } };
+      const filipinoAssessments = await Assessment.find({
+        ...filipinoSubjectQuery,
+        score: { $exists: true, $ne: null },
+      }, 'score date').lean();
+
+      // Chart data for Filipino reading
+      const weeks = 4;
+      const filBuckets = Array.from({ length: weeks }, () => ({ sum: 0, count: 0 }));
+      if (filipinoAssessments.length > 0) {
+        const times = filipinoAssessments
+          .map((a: any) => new Date(a.date || a.createdAt).getTime())
+          .filter((t) => !isNaN(t));
+        const max = Math.max(...times);
+        const min = Math.min(...times);
+        const span = Math.max(max - min, WEEK_MS);
+        const width = span / weeks;
+        for (const a of filipinoAssessments) {
+          const d = new Date(a.date || a.createdAt).getTime();
+          if (isNaN(d)) continue;
+          let idx = Math.min(weeks - 1, Math.max(0, Math.floor((d - min) / width)));
+          filBuckets[idx].sum += Number(a.score) || 0;
+          filBuckets[idx].count += 1;
+        }
+      }
+      const filChartData = filBuckets.map((b, i) => ({
+        name: `Linggo ${i + 1}`,
+        Pagbasa: b.count ? Math.round(b.sum / b.count) : 0,
+      }));
+
+      // Filipino OMR count
+      const filipinoOmrCount = await Assessment.countDocuments({
+        type: 'OMR',
+        ...filipinoSubjectQuery,
+      });
+
+      // Filipino pending reviews
+      const filipinoPending = await Assessment.countDocuments({
+        ...filipinoSubjectQuery,
+        status: 'pending',
+      });
+
+      // Learners flagged for intervention in Filipino
+      const filipinoInterventionLearners = await LearnerRecord.find({
+        ...learnerScopeQuery,
+        $or: [
+          { 'philIriFilipino.readingLevel': { $in: ['Pagkabigo', 'Hindi Makabasa'] } },
+          { 'philIriFilipino.needsIndividualAssessment': true },
+          { riskLevel: 'High Risk' },
+        ],
+      })
+        .populate('studentId', 'name')
+        .limit(6);
+
+      const filipinoAlerts = filipinoInterventionLearners.map((record: any) => {
+        const filLevel = record.philIriFilipino?.readingLevel || 'Pagkabigo';
+        const isNonReader = filLevel === 'Hindi Makabasa';
+        return {
+          name: record.studentId?.name || 'Mag-aaral',
+          lrn: record.lrn,
+          learnerId: record.studentId?._id ? String(record.studentId._id) : null,
+          badge: filLevel,
+          badgeStyle: isNonReader
+            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+            : 'bg-amber-100 text-amber-800 border border-amber-300',
+          action: 'Suriin ang Tala',
+        };
+      });
+
+      const filipinoScansRaw = await Assessment.find({
+        type: 'OMR',
+        ...filipinoSubjectQuery,
+      })
+        .sort({ date: -1, createdAt: -1 })
+        .limit(5)
+        .lean();
+
+      const studentIds = filipinoScansRaw.map((a: any) => a.studentId).filter(Boolean);
+      const records = await LearnerRecord.find({ studentId: { $in: studentIds } }, 'studentId gradeLevel section').lean();
+      const recordMap = new Map(records.map((r: any) => [String(r.studentId), r]));
+
+      const filipinoRecentScans = filipinoScansRaw.map((a: any) => {
+        const rec = recordMap.get(String(a.studentId));
+        const d = a.date ? new Date(a.date) : new Date(a.createdAt || Date.now());
+        const dateStr = d.toLocaleDateString('fil-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+        return {
+          date: dateStr,
+          title: a.title || 'OMR Pagtatasa sa Filipino',
+          subject: 'Filipino',
+          cohort: rec ? `Baitang ${rec.gradeLevel} - ${rec.section}` : 'Klase',
+          average: a.score != null ? `${a.score}%` : '—',
+          status: 'Naproseso',
+        };
+      });
+
+      // Total learners enrolled
+      const totalLearners = await LearnerRecord.countDocuments(learnerScopeQuery);
+      const totalFilipinoGst = await LearnerRecord.countDocuments({
+        ...learnerScopeQuery,
+        'philIriFilipino.gstScore': { $ne: null },
+      });
+
+      return ok({
+        overview: {
+          totalLearners: totalFilipinoGst || totalLearners,
+          highRiskCount: filipinoAlerts.length,
+          recentScans: filipinoOmrCount,
+          pendingReviews: filipinoPending,
+        },
+        alerts: filipinoAlerts,
+        chartData: filChartData,
+        recentScans: filipinoRecentScans,
+        teacherSubject: 'Filipino',
+      });
+    }
+
+    // 1. Total Learners Count (scoped to teacher)
+    const totalLearners = await LearnerRecord.countDocuments(learnerScopeQuery);
+
+    // 2. High Risk Learners (scoped to teacher)
+    const highRiskCount = await LearnerRecord.countDocuments({
+      ...learnerScopeQuery,
+      riskLevel: 'High Risk',
+    });
+    const highRiskLearners = await LearnerRecord.find({
+      ...learnerScopeQuery,
+      riskLevel: 'High Risk',
+    })
       .populate('studentId', 'name')
       .limit(5);
 
@@ -170,16 +333,17 @@ export async function GET(req: NextRequest) {
 
     const recentScans = await Assessment.countDocuments(scanCountQuery);
 
-    // 4. Pending Reviews
+    // 4. Pending Reviews (only pending/partial items needing teacher action)
     let pendingReviews = 0;
     if (teacherSubject === 'Reading' || teacherSubject === 'All') {
       pendingReviews = await Assessment.countDocuments({
         type: 'READING_FLUENCY',
+        status: 'pending',
       });
     } else {
       pendingReviews = await Assessment.countDocuments({
         subject: teacherSubject,
-        gradingStatus: 'partial',
+        $or: [{ gradingStatus: 'partial' }, { status: 'pending' }],
       });
     }
 

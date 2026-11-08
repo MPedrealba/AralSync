@@ -65,6 +65,23 @@ const HREFS: Record<string, (meta: any) => string> = {
 
 const INCLUDED = Object.keys(MESSAGES);
 
+function resolveNotificationHref(action: string, meta: any, role: string): string {
+  if (role === 'coordinator') {
+    if (action === 'learner_import' || action === 'learner_update') return '/coordinator/learners';
+    if (action.startsWith('reading_')) return '/coordinator/reading-levels';
+    return '/coordinator';
+  }
+  if (role === 'principal') {
+    if (action === 'learner_import' || action === 'learner_update') return '/principal/learner-records';
+    if (action.startsWith('reading_')) return '/principal/reading-levels';
+    return '/principal';
+  }
+  if (role === 'student') {
+    return '/student';
+  }
+  return HREFS[action]?.(meta) || '/dashboard';
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(req, []);
@@ -96,7 +113,7 @@ export async function GET(req: NextRequest) {
         id,
         text,
         kind: KIND_OF[l.action as string] || 'system',
-        href: HREFS[l.action as string]?.(l.meta || {}) || '/dashboard',
+        href: resolveNotificationHref(l.action as string, l.meta || {}, user.role),
         read: ackSet.has(id),
         createdAt: l.createdAt,
       });

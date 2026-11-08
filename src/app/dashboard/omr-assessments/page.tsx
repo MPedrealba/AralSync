@@ -34,11 +34,20 @@ import {
   Calendar,
   Users,
   Layers,
+  ZoomIn,
+  FileImage,
 } from "lucide-react";
 import OMRSheetViewerModal from "@/components/OMRSheetViewerModal";
 import { parseJsonResponse } from "@/lib/safeFetch";
 import { getSubjectBubbleSheet, getStampedBubbleSheetUrl } from "@/lib/bubbleSheet";
-import { QuestionnaireSection, deriveSectionsFromQuestions, clusterQuestionsByTopic } from "@/lib/questionnaireSections";
+import {
+  QuestionnaireSection,
+  deriveSectionsFromQuestions,
+  clusterQuestionsByTopic,
+  buildPhilIriG7Sections,
+  buildPhilIriSections,
+  buildPhilIriFilipinoSections,
+} from "@/lib/questionnaireSections";
 
 /* ──── Tab names ──── */
 const tabs = ["Results/History", "Generate Questionnaire", "Exam Library"] as const;
@@ -194,6 +203,8 @@ interface AnswerKeyRow {
   }>;
   passageTitle?: string;
   passageText?: string;
+  passageImage?: string;
+  sections?: QuestionnaireSection[];
   isOnline?: boolean;
   timeLimitMinutes?: number;
   dueDate?: string | null;
@@ -392,10 +403,10 @@ function ResultsTab({ assignedSubject = "All" }: { assignedSubject?: string }) {
           onChange={(e) => setCategoryFilter(e.target.value as any)}
           className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
         >
-          <option value="">All Formats (Quizzes, Tests & Exams)</option>
-          <option value="quiz">Weekly Quizzes (📝)</option>
+          <option value="">All Formats (Pre-Test & Post-Test)</option>
           <option value="pre-test">Diagnostic Pre-Tests (📋)</option>
-          <option value="post-test">Post-Tests & Endlines (📈)</option>
+          <option value="post-test">Learning Recovery Post-Tests (📈)</option>
+          <option value="quiz">Weekly Quizzes (📝)</option>
           <option value="exam">Comprehensive Exams (🏆)</option>
         </select>
         <select
@@ -673,7 +684,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
   // Manual "Add Answer Key" modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newAssessmentType, setNewAssessmentType] = useState<AssessmentType>("quiz");
+  const [newAssessmentType, setNewAssessmentType] = useState<AssessmentType>("pre-test");
   const [newSubject, setNewSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [newItems, setNewItems] = useState(20);
   const [answersText, setAnswersText] = useState("");
@@ -688,7 +699,7 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanPreview, setScanPreview] = useState<string | null>(null);
   const [scanTitle, setScanTitle] = useState("");
-  const [scanAssessmentType, setScanAssessmentType] = useState<AssessmentType>("quiz");
+  const [scanAssessmentType, setScanAssessmentType] = useState<AssessmentType>("pre-test");
   const [scanSubject, setScanSubject] = useState(assignedSubject !== "All" ? assignedSubject : "Math");
   const [scanItems, setScanItems] = useState(20);
   const [scanning, setScanning] = useState(false);
@@ -984,10 +995,10 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
             onChange={(e) => setKeyCategoryFilter(e.target.value as any)}
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 outline-none shadow-sm"
           >
-            <option value="">All Formats (Quizzes, Tests & Exams)</option>
-            <option value="quiz">Weekly Quizzes (📝)</option>
+            <option value="">All Formats (Pre-Test & Post-Test)</option>
             <option value="pre-test">Diagnostic Pre-Tests (📋)</option>
-            <option value="post-test">Post-Tests & Endlines (📈)</option>
+            <option value="post-test">Learning Recovery Post-Tests (📈)</option>
+            <option value="quiz">Weekly Quizzes (📝)</option>
             <option value="exam">Comprehensive Exams (🏆)</option>
           </select>
         </div>
@@ -1213,9 +1224,9 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                     onChange={(e) => setNewAssessmentType(e.target.value as any)}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                   >
-                    <option value="quiz">Weekly Quiz</option>
                     <option value="pre-test">Pre-Test (Diagnostic)</option>
                     <option value="post-test">Post-Test (Endline)</option>
+                    <option value="quiz">Weekly Quiz</option>
                     <option value="exam">Comprehensive Exam</option>
                   </select>
                 </div>
@@ -1320,9 +1331,9 @@ function AnswerKeysTab({ assignedSubject = "All" }: { assignedSubject?: string }
                       onChange={(e) => setScanAssessmentType(e.target.value as any)}
                       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
                     >
-                      <option value="quiz">Weekly Quiz</option>
                       <option value="pre-test">Pre-Test (Diagnostic)</option>
                       <option value="post-test">Post-Test (Endline)</option>
+                      <option value="quiz">Weekly Quiz</option>
                       <option value="exam">Comprehensive Exam</option>
                     </select>
                   </div>
@@ -1890,6 +1901,470 @@ function AssignOnlineModal({
   );
 }
 
+/* ━━━ TYPES & PRINTABLE: OFFICIAL DEPED QUESTIONNAIRE ━━━ */
+const PrintAry = ["A", "B", "C", "D"];
+
+interface GeneratedQuestion {
+  number: number;
+  prompt: string;
+  choices: string[];
+  mode: "mc" | "written";
+  difficulty: string;
+  competencyCode: string;
+  competency: string;
+  topic: string;
+  correctAnswer?: string;
+}
+
+interface GeneratedDoc {
+  title: string;
+  assessmentType?: AssessmentType;
+  assessmentCategory?: AssessmentType;
+  subject: string;
+  topic?: string;
+  topics?: string[];
+  gradeLevel: number;
+  itemCount: number;
+  passageTitle?: string;
+  passageText?: string;
+  passageImage?: string;
+  writtenCount: number;
+  questions: GeneratedQuestion[];
+  sections?: QuestionnaireSection[];
+  answers: string[];
+  answerKey: {
+    id: string;
+    title: string;
+    assessmentType?: AssessmentType;
+    assessmentCategory?: AssessmentType;
+    subject: string;
+    topic?: string;
+    topics?: string[];
+    items: number;
+    sections?: QuestionnaireSection[];
+    passageImage?: string;
+    isOnline?: boolean;
+    timeLimitMinutes?: number;
+    dueDate?: string | Date | null;
+    targetGrade?: number | null;
+    targetSection?: string | null;
+  };
+}
+
+/* ━━━ PRINTABLE: OFFICIAL DEPED QUESTIONNAIRE ━━━ */
+function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
+  const sections =
+    doc.sections && doc.sections.length > 0
+      ? doc.sections
+      : deriveSectionsFromQuestions(doc.questions, doc.subject);
+
+  const isMultiSection = sections.length > 1;
+  const isFilipino =
+    doc.subject === "Filipino" ||
+    Boolean(doc.title && /filipino|sipi|pangkatang/i.test(doc.title)) ||
+    sections.some((s) => s.title?.includes("BAHAGI"));
+
+  return (
+    <div className="bg-white p-8 text-black font-sans max-w-4xl mx-auto print:p-0 print:m-0 print:max-w-none">
+      {/* ── PAGE 1: OFFICIAL COVER & GENERAL INSTRUCTIONS ── */}
+      <div
+        className={isMultiSection ? "print-cover-page min-h-[85vh] print:min-h-0 flex flex-col justify-between mb-8 print:mb-0" : "mb-6"}
+        style={isMultiSection ? { breakAfter: "page", pageBreakAfter: "always" } : undefined}
+      >
+        <div>
+          {/* Official DepEd School Header with Top Middle Logo and School Name */}
+          <div className="mb-6 border-b-2 border-black pb-4 text-center">
+            <img
+              src="/aral-logo.png"
+              alt="School Logo"
+              className="h-16 w-16 object-contain mx-auto mb-2 print:block"
+            />
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+              {isFilipino ? "Republika ng Pilipinas" : "Republic of the Philippines"}
+            </p>
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+              {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
+            </p>
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+              {isFilipino ? "Pambansang Punong Rehiyon — Sangay ng mga Paaralang Lungsod" : "National Capital Region — Division of City Schools"}
+            </p>
+            <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
+              GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+            </h1>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
+              {doc.title}
+            </h2>
+            <p className="text-xs text-gray-700 mt-0.5">
+              {isFilipino ? "Asignatura: Filipino" : `Subject: ${doc.subject === "Math" ? "Mathematics" : doc.subject}`} • {isFilipino ? `Baitang ${doc.gradeLevel || 7}` : `Grade ${doc.gradeLevel || 7}`} • {doc.itemCount} {isFilipino ? "Aytem" : "Items"}
+              {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
+            </p>
+          </div>
+
+          {/* Student Info Fields: Name, LRN, Grade & Section, Date, Score */}
+          <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-xs font-semibold border-b border-black pb-4 text-black">
+            <div className="flex items-center gap-2">
+              <span className="font-bold tracking-wider">{isFilipino ? "PANGALAN:" : "NAME:"}</span>
+              <span className="flex-1 border-b border-black" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold tracking-wider">LRN:</span>
+              <span className="flex-1 border-b border-black" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold tracking-wider">{isFilipino ? "SEKSIYON:" : "SECTION:"}</span>
+              <span className="flex-1 border-b border-black" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold tracking-wider">{isFilipino ? "PETSA:" : "DATE:"}</span>
+              <span className="flex-1 border-b border-black" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold tracking-wider">{isFilipino ? "MARKA:" : "SCORE:"}</span>
+              <span className="flex-1 border-b border-black" />
+            </div>
+          </div>
+
+          {/* General Directions */}
+          <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed text-black">
+            <h3 className="font-bold uppercase tracking-wider text-black mb-2">
+              {isFilipino ? "PANGKALAHATANG PANUTO" : "General Instructions"}
+            </h3>
+            <ol className="list-decimal pl-5 space-y-2 text-gray-900 text-[11.5px] leading-relaxed">
+              {isFilipino ? (
+                <>
+                  <li>Basahing mabuti ang bawat tanong bago piliin ang iyong sagot.</li>
+                  <li>HUWAG susulatan o mamarkahan ang assessment booklet na ito.</li>
+                  <li>Itiman nang buo at malinaw ang bilog na tumutugma sa iyong napiling titik (A, B, C, o D) sa iyong opisyal na 50-Item OMR Sagutang Papel.</li>
+                  <li>Gumamit lamang ng itim o asul na bolpen o lapis (No. 2). Iwasan ang bura o labis na marka.</li>
+                  {isMultiSection && (
+                    <li>
+                      Ang booklet na ito ay naglalaman ng <strong>{sections.length} Bahagi</strong>. Bawat bahagi ay nagsisimula sa sarili nitong pahina kasama ang kaugnay na seleksiyon, kuwento, tula, o infographic.
+                    </li>
+                  )}
+                </>
+              ) : (
+                <>
+                  <li>Read each question carefully before choosing your answer.</li>
+                  <li>Do NOT write, mark, or shade your answers on this questionnaire booklet.</li>
+                  <li>Shade the circle corresponding to your chosen letter (A, B, C, or D) cleanly and completely on your official 50-Item OMR Bubble Sheet.</li>
+                  <li>Use only a black or dark blue pen / pencil (No. 2) to shade the bubbles. Avoid erasures or stray marks.</li>
+                  {isMultiSection && (
+                    <li>
+                      This assessment booklet contains <strong>{sections.length} Parts</strong>. Each part begins on its own page with its required reference reading material, poem, advisory, or infographic.
+                    </li>
+                  )}
+                </>
+              )}
+            </ol>
+          </div>
+
+          {/* Multi-Section Reference Material Index on Cover Page */}
+          {isMultiSection && (
+            <div className="rounded border border-gray-300 p-4 text-xs">
+              <h4 className="font-bold uppercase tracking-wider text-black mb-2">
+                {isFilipino ? "Mga Bahagi at Sanggunian ng Pagtatasa" : "Assessment Parts & Reference Materials"}
+              </h4>
+              <div className="space-y-2.5">
+                {sections.map((sec, idx) => (
+                  <div key={idx} className="flex items-center justify-between border-b border-dashed border-gray-200 pb-2 text-gray-800">
+                    <span className="font-semibold text-black">
+                      {sec.title.includes(":") ? sec.title.split(":")[0] : `PART ${sec.partNumber}`}: {sec.passageTitle || sec.topic}
+                    </span>
+                    <span className="font-mono text-[11px] text-gray-600">
+                      {sec.itemRange} ({sec.itemCount} {isFilipino ? "aytem" : "items"}) {sec.referenceType ? `• [${sec.referenceType.toUpperCase()}]` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Single-section fallback passage if not multi-section */}
+          {!isMultiSection && doc.passageText && (
+            <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
+              <p className="font-bold uppercase tracking-wider text-black mb-1">
+                {isFilipino ? "Seleksiyon sa Pagbasa:" : "Reading Selection:"} {doc.passageTitle}
+              </p>
+              <div className="whitespace-pre-line text-gray-800 font-serif text-[11.5px]">
+                {doc.passageText}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {isMultiSection && (
+          <div className="text-center text-[11px] text-gray-500 italic border-t border-gray-300 pt-3">
+            {isFilipino ? "Pakibuklat ang susunod na pahina para sa Bahagi I." : "Please turn to the next page to begin Part I."}
+          </div>
+        )}
+      </div>
+
+      {/* ── QUESTION SECTIONS (PAGES 2–5 FOR MULTI-PART ASSESSMENTS) ── */}
+      <div className="space-y-4 print:space-y-0 text-xs">
+        {sections.map((section, sIdx) => {
+          const sectionQuestions = doc.questions.filter(
+            (q) => q.number >= section.startItem && q.number <= section.endItem
+          );
+          const isLastSection = sIdx === sections.length - 1;
+
+          return (
+            <div
+              key={sIdx}
+              className={isMultiSection ? "section-page pt-1 print:pt-0" : "break-inside-avoid"}
+              style={
+                isMultiSection
+                  ? {
+                      breakAfter: !isLastSection ? "page" : "auto",
+                      pageBreakAfter: !isLastSection ? "always" : "auto",
+                      /* Page-break enforcement: pageBreakBefore: "always" */
+                    }
+                  : undefined
+              }
+            >
+              {/* Section Header & Directions */}
+              <div className="mb-2 border-b-2 border-black pb-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-black">
+                    {section.title && section.title.startsWith("PART ")
+                      ? section.title
+                      : `PART ${section.partNumber}: ${section.passageTitle || section.topic} (${section.itemRange})`}
+                  </h3>
+                  <span className="text-[10px] uppercase font-semibold text-gray-600">
+                    Grade {doc.gradeLevel || 7} • {doc.subject}
+                  </span>
+                </div>
+                {section.instructions && (
+                  <p className="mt-0.5 text-[10.5px] italic font-medium text-gray-900 leading-tight">
+                    {section.instructions}
+                  </p>
+                )}
+              </div>
+
+              {/* Section Reference Material: Poem, Article, Advisory, or Infographic */}
+              {/* Part I: Compact 2-Column Poem Stanzas */}
+              {section.referenceType === "poem" && section.passageText && (
+                <div
+                  className="mb-2 break-inside-avoid"
+                  style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
+                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
+                      Reading Selection: {section.passageTitle || section.topic}
+                    </p>
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
+                      Poem
+                    </span>
+                  </div>
+                  {(() => {
+                    const rawBlocks = section.passageText
+                      .split(/\n\s*\n/)
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+
+                    let stanzas = rawBlocks;
+                    let authorAttribution = "";
+
+                    if (
+                      rawBlocks.length > 1 &&
+                      (rawBlocks[0].toLowerCase().includes("by ") ||
+                        rawBlocks[0].toLowerCase().includes("from ") ||
+                        rawBlocks[0].toLowerCase().includes((section.passageTitle || "").toLowerCase()))
+                    ) {
+                      authorAttribution = rawBlocks[0].replace(new RegExp(`^${section.passageTitle || ""}\\s*`, "i"), "").trim();
+                      stanzas = rawBlocks.slice(1);
+                    }
+
+                    if (stanzas.length >= 2) {
+                      const col1 = stanzas.slice(0, 2).join("\n\n");
+                      const col2 = stanzas.slice(2).join("\n\n");
+                      return (
+                        <div>
+                          {authorAttribution && (
+                            <p className="text-[9.5px] italic text-gray-600 mb-1 pl-3 font-serif">
+                              {authorAttribution}
+                            </p>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-6 text-[10.5px] leading-snug font-serif italic pl-3 border-l-2 border-gray-400 py-1 text-black">
+                            <div className="whitespace-pre-line">{col1}</div>
+                            <div className="whitespace-pre-line">{col2}</div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        className="text-[10.5px] leading-snug font-serif italic pl-3 border-l-2 border-gray-400 py-1 whitespace-pre-line text-black"
+                        style={{ columns: 2, columnGap: "1.5rem" }}
+                      >
+                        {section.passageText}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Part II: 2 Justified Columns Article */}
+              {section.referenceType === "article" && section.passageText && (
+                <div
+                  className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                  style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
+                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
+                      Reading Selection: {section.passageTitle || section.topic}
+                    </p>
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
+                      Article
+                    </span>
+                  </div>
+                  <div
+                    className="text-[10px] leading-tight text-gray-800 font-serif whitespace-pre-line text-justify"
+                    style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
+                  >
+                    {section.passageText}
+                  </div>
+                </div>
+              )}
+
+              {/* Part III: 2 Justified Columns Advisory */}
+              {section.referenceType === "advisory" && section.passageText && (
+                <div
+                  className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                  style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
+                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
+                      Reading Selection: {section.passageTitle || section.topic}
+                    </p>
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
+                      Advisory
+                    </span>
+                  </div>
+                  <div
+                    className="text-[10px] leading-tight text-gray-800 font-sans whitespace-pre-line text-justify"
+                    style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
+                  >
+                    {section.passageText}
+                  </div>
+                </div>
+              )}
+
+              {/* Part IV: Side-by-Side Infographic & Bullet Points */}
+              {section.referenceType === "infographic" && (
+                <div
+                  className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                  style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                >
+                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1.5">
+                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
+                      Reading Selection: {section.passageTitle || section.topic}
+                    </p>
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
+                      Infographic
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-12 gap-3 items-center">
+                    {section.passageImage && (
+                      <div className="col-span-5 flex flex-col items-center justify-center text-center">
+                        <img
+                          src={section.passageImage}
+                          alt={section.passageTitle || "Infographic Reference"}
+                          className="max-h-[160px] w-auto object-contain rounded border border-gray-300"
+                          style={{
+                            printColorAdjust: "exact",
+                            WebkitPrintColorAdjust: "exact",
+                          }}
+                        />
+                        <p className="mt-0.5 text-[8.5px] text-gray-500 italic">
+                          Reference: DENR-EMB Official Infographic
+                        </p>
+                      </div>
+                    )}
+                    {section.passageText && (
+                      <div
+                        className={
+                          section.passageImage
+                            ? "col-span-7 text-[10px] leading-snug text-gray-800 whitespace-pre-line"
+                            : "col-span-12 text-[10px] leading-snug text-gray-800 whitespace-pre-line"
+                        }
+                      >
+                        {section.passageText}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Fallback for other reference materials */}
+              {!["poem", "article", "advisory", "infographic"].includes(section.referenceType || "") &&
+                (section.passageImage || section.passageText) && (
+                  <div
+                    className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                    style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                  >
+                    <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
+                      <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
+                        Reading Selection: {section.passageTitle || section.topic}
+                      </p>
+                    </div>
+                    {section.passageImage && (
+                      <div className="mb-2 text-center">
+                        <img
+                          src={section.passageImage}
+                          alt={section.passageTitle || "Reference"}
+                          className="max-h-[160px] w-auto mx-auto object-contain rounded border border-gray-300"
+                        />
+                      </div>
+                    )}
+                    {section.passageText && (
+                      <div
+                        className="text-[10px] leading-tight text-gray-800 font-serif whitespace-pre-line text-justify"
+                        style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
+                      >
+                        {section.passageText}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {/* Section Questions: Compact 10.5px font, tight line-height, mb-1.5 */}
+              <div className="pl-0.5">
+                {sectionQuestions.map((q) => (
+                  <div
+                    key={q.number}
+                    className="question-item break-inside-avoid mb-1.5"
+                    style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                  >
+                    <p className="font-medium text-black leading-tight text-[10.5px]">
+                      <span className="font-bold mr-1">{q.number}.</span>
+                      {q.prompt}
+                    </p>
+                    {q.mode === "written" ? (
+                      <div className="mt-1 border-b border-black pl-6" style={{ width: "60%" }} />
+                    ) : (
+                      <div
+                        className="mt-0.5 grid grid-cols-2 gap-x-4 gap-y-0.5 pl-3 text-[10.5px] leading-tight"
+                        style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                      >
+                        {q.choices.map((c, i) => (
+                          <div key={i} className="flex items-baseline gap-1">
+                            <span className="font-bold">{PrintAry[i]}.</span>
+                            <span>{c}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ━━━ MODAL: VIEW & REPRINT QUESTIONNAIRE FROM EXAM LIBRARY ━━━ */
 function ExamViewerModal({
   examKey,
@@ -1903,6 +2378,7 @@ function ExamViewerModal({
   const [currentKey, setCurrentKey] = useState<AnswerKeyRow>(examKey);
   const [showOnlineModal, setShowOnlineModal] = useState(false);
   const [printThis, setPrintThis] = useState<"questionnaire" | null>(null);
+  const [selectedEnlargedImage, setSelectedEnlargedImage] = useState<string | null>(null);
   const activeBubbleSheet = getSubjectBubbleSheet(currentKey.subject || "Reading");
 
   useEffect(() => {
@@ -1943,7 +2419,7 @@ function ExamViewerModal({
         };
       });
 
-  const viewerDoc: GeneratedDoc = {
+  const viewerDoc: GeneratedDoc = sanitizeDoc({
     title: currentKey.title,
     assessmentType: currentKey.assessmentType || resolveAssessmentScopeType(currentKey.assessmentCategory, currentKey.title),
     subject: currentKey.subject || "Reading",
@@ -1958,14 +2434,20 @@ function ExamViewerModal({
     ),
     passageTitle: currentKey.passageTitle,
     passageText: currentKey.passageText,
+    passageImage: currentKey.passageImage,
+    sections: currentKey.sections,
     answerKey: {
       id: currentKey.id,
       title: currentKey.title,
       subject: currentKey.subject,
       items: currentKey.items,
+      sections: currentKey.sections,
+      passageImage: currentKey.passageImage,
       isOnline: currentKey.isOnline,
     },
-  };
+  });
+
+  const sectionsList = viewerDoc.sections && viewerDoc.sections.length > 0 ? viewerDoc.sections : (currentKey.sections && currentKey.sections.length > 0 ? currentKey.sections : null);
 
   return (
     <>
@@ -2054,18 +2536,6 @@ function ExamViewerModal({
 
           {/* Modal Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {/* Reading Selection if available */}
-            {currentKey.passageText && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                  📖 Reading Selection: {currentKey.passageTitle || "Passage"}
-                </p>
-                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-700">
-                  {currentKey.passageText}
-                </p>
-              </div>
-            )}
-
             {!hasFullQuestions && (
               <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs text-blue-900 flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
@@ -2078,53 +2548,175 @@ function ExamViewerModal({
               </div>
             )}
 
-            {/* Questions list */}
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-              {questionsList.map((q, idx) => {
-                const keyVal = q.correctAnswer || (currentKey.answers && currentKey.answers[(q.number || idx + 1) - 1]) || "";
-                return (
-                  <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
-                      {q.number}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
-                      {q.mode === "written" ? (
-                        <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
-                          Teacher graded
-                        </div>
-                      ) : (
-                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-                          {(q.choices || []).map((c, i) => (
-                            <span key={i} className="text-xs text-slate-600">
-                              <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
-                              {c}
+            {/* If section-level materials are present */}
+            {sectionsList ? (
+              <div className="space-y-6">
+                {sectionsList.map((sec, sIdx) => {
+                  const secQuestions = questionsList.filter(
+                    (q) => (q.number || 0) >= sec.startItem && (q.number || 0) <= sec.endItem
+                  );
+                  return (
+                    <div key={sIdx} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                      {/* Section Header */}
+                      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wide text-slate-900">
+                            {sec.title && sec.title.startsWith("PART ")
+                              ? sec.title
+                              : `PART ${sec.partNumber}: ${sec.passageTitle || sec.topic} (${sec.itemRange})`}
+                          </h4>
+                          {sec.referenceType && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                              {sec.referenceType}
                             </span>
-                          ))}
+                          )}
+                        </div>
+                        {sec.instructions && (
+                          <p className="mt-1 text-xs italic font-medium text-slate-600">
+                            {sec.instructions}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Reference Material (Poem, Article, Advisory, or Infographic) */}
+                      {(sec.passageText || sec.passageImage) && (
+                        <div className="p-4 border-b border-slate-100 bg-gradient-to-br from-slate-50/50 to-white text-xs leading-relaxed text-slate-800">
+                          {sec.passageImage && (
+                            <div className="mb-3 flex flex-col items-center">
+                              <img
+                                src={sec.passageImage}
+                                alt={sec.passageTitle || "Infographic Reference"}
+                                className="max-h-64 w-auto object-contain rounded-lg border border-slate-200 shadow-xs cursor-pointer hover:opacity-95"
+                                onClick={() => setSelectedEnlargedImage(sec.passageImage!)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setSelectedEnlargedImage(sec.passageImage!)}
+                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-800 hover:text-red-900 bg-red-50 px-2.5 py-1 rounded-md border border-red-200 cursor-pointer"
+                              >
+                                <ZoomIn className="h-3.5 w-3.5" />
+                                <span>Click to Enlarge / View Fullscreen</span>
+                              </button>
+                            </div>
+                          )}
+                          {sec.passageText && (
+                            <div
+                              className={`whitespace-pre-line select-text p-3 rounded-lg border ${
+                                sec.referenceType === "poem"
+                                  ? "font-serif italic text-[12.5px] leading-relaxed bg-amber-50/40 text-slate-900 border-amber-200/70 pl-5 border-l-4"
+                                  : sec.referenceType === "advisory"
+                                  ? "font-sans text-[12px] leading-relaxed bg-blue-50/40 text-slate-900 border-blue-200/60"
+                                  : "font-serif text-[12px] leading-relaxed bg-white/70 text-slate-800 border-slate-200/60"
+                              }`}
+                            >
+                              {sec.passageText}
+                            </div>
+                          )}
                         </div>
                       )}
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {q.competencyCode && (
-                          <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                            {q.competencyCode}
-                          </span>
-                        )}
-                        {q.difficulty && (
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
-                            {q.difficulty}
+
+                      {/* Questions under this section */}
+                      <div className="divide-y divide-slate-100">
+                        {secQuestions.map((q, idx) => {
+                          const keyVal = q.correctAnswer || (currentKey.answers && currentKey.answers[(q.number || idx + 1) - 1]) || "";
+                          return (
+                            <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
+                                {q.number}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
+                                {q.mode === "written" ? (
+                                  <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
+                                    Teacher graded
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                                    {(q.choices || []).map((c, i) => (
+                                      <span key={i} className="text-xs text-slate-600">
+                                        <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
+                                        {c}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {keyVal && (
+                                <span className="flex shrink-0 items-center justify-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                                  Key: {keyVal}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <>
+                {/* Fallback Reading Selection if available */}
+                {currentKey.passageText && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                      📖 Reading Selection: {currentKey.passageTitle || "Passage"}
+                    </p>
+                    <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-700 font-serif">
+                      {currentKey.passageText}
+                    </p>
+                  </div>
+                )}
+
+                {/* Questions list */}
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                  {questionsList.map((q, idx) => {
+                    const keyVal = q.correctAnswer || (currentKey.answers && currentKey.answers[(q.number || idx + 1) - 1]) || "";
+                    return (
+                      <div key={q.number} className="flex items-start gap-4 p-4 hover:bg-slate-50/50 transition-colors">
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-900 border border-red-200">
+                          {q.number}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
+                          {q.mode === "written" ? (
+                            <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
+                              Teacher graded
+                            </div>
+                          ) : (
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                              {(q.choices || []).map((c, i) => (
+                                <span key={i} className="text-xs text-slate-600">
+                                  <span className="mr-1.5 font-bold text-slate-700">{PrintAry[i]}.</span>
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {q.competencyCode && (
+                              <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                                {q.competencyCode}
+                              </span>
+                            )}
+                            {q.difficulty && (
+                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                                {q.difficulty}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {keyVal && (
+                          <span className="flex shrink-0 items-center justify-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                            Key: {keyVal}
                           </span>
                         )}
                       </div>
-                    </div>
-                    {keyVal && (
-                      <span className="flex shrink-0 items-center justify-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
-                        Key: {keyVal}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -2144,104 +2736,71 @@ function ExamViewerModal({
       {printThis && (
         <>
           <style>{`
-            @media print { body * { visibility: hidden; }
-            .print-exam-modal-overlay, .print-exam-modal-overlay * { visibility: visible; }
-            .print-exam-modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; width: 100%; overflow: visible !important; }
-            @page { size: portrait; margin: 0.8cm; } }
+            @media print {
+              body * { visibility: hidden; }
+              .print-exam-modal-overlay, .print-exam-modal-overlay * { visibility: visible; }
+              .print-exam-modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+              @page { size: portrait; margin: 0.8cm; }
+              .print-cover-page { page-break-after: always !important; break-after: page !important; }
+              .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
+              .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+            }
           `}</style>
           <div className="print-exam-modal-overlay fixed inset-0 z-[999] overflow-auto bg-white p-8 text-black">
             {printThis === "questionnaire" && (
-              <>
-                <div className="mb-6 border-b-2 border-black pb-3 text-center">
-                  <h1 className="text-lg font-bold uppercase">AralSync — Official Assessment</h1>
-                  <p className="text-sm font-semibold">{currentKey.title}</p>
-                  <p className="text-xs text-gray-700">Subject: {currentKey.subject} • Items: {currentKey.items}</p>
-                </div>
-                <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  <div className="flex gap-2"><span className="font-semibold">Name:</span><span className="flex-1 border-b border-gray-400" /></div>
-                  <div className="flex gap-2"><span className="font-semibold">LRN:</span><span className="flex-1 border-b border-gray-400" /></div>
-                  <div className="flex gap-2"><span className="font-semibold">Grade &amp; Section:</span><span className="flex-1 border-b border-gray-400" /></div>
-                  <div className="flex gap-2"><span className="font-semibold">Date:</span><span className="flex-1 border-b border-gray-400" /></div>
-                </div>
-                {currentKey.passageText && (
-                  <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
-                    <p className="font-bold uppercase tracking-wider text-black mb-1">
-                      Reading Selection: {currentKey.passageTitle || "Passage"}
-                    </p>
-                    <div className="whitespace-pre-line text-gray-800">
-                      {currentKey.passageText}
-                    </div>
-                  </div>
-                )}
-                <div className="text-sm space-y-3">
-                  {questionsList.map((q) => (
-                    <div key={q.number} className="mb-3">
-                      <p className="font-semibold">{q.number}. {q.prompt}</p>
-                      {q.mode === "written" ? (
-                        <div className="mt-2 border-b border-black w-64" />
-                      ) : (
-                        <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-0.5 pl-6">
-                          {(q.choices || []).map((c, i) => (
-                            <p key={i}>{PrintAry[i]}. {c}</p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </>
+              <QuestionnairePrint doc={viewerDoc} />
             )}
           </div>
         </>
       )}
+
+      {/* Fullscreen Infographic Image Modal */}
+      {selectedEnlargedImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs"
+          onClick={() => setSelectedEnlargedImage(null)}
+        >
+          <div
+            className="relative flex flex-col max-w-4xl max-h-[92vh] w-full rounded-2xl bg-white p-4 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <FileImage className="h-5 w-5 text-red-800" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Infographic Visual Reference — Fullscreen
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEnlargedImage(null)}
+                className="rounded-lg p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center p-2 bg-slate-50 rounded-xl">
+              <img
+                src={selectedEnlargedImage}
+                alt="Enlarged Reference"
+                className="max-h-[76vh] w-auto object-contain rounded-lg shadow-md"
+              />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+              <span>Official Reference: DENR-EMB Region 1 Solid Waste Management</span>
+              <button
+                type="button"
+                onClick={() => setSelectedEnlargedImage(null)}
+                className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
-}
-
-/* ━━━ TAB 4: GENERATE QUESTIONNAIRE ━━━ */
-interface GeneratedQuestion {
-  number: number;
-  prompt: string;
-  choices: string[];
-  mode: "mc" | "written";
-  difficulty: string;
-  competencyCode: string;
-  competency: string;
-  topic: string;
-  correctAnswer?: string;
-}
-
-interface GeneratedDoc {
-  title: string;
-  assessmentType?: AssessmentType;
-  assessmentCategory?: AssessmentType;
-  subject: string;
-  topic?: string;
-  topics?: string[];
-  gradeLevel: number;
-  itemCount: number;
-  passageTitle?: string;
-  passageText?: string;
-  writtenCount: number;
-  questions: GeneratedQuestion[];
-  sections?: QuestionnaireSection[];
-  answers: string[];
-  answerKey: {
-    id: string;
-    title: string;
-    assessmentType?: AssessmentType;
-    assessmentCategory?: AssessmentType;
-    subject: string;
-    topic?: string;
-    topics?: string[];
-    items: number;
-    sections?: QuestionnaireSection[];
-    isOnline?: boolean;
-    timeLimitMinutes?: number;
-    dueDate?: string | Date | null;
-    targetGrade?: number | null;
-    targetSection?: string | null;
-  };
 }
 
 interface PassageOption {
@@ -2250,8 +2809,6 @@ interface PassageOption {
   gradeLevel: number | null;
   questionCount: number;
 }
-
-const PrintAry = ["A", "B", "C", "D"];
 
 function sanitizeDoc(d: any): GeneratedDoc {
   if (!d) return d;
@@ -2267,11 +2824,52 @@ function sanitizeDoc(d: any): GeneratedDoc {
     assessmentType: d.assessmentType,
   });
 
+  // If the document already comes with pre-structured sections (e.g. from Reading Generator with reading passages & infographics),
+  // preserve them and their reference materials:
+  const hasPrestructuredSections =
+    Array.isArray(d.sections) &&
+    d.sections.length > 0 &&
+    d.sections.some((s: any) => s.passageText || s.passageImage || s.passageTitle);
+
+  const isFilipinoReading =
+    subject === "Filipino" || Boolean(d.title && /filipino|sipi|pangkatang/i.test(d.title));
+
+  const is4PartReadingDoc =
+    rawQuestions.length === 40 &&
+    (subject.toLowerCase().includes("read") ||
+      isFilipinoReading ||
+      (d.title && /phil-?iri|reading|gst/i.test(d.title)));
+
+  let finalSections = hasPrestructuredSections ? d.sections : sections;
+  if (is4PartReadingDoc && (!finalSections || finalSections.length <= 1)) {
+    finalSections = isFilipinoReading
+      ? buildPhilIriFilipinoSections(d.gradeLevel || (d as any).grade || 7)
+      : buildPhilIriSections(d.gradeLevel || (d as any).grade || 7);
+  }
+
+  const finalQuestions = hasPrestructuredSections || is4PartReadingDoc
+    ? rawQuestions.map((q: any, idx: number) => {
+        const num = q.number || idx + 1;
+        let partNum = q.partNumber;
+        if (is4PartReadingDoc && !partNum) {
+          if (idx < 10) partNum = "I";
+          else if (idx < 20) partNum = "II";
+          else if (idx < 30) partNum = "III";
+          else partNum = "IV";
+        }
+        return {
+          ...q,
+          number: num,
+          ...(partNum ? { partNumber: partNum } : {}),
+        };
+      })
+    : orderedQuestions;
+
   return {
     ...d,
-    questions: orderedQuestions,
-    sections,
-    answers: orderedQuestions.map((q: any, i: number) => {
+    questions: finalQuestions,
+    sections: finalSections,
+    answers: finalQuestions.map((q: any, i: number) => {
       const a = q.correctAnswer || q.correctKey || q.letter || d.answers?.[i] || d.answerLetters?.[i];
       return typeof a === "string" ? a.toUpperCase().trim().slice(0, 1) : "A";
     }),
@@ -2282,7 +2880,7 @@ type GenType = "aral" | "extract" | "upload";
 type AralMethod = "bank" | "extract";
 
 function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: string }) {
-  const [assessmentType, setAssessmentType] = useState<AssessmentType>("quiz");
+  const [assessmentType, setAssessmentType] = useState<AssessmentType>("pre-test");
   const [assignedSubject, setAssignedSubject] = useState(
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
@@ -2292,12 +2890,24 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     assignedSubjectProp && assignedSubjectProp !== "All" ? assignedSubjectProp : "Reading"
   );
   const [grade, setGrade] = useState(7);
-  const [count, setCount] = useState(10);
+  const [count, setCount] = useState(40);
   const [writtenCount, setWrittenCount] = useState(0);
   const [topic, setTopic] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
   const [usedTopics, setUsedTopics] = useState<string[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [scannedCoverage, setScannedCoverage] = useState<
+    Array<{
+      id: string;
+      letter?: string;
+      name: string;
+      topic: string;
+      type: string;
+      count: number;
+      author?: string;
+    }>
+  >([]);
+  const [selectedCoverage, setSelectedCoverage] = useState<string[]>([]);
   const [allowRetake, setAllowRetake] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(true);
   const [aralMaterialId, setAralMaterialId] = useState("");
@@ -2334,6 +2944,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null);
   const [editingInstructionText, setEditingInstructionText] = useState("");
+  const [selectedEnlargedImage, setSelectedEnlargedImage] = useState<string | null>(null);
+  const [selectedReadingSelection, setSelectedReadingSelection] = useState<string>("all");
 
   const activeBubbleSheet = getSubjectBubbleSheet(
     doc?.subject || (subject === "All" ? "Reading" : subject)
@@ -2364,6 +2976,91 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       return matchSubj && matchGrade;
     });
   }, [learningMaterials, subject, grade]);
+
+  const selectedMaterial = useMemo(() => {
+    return availableMaterials.find((m: any) => (m._id || m.id) === aralMaterialId) || null;
+  }, [availableMaterials, aralMaterialId]);
+
+  const isReadingOrPhilIri = useMemo(() => {
+    const isReadingSubj = subject === "Reading" || subject === "Filipino" || subject === "English" || subject === "All";
+    const matTitle = selectedMaterial?.title || "";
+    return isReadingSubj || /phil[-_]?iri|reading|gst/i.test(matTitle);
+  }, [subject, selectedMaterial]);
+
+  const philIriSelectionOptions = useMemo(() => {
+    const isFil = subject === "Filipino";
+    const g = grade >= 7 && grade <= 10 ? grade : 7;
+    if (isFil) {
+      const filTitlesByGrade: Record<number, { A: string; B: string; C: string; D: string }> = {
+        7: {
+          A: "Isandaang Piso (Kuwento)",
+          B: "Gen Z at Millennials vs. Kulturang Pilipino (Artikulo)",
+          C: "Fiesta Filipinas (Pagsusuri ng Palabas)",
+          D: "Wikang Filipino (Infographic)",
+        },
+        8: {
+          A: "Foul (Kuwento)",
+          B: "Pistang Bol-anon (Artikulo)",
+          C: "Casa San Miguel: Pugad ng mga Manlilikha (Artikulo)",
+          D: "DOH Pneumonia (Infographic)",
+        },
+        9: {
+          A: "ES-TUD-YAN-TE (Dagli)",
+          B: "Echoserang Palaka! (Tula)",
+          C: "Ink-clusive: Karapatan sa Karunungan ng May Kapansanan (Artikulo)",
+          D: "Emergency Supply Kit (Infographic)",
+        },
+        10: {
+          A: "Abal-abal (Sanaysay)",
+          B: "Mapa at Direksiyon ng Paglikas (Dayagram)",
+          C: "'Di Ako Maglalabas (Dagli)",
+          D: "Big C, Noon at Ngayon (Infographic)",
+        },
+      };
+      const t = filTitlesByGrade[g] || filTitlesByGrade[7];
+      return [
+        { value: "all", label: `Buong Pangkatang Pagtatasa (40 Aytem / Lahat ng 4 na Sipi - Baitang ${g})` },
+        { value: "A", label: `Sipi A: ${t.A} (Mga Bilang 1–10)` },
+        { value: "B", label: `Sipi B: ${t.B} (Mga Bilang 11–20)` },
+        { value: "C", label: `Sipi C: ${t.C} (Mga Bilang 21–30)` },
+        { value: "D", label: `Sipi D: ${t.D} (Mga Bilang 31–40)` },
+      ];
+    }
+    const titlesByGrade: Record<number, { A: string; B: string; C: string; D: string }> = {
+      7: {
+        A: "What Little Things! (Poem)",
+        B: "Plant Intelligence (Article)",
+        C: "Get to Know PAGASA's Rainfall Warnings (Advisory)",
+        D: "Solid Waste Management (Infographic)",
+      },
+      8: {
+        A: "Africa's Plea (Poem)",
+        B: "Dinagsa Festival (Article)",
+        C: "The Negro Speaks of Rivers (Poem)",
+        D: "Deforestation (Infographic)",
+      },
+      9: {
+        A: "The Road Not Taken (Poem)",
+        B: "Depression: How Serious Can It Get? (Article)",
+        C: "Tsunamis (Article)",
+        D: "Brain Aneurysms (Infographic)",
+      },
+      10: {
+        A: "Still I Rise (Poem)",
+        B: "Mental Health, Too (Article)",
+        C: "Arachne (Greek Myth)",
+        D: "Transforming Philippine Agriculture (Infographic)",
+      },
+    };
+    const t = titlesByGrade[g] || titlesByGrade[7];
+    return [
+      { value: "all", label: `Full Group Screening Test (40 Items / All 4 Selections - Grade ${g})` },
+      { value: "A", label: `Selection A: ${t.A} (Items 1–10)` },
+      { value: "B", label: `Selection B: ${t.B} (Items 11–20)` },
+      { value: "C", label: `Selection C: ${t.C} (Items 21–30)` },
+      { value: "D", label: `Selection D: ${t.D} (Items 31–40)` },
+    ];
+  }, [grade, subject]);
 
   useEffect(() => {
     (async () => {
@@ -2409,19 +3106,36 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     }
   }, [assignedSubjectProp]);
 
-  // Load official ARAL curriculum topics and used-topics state for this teacher
+  // Load official ARAL curriculum topics, scanned coverage, and used-topics state for this teacher
   useEffect(() => {
     (async () => {
       setLoadingTopics(true);
       try {
         const querySubj = subject && subject !== "All" ? `?subject=${encodeURIComponent(subject)}` : "";
-        const res = await fetch(`/api/teacher/questionnaire/topics${querySubj}`);
+        const queryGrade = grade ? `&grade=${grade}` : "";
+        const queryMat = aralMaterialId ? `&materialId=${encodeURIComponent(aralMaterialId)}` : "";
+        const res = await fetch(`/api/teacher/questionnaire/topics${querySubj}${queryGrade}${queryMat}`);
         const json = await parseJsonResponse(res);
         if (json.success) {
           const list: string[] = json.topics || [];
           const used: string[] = json.usedTopics || [];
+          const cov: any[] = Array.isArray(json.coverageItems) ? json.coverageItems : [];
           setTopics(list);
           setUsedTopics(used);
+          setScannedCoverage(cov);
+
+          // By default, select all scanned coverage items
+          const allCoverageTopics = cov.map((c: any) => c.topic || c.name);
+          setSelectedCoverage(allCoverageTopics);
+
+          // Recalculate default count
+          if (subject === "Reading" || isReadingOrPhilIri) {
+            setCount(subject === "Reading" ? 40 : 20);
+          } else {
+            const totalItems = cov.reduce((sum, c) => sum + (c.count || 10), 0);
+            setCount(Math.min(50, Math.max(10, totalItems || 20)));
+          }
+
           if (json.assignedSubject) {
             setAssignedSubject(json.assignedSubject);
             if (json.assignedSubject !== "All" && subject !== json.assignedSubject) {
@@ -2442,7 +3156,40 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
         setLoadingTopics(false);
       }
     })();
-  }, [subject]);
+  }, [subject, grade, aralMaterialId, assessmentType, isReadingOrPhilIri]);
+
+  const toggleCoverage = (itemTopic: string) => {
+    setSelectedCoverage((prev) => {
+      const next = prev.includes(itemTopic)
+        ? prev.filter((t) => t !== itemTopic)
+        : [...prev, itemTopic];
+      if (isReadingOrPhilIri) {
+        setCount(next.length * 10);
+      } else {
+        const totalItems = scannedCoverage
+          .filter((c) => next.includes(c.topic || c.name))
+          .reduce((sum, c) => sum + (c.count || 10), 0);
+        setCount(Math.min(50, Math.max(0, totalItems)));
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllCoverage = () => {
+    const allTopics = scannedCoverage.map((c) => c.topic || c.name);
+    setSelectedCoverage(allTopics);
+    if (isReadingOrPhilIri) {
+      setCount(allTopics.length * 10);
+    } else {
+      const totalItems = scannedCoverage.reduce((sum, c) => sum + (c.count || 10), 0);
+      setCount(Math.min(50, Math.max(10, totalItems)));
+    }
+  };
+
+  const handleClearAllCoverage = () => {
+    setSelectedCoverage([]);
+    setCount(0);
+  };
 
   const toggleTopic = (t: string) => {
     setSelectedTopics((prev) => {
@@ -2458,14 +3205,14 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
   const switchAssessmentType = (type: AssessmentType) => {
     setAssessmentType(type);
-    if (type === "quiz") {
+    if (type === "pre-test" || type === "post-test") {
+      if (count < 10 || count === 20) setCount(subject === "Reading" ? 40 : 20);
+    } else if (type === "quiz") {
       if (count > 20) setCount(10);
       if (selectedTopics.length === 0 && topics.length > 0) {
         const firstUnused = topics.find((t) => !usedTopics.includes(t)) || topics[0];
         setSelectedTopics([firstUnused]);
       }
-    } else if (type === "pre-test" || type === "post-test") {
-      if (count < 10) setCount(20);
     } else {
       if (count < 25) setCount(50);
     }
@@ -2659,6 +3406,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           topics: doc.topics || (doc.topic ? [doc.topic] : []),
           items: mappedItems,
           answerKeyId: doc.answerKey?.id,
+          sections: doc.sections || [],
+          passageTitle: doc.passageTitle || "",
+          passageText: doc.passageText || "",
+          passageImage: doc.passageImage || "",
         }),
       });
 
@@ -2711,6 +3462,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     try {
       if (genType === "aral") {
         if (aralMethod === "bank") {
+          if (scannedCoverage.length > 0 && selectedCoverage.length === 0) {
+            setGenError("Select at least 1 reading selection or competency for this assessment.");
+            setGenerating(false);
+            return;
+          }
           if (assessmentType === "quiz") {
             if (selectedTopics.length === 0) {
               setGenError("Select 1 or 2 topics for your weekly quiz.");
@@ -2737,6 +3493,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             ? "/api/teacher/questionnaire/generate"
             : "/api/teacher/questionnaire/generate-reading";
 
+          const effectiveTopics = selectedCoverage.length > 0 ? selectedCoverage : (assessmentType === "quiz" ? selectedTopics : topics);
+
           const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2750,21 +3508,26 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     count,
                     writtenCount,
                     assessmentType,
-                    topics: assessmentType === "quiz" ? selectedTopics : topics,
-                    topic: selectedTopics[0] || "",
+                    topics: effectiveTopics,
+                    topic: effectiveTopics[0] || selectedTopics[0] || "",
                     materialId: aralMaterialId || undefined,
                   }
                 : {
                     title: customTitle.trim() || undefined,
+                    subject: subject === "Filipino" ? "Filipino" : (subject === "English" ? "English" : "Reading"),
                     grade,
                     gradeLevel: grade,
                     assessmentType,
-                    topics: assessmentType === "quiz" ? selectedTopics : topics,
-                    topic: selectedTopics[0] || "",
+                    topics: effectiveTopics,
+                    topic: effectiveTopics[0] || selectedTopics[0] || "",
                     count,
                     writtenCount,
                     allowRetake,
                     materialId: aralMaterialId || undefined,
+                    selectionLetter: selectedReadingSelection !== "all" ? selectedReadingSelection : undefined,
+                    sessionName: selectedReadingSelection !== "all"
+                      ? philIriSelectionOptions.find((o) => o.value === selectedReadingSelection)?.label
+                      : undefined,
                   }
             ),
           });
@@ -2989,170 +3752,202 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 {/* Method Specific Controls: Bank */}
                 {aralMethod === "bank" && (
                   <>
-                    {/* Assessment Scope Switcher (Chronological: Pre-Test -> Weekly Quiz -> Periodical Exam -> Post-Test) */}
+                    {/* Material Section / Reading Selection (for Reading / Phil-IRI) */}
+                    {isReadingOrPhilIri && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Reading Selection / Material Section
+                          </label>
+                          <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[10px] font-bold text-red-800">
+                            Phil-IRI Stage 1
+                          </span>
+                        </div>
+                        <select
+                          value={selectedReadingSelection}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedReadingSelection(val);
+                            if (val !== "all") {
+                              setCount(10);
+                            } else {
+                              if (assessmentType === "pre-test" || assessmentType === "post-test" || assessmentType === "exam") {
+                                setCount(40);
+                              }
+                            }
+                          }}
+                          className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                        >
+                          {philIriSelectionOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          {selectedReadingSelection === "all"
+                            ? `Full group screening test covering all 4 selections for Grade ${grade} (40 Items).`
+                            : `Individual selection for targeted formative check or weekly quiz (10 Items).`}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Assessment Scope Switcher (Pre-Test & Post-Test Only) */}
                     <div>
                       <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
                         Assessment Scope
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
-                        {/* 1. Pre-Test (Baseline Diagnostic at start) */}
+                      <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
+                        {/* 1. Pre-Test (Baseline Entry Diagnostic) */}
                         <button
                           type="button"
                           onClick={() => switchAssessmentType("pre-test")}
-                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                          className={`h-9 flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all ${
                             assessmentType === "pre-test"
                               ? "bg-amber-600 text-white shadow-xs"
                               : "text-slate-600 hover:text-slate-900"
                           }`}
                         >
-                          <FileCheck2 className="h-3.5 w-3.5" />
-                          <span>Pre-Test</span>
+                          <FileCheck2 className="h-4 w-4" />
+                          <span>Pre-Test (Baseline Diagnostic)</span>
                         </button>
 
-                        {/* 2. Weekly Quiz (Formative ongoing checks) */}
-                        <button
-                          type="button"
-                          onClick={() => switchAssessmentType("quiz")}
-                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                            assessmentType === "quiz"
-                              ? "bg-red-800 text-white shadow-xs"
-                              : "text-slate-600 hover:text-slate-900"
-                          }`}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          <span>Weekly Quiz</span>
-                        </button>
-
-                        {/* 3. Periodical Exam (Quarterly milestone examination) */}
-                        <button
-                          type="button"
-                          onClick={() => switchAssessmentType("exam")}
-                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
-                            assessmentType === "exam"
-                              ? "bg-purple-700 text-white shadow-xs"
-                              : "text-slate-600 hover:text-slate-900"
-                          }`}
-                        >
-                          <Award className="h-3.5 w-3.5" />
-                          <span>Periodical Exam</span>
-                        </button>
-
-                        {/* 4. Post-Test (Culminating summative evaluation at end) */}
+                        {/* 2. Post-Test (Endline Learning Recovery & Growth Evaluation) */}
                         <button
                           type="button"
                           onClick={() => switchAssessmentType("post-test")}
-                          className={`h-8.5 flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all ${
+                          className={`h-9 flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all ${
                             assessmentType === "post-test"
                               ? "bg-emerald-600 text-white shadow-xs"
                               : "text-slate-600 hover:text-slate-900"
                           }`}
                         >
-                          <TrendingUp className="h-3.5 w-3.5" />
-                          <span>Post-Test</span>
+                          <TrendingUp className="h-4 w-4" />
+                          <span>Post-Test (Growth Evaluation)</span>
                         </button>
                       </div>
                     </div>
 
-                    {/* Quiz Mode: 1-2 Topics Selector */}
-                    {assessmentType === "quiz" ? (
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Competencies (Choose 1 or 2)
-                          </label>
-                          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                            {selectedTopics.length}/2 Selected
+                    {/* Interactive Scanned Material Coverage Checklist */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5 text-xs text-slate-800">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                          {assessmentType === "pre-test" ? (
+                            <>
+                              <FileCheck2 className="h-4 w-4 text-amber-600" />
+                              <span>Diagnostic Pre-Test Coverage</span>
+                            </>
+                          ) : (
+                            <>
+                              <TrendingUp className="h-4 w-4 text-emerald-600" />
+                              <span>Learning Recovery Post-Test Coverage</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllCoverage}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearAllCoverage}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                          >
+                            Clear All
+                          </button>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                              assessmentType === "pre-test"
+                                ? "bg-amber-50 border-amber-200 text-amber-700"
+                                : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                            }`}
+                          >
+                            {selectedCoverage.length} of {scannedCoverage.length} Selected
                           </span>
                         </div>
+                      </div>
 
-                        <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 p-1.5 scrollbar-thin scrollbar-thumb-slate-200">
-                          {topics.map((t) => {
-                            const isSelected = selectedTopics.includes(t);
-                            const isUsed = usedTopics.includes(t);
-                            const isMaxed = !isSelected && selectedTopics.length >= 2;
-                            const isDisabled = (isUsed && !allowRetake) || isMaxed;
+                      {loadingTopics ? (
+                        <div className="flex items-center justify-center py-4 text-slate-400 gap-2 text-xs">
+                          <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                          <span>Scanning material chapters and syllabus...</span>
+                        </div>
+                      ) : scannedCoverage.length === 0 ? (
+                        <div className="rounded-lg bg-white p-3 text-center text-xs text-slate-500 border border-slate-200">
+                          No reading selections or chapters scanned for this material and grade.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+                          {scannedCoverage.map((item) => {
+                            const itemKey = item.topic || item.name;
+                            const isChecked = selectedCoverage.includes(itemKey);
+                            const typeBadgeColor =
+                              item.type === "POEM"
+                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                : item.type === "ARTICLE"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : item.type === "ADVISORY"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : item.type === "INFOGRAPHIC"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-slate-100 text-slate-700 border-slate-200";
 
                             return (
                               <label
-                                key={t}
-                                className={`flex items-start gap-2 rounded-lg border p-1.5 text-xs transition-all cursor-pointer ${
-                                  isSelected
-                                    ? "border-red-300 bg-red-50 text-red-950 font-semibold"
-                                    : isDisabled
-                                    ? "border-slate-100 bg-white/60 text-slate-400 cursor-not-allowed opacity-60"
-                                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                                key={item.id || itemKey}
+                                className={`flex items-center justify-between gap-3 rounded-lg border p-2 text-xs cursor-pointer transition-all ${
+                                  isChecked
+                                    ? "border-amber-300 bg-white shadow-2xs"
+                                    : "border-slate-200 bg-white/60 text-slate-400 opacity-70 hover:opacity-100"
                                 }`}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  disabled={isDisabled}
-                                  onChange={() => toggleTopic(t)}
-                                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-red-800 focus:ring-red-800"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <span className="truncate block">{t}</span>
-                                  {isUsed && !allowRetake && (
-                                    <p className="text-[10px] text-amber-700 mt-0.5">Assessed (enable retake to re-use)</p>
-                                  )}
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleCoverage(itemKey)}
+                                    className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-600"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className={`block truncate font-medium ${isChecked ? "text-slate-900 font-semibold" : "text-slate-500"}`}>
+                                      {item.name}
+                                    </span>
+                                    {item.author && (
+                                      <span className="block text-[10px] text-slate-400 truncate">
+                                        By {item.author}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`rounded-md border px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider ${typeBadgeColor}`}>
+                                    {item.type}
+                                  </span>
+                                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                    {item.count} items
+                                  </span>
                                 </div>
                               </label>
                             );
                           })}
                         </div>
-                      </div>
-                    ) : (
-                      /* Exam / Pre-Test / Post-Test Mode: Whole Curriculum Display */
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs text-slate-800">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                            {assessmentType === "pre-test" ? (
-                              <>
-                                <FileCheck2 className="h-4 w-4 text-amber-600" />
-                                <span>Pre-Test Diagnostic Coverage</span>
-                              </>
-                            ) : assessmentType === "post-test" ? (
-                              <>
-                                <TrendingUp className="h-4 w-4 text-emerald-600" />
-                                <span>Post-Test Growth Assessment</span>
-                              </>
-                            ) : (
-                              <>
-                                <Award className="h-4 w-4 text-purple-600" />
-                                <span>Whole Curriculum Coverage</span>
-                              </>
-                            )}
-                          </div>
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                            assessmentType === "pre-test"
-                              ? "bg-amber-50 border-amber-200 text-amber-700"
-                              : assessmentType === "post-test"
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                              : "bg-purple-50 border-purple-200 text-purple-700"
-                          }`}>
-                            All {topics.length} Topics
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-                          {topics.map((t) => (
-                            <span
-                              key={t}
-                              className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700 shadow-2xs"
-                            >
-                              <Check className="h-3 w-3 text-emerald-600" />
-                              <span>{t}</span>
-                            </span>
-                          ))}
-                        </div>
-                        <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200">
+                      )}
+
+                      <div className="rounded-lg bg-white p-2 text-[10px] font-medium text-slate-600 border border-slate-200 flex items-center justify-between">
+                        <span>
                           {assessmentType === "pre-test"
-                            ? "Baseline diagnostic: questions sample across competencies to establish student entry level."
-                            : assessmentType === "post-test"
-                            ? "Endline evaluation: questions match diagnostic competencies to measure net learning recovery."
-                            : `Even distribution: ~${Math.floor(count / Math.max(1, topics.length))} items per topic for a ${count}-item balanced exam.`}
-                        </div>
+                            ? "Baseline Diagnostic: establishes entry comprehension across selected selections."
+                            : "Endline Growth Evaluation: measures learning recovery across diagnostic selections."}
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          Recommended Items: {count}
+                        </span>
                       </div>
-                    )}
+                    </div>
 
                     {/* Retake Checkbox for Quiz */}
                     {assessmentType === "quiz" && (
@@ -3216,12 +4011,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     {/* Session Directory Quick Pick (if present) */}
                     {(() => {
                       const selectedMat = availableMaterials.find((m: any) => (m._id || m.id) === aralMaterialId);
-                      const sessions = selectedMat?.sessionDirectory || [];
+                      const rawSessions = selectedMat?.sessionDirectory || [];
+                      const sessions = rawSessions.filter((s: any) => {
+                        const nameAndTopic = `${s.sessionName} ${s.topic || ""}`;
+                        if (nameAndTopic.match(/Grade\s*\d+/i)) {
+                          return nameAndTopic.includes(`Grade ${grade}`);
+                        }
+                        return true;
+                      });
                       if (sessions.length === 0) return null;
                       return (
                         <div>
                           <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Session Directory / Chapter (Quick Jump)
+                            Session Directory / Chapter (Grade {grade})
                           </label>
                           <select
                             onChange={(e) => {
@@ -3314,14 +4116,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                     onChange={(e) => setCustomTitle(e.target.value)}
                     placeholder={
                       aralMethod === "extract"
-                        ? "e.g. Activity 1: Operations on Integers Quiz"
-                        : assessmentType === "quiz"
-                        ? "e.g. Weekly Quiz #1 — Vocabulary & Context Clues"
+                        ? "e.g. Activity 1: Operations on Integers Pre-Test"
                         : assessmentType === "pre-test"
-                        ? "e.g. ARAL Diagnostic Pre-Test in Reading"
-                        : assessmentType === "post-test"
-                        ? "e.g. ARAL Learning Recovery Post-Test in Reading"
-                        : "e.g. First Quarter Periodical Exam in Reading"
+                        ? `e.g. DepEd Phil-IRI Stage 1 Diagnostic Pre-Test (Grade ${grade})`
+                        : `e.g. DepEd Phil-IRI Learning Recovery Post-Test (Grade ${grade})`
                     }
                     className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 transition-all"
                   />
@@ -3429,9 +4227,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                 (genType === "aral" && aralMethod === "extract" && !aralMaterialId) ||
                 (genType === "aral" &&
                   aralMethod === "bank" &&
-                  assessmentType === "quiz" &&
-                  (selectedTopics.length === 0 ||
-                    (selectedTopics.some((t) => usedTopics.includes(t)) && !allowRetake)))
+                  scannedCoverage.length > 0 &&
+                  selectedCoverage.length === 0)
               }
               className="mt-4 h-10 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-800 hover:bg-red-900 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -3446,17 +4243,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   : "Generating Questionnaire…"
                 : aralMethod === "extract"
                 ? `Scan & Extract Exercises from Page ${extractPageNumber}`
-                : assessmentType === "quiz" &&
-                  selectedTopics.some((t) => usedTopics.includes(t)) &&
-                  !allowRetake
-                ? "Topic Already Assessed"
                 : assessmentType === "pre-test"
                 ? `Generate Diagnostic Pre-Test (${count} items)`
-                : assessmentType === "post-test"
-                ? `Generate Recovery Post-Test (${count} items)`
-                : assessmentType === "exam"
-                ? `Generate Periodical Exam (${count} items)`
-                : `Generate Weekly Quiz (${count} items)`}
+                : `Generate Recovery Post-Test (${count} items)`}
             </button>
           )}
 
@@ -3828,7 +4617,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   </div>
 
                   {/* Reading Selection if present */}
-                  {doc.passageText && (
+                  {doc.passageText && (!doc.sections || doc.sections.every((s: any) => !s.passageText)) && (
                     <div className="mb-6 rounded-xl border border-red-200/90 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm text-xs leading-relaxed text-slate-900">
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-red-100">
                         <div className="flex items-center gap-2">
@@ -3875,7 +4664,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                           <div className="mb-3">
                             <div className="flex items-center justify-between gap-2 border-b border-slate-400 pb-1">
                               <h4 className="text-xs sm:text-sm font-extrabold uppercase tracking-wide text-slate-900">
-                                PART {section.partNumber}: {section.topic} ({section.itemRange})
+                                {section.title && section.title.startsWith("PART ")
+                                  ? section.title
+                                  : `PART ${section.partNumber}: ${section.passageTitle || section.topic} (${section.itemRange})`}
                               </h4>
                               {!isEditingThisSection && (
                                 <button
@@ -3940,6 +4731,91 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                               </p>
                             )}
                           </div>
+
+                          {/* Reading Selection / Reference Material for this Section */}
+                          {(section.passageText || section.passageImage) && (
+                            <div className="mb-5 rounded-xl border border-red-200/90 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-xs text-xs leading-relaxed text-slate-900">
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-red-100">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-100 text-red-800">
+                                    {section.referenceType === "infographic" || section.passageImage ? (
+                                      <FileImage className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <BookOpen className="h-3.5 w-3.5" />
+                                    )}
+                                  </span>
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100/60 px-2 py-0.5 rounded-full border border-red-200/60">
+                                        Reading Selection {section.partNumber ? `• Part ${section.partNumber}` : ""}
+                                      </span>
+                                      {section.referenceType && (
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                          {section.referenceType === "poem"
+                                            ? "Poem"
+                                            : section.referenceType === "infographic"
+                                            ? "Infographic"
+                                            : section.referenceType === "advisory"
+                                            ? "Advisory"
+                                            : "Article"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 mt-1">
+                                      {section.passageTitle || section.topic || "Reading Selection"}
+                                    </h4>
+                                  </div>
+                                </div>
+                                {section.passageText && (
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                                    {section.passageText.trim().split(/\s+/).length} words
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Responsive Infographic Visual with Click to Enlarge modal */}
+                              {section.passageImage && (
+                                <div className="mb-4">
+                                  <div className="relative group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center p-3">
+                                    <img
+                                      src={section.passageImage}
+                                      alt={section.passageTitle || "Visual material"}
+                                      className="max-h-72 w-auto object-contain rounded-lg shadow-xs cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
+                                      onClick={() => setSelectedEnlargedImage(section.passageImage!)}
+                                    />
+                                    <div className="mt-2.5 flex items-center justify-between w-full px-2">
+                                      <span className="text-[11px] text-slate-500 font-medium">
+                                        Official Infographic Reference
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedEnlargedImage(section.passageImage!)}
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-800 hover:text-red-900 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-md border border-red-200 transition-colors cursor-pointer"
+                                      >
+                                        <ZoomIn className="h-3.5 w-3.5" />
+                                        <span>Click to Enlarge / View Fullscreen</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Formatted Passage Text based on Reference Type */}
+                              {section.passageText && (
+                                <div
+                                  className={`whitespace-pre-line select-text p-3.5 rounded-lg border ${
+                                    section.referenceType === "poem"
+                                      ? "font-serif italic text-[13px] leading-relaxed bg-amber-50/40 text-slate-900 border-amber-200/80 pl-6 border-l-4"
+                                      : section.referenceType === "advisory"
+                                      ? "font-sans text-[12.5px] leading-relaxed bg-blue-50/40 text-slate-900 border-blue-200/70"
+                                      : "font-serif text-[12.5px] leading-relaxed bg-white/70 text-slate-800 border-slate-200/60"
+                                  }`}
+                                >
+                                  {section.passageText}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {/* Numbered Questions under this Section */}
                           <div className="space-y-4 pl-1">
@@ -4040,10 +4916,15 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
       {printMode && (
         <>
           <style>{`
-            @media print { body * { visibility: hidden; }
-            .print-overlay, .print-overlay * { visibility: visible; }
-            .print-overlay { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important; width: 100%; height: auto !important; overflow: visible !important; }
-            @page { size: portrait; margin: 0.8cm; } }
+            @media print {
+              body * { visibility: hidden; }
+              .print-overlay, .print-overlay * { visibility: visible; }
+              .print-overlay { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important; width: 100%; height: auto !important; overflow: visible !important; }
+              @page { size: portrait; margin: 0.8cm; }
+              .print-cover-page { page-break-after: always !important; break-after: page !important; }
+              .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
+              .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+            }
           `}</style>
           <div className="print-overlay fixed inset-0 z-[999] overflow-auto bg-white">
             <QuestionnairePrint doc={doc!} />
@@ -4069,6 +4950,52 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             );
           }}
         />
+      )}
+
+      {/* Fullscreen Infographic Image Modal */}
+      {selectedEnlargedImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-xs"
+          onClick={() => setSelectedEnlargedImage(null)}
+        >
+          <div
+            className="relative flex flex-col max-w-4xl max-h-[92vh] w-full rounded-2xl bg-white p-4 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <FileImage className="h-5 w-5 text-red-800" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Infographic Visual Reference — Fullscreen
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEnlargedImage(null)}
+                className="rounded-lg p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center p-2 bg-slate-50 rounded-xl">
+              <img
+                src={selectedEnlargedImage}
+                alt="Enlarged Reference"
+                className="max-h-[76vh] w-auto object-contain rounded-lg shadow-md"
+              />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+              <span>Official Reference: DENR-EMB Region 1 Solid Waste Management</span>
+              <button
+                type="button"
+                onClick={() => setSelectedEnlargedImage(null)}
+                className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -4622,132 +5549,6 @@ function UploadExamForm({
         >
           Cancel
         </button>
-      </div>
-    </div>
-  );
-}
-
-/* ━━━ PRINTABLE: OFFICIAL DEPED QUESTIONNAIRE ━━━ */
-function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
-  const sections =
-    doc.sections && doc.sections.length > 0
-      ? doc.sections
-      : deriveSectionsFromQuestions(doc.questions, doc.subject);
-
-  return (
-    <div className="bg-white p-8 text-black font-sans max-w-4xl mx-auto">
-      {/* Official DepEd School Header with Top Middle Logo and School Name */}
-      <div className="mb-5 border-b-2 border-black pb-3 text-center">
-        <img
-          src="/aral-logo.png"
-          alt="School Logo"
-          className="h-16 w-16 object-contain mx-auto mb-2 print:block"
-        />
-        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-          Republic of the Philippines
-        </p>
-        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-          Department of Education
-        </p>
-        <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-          National Capital Region — Division of City Schools
-        </p>
-        <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
-          GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
-        </h1>
-        <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
-          {doc.title}
-        </h2>
-        <p className="text-xs text-gray-700 mt-0.5">
-          Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
-          {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
-        </p>
-      </div>
-
-      {/* 4 Learner Info Header Fields: Name, Section, Date, Score */}
-      <div className="mb-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold border-b border-black pb-4 text-black">
-        <div className="flex items-center gap-2">
-          <span className="font-bold tracking-wider">NAME:</span>
-          <span className="flex-1 border-b border-black" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-bold tracking-wider">SECTION:</span>
-          <span className="flex-1 border-b border-black" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-bold tracking-wider">DATE:</span>
-          <span className="flex-1 border-b border-black" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-bold tracking-wider">SCORE:</span>
-          <span className="flex-1 border-b border-black" />
-        </div>
-      </div>
-
-      {/* General Directions */}
-      <div className="mb-5 text-xs italic text-gray-800">
-        <span className="font-bold not-italic">General Directions:</span> Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
-      </div>
-
-      {/* Reading selection box for print if present */}
-      {doc.passageText && (
-        <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
-          <p className="font-bold uppercase tracking-wider text-black mb-1">
-            Reading Selection: {doc.passageTitle}
-          </p>
-          <div className="whitespace-pre-line text-gray-800">
-            {doc.passageText}
-          </div>
-        </div>
-      )}
-
-      {/* Topic sections with DepEd headers and continuous numbering */}
-      <div className="space-y-6 text-xs">
-        {sections.map((section, sIdx) => {
-          const sectionQuestions = doc.questions.filter(
-            (q) => q.number >= section.startItem && q.number <= section.endItem
-          );
-
-          return (
-            <div key={sIdx} className="break-inside-avoid">
-              {/* Official DepEd Section Header & Directions */}
-              <div className="mb-2.5 border-b border-black pb-1">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-black">
-                  PART {section.partNumber}: {section.topic} ({section.itemRange})
-                </h3>
-                {section.instructions && (
-                  <p className="mt-0.5 text-[11px] italic font-medium text-gray-900">
-                    {section.instructions}
-                  </p>
-                )}
-              </div>
-
-              {/* Questions */}
-              <div className="space-y-3.5 pl-1">
-                {sectionQuestions.map((q) => (
-                  <div key={q.number} className="break-inside-avoid mb-3">
-                    <p className="font-medium text-black leading-relaxed">
-                      <span className="font-bold mr-1.5">{q.number}.</span>
-                      {q.prompt}
-                    </p>
-                    {q.mode === "written" ? (
-                      <div className="mt-2 border-b border-black pl-6" style={{ width: "60%" }} />
-                    ) : (
-                      <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 pl-4">
-                        {q.choices.map((c, i) => (
-                          <div key={i} className="flex items-baseline gap-1.5">
-                            <span className="font-bold">{PrintAry[i]}.</span>
-                            <span>{c}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

@@ -152,7 +152,7 @@ function ForgotPasswordContent() {
     setErrorMessage("");
 
     if (!username.trim() || !identifier.trim()) {
-      setErrorMessage("Please provide your Username and Registered DepEd Email or Full Name.");
+      setErrorMessage("Please provide your Username and Registered DepEd Email.");
       return;
     }
 
@@ -457,25 +457,25 @@ function ForgotPasswordContent() {
               </div>
             </div>
 
-            {/* Registered Email or Full Name */}
+            {/* Registered DepEd Email */}
             <div>
               <label htmlFor="identifier" className="mb-1 block text-xs font-bold text-slate-700">
-                Registered DepEd Email or Full Name
+                Registered DepEd Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   id="identifier"
-                  type="text"
+                  type="email"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g. miguel.teacher@deped.gov.ph or Teacher Miguel"
+                  placeholder="e.g. miguel.teacher@deped.gov.ph"
                   required
                   className="h-10.5 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-semibold text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                 />
               </div>
               <p className="mt-1 text-[10px] text-slate-400">
-                You can enter either your official DepEd email or your full name as registered in the system.
+                Enter the official DepEd email associated with your account.
               </p>
             </div>
 

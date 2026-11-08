@@ -23,6 +23,10 @@ export interface CachedLearner {
   name: string;
   gradeLevel: number;
   section: string;
+  gstScore?: number | null;
+  gstStatus?: 'Grade-Ready' | 'Needs Individualized Assessment' | 'Unassessed';
+  recommendedStartingLevel?: number | null;
+  needsIndividualAssessment?: boolean;
 }
 
 /** Built-in Phil-IRI Key Stage 3 (Grades 7-10) passages available even on initial cold-launch without connectivity */
@@ -128,6 +132,74 @@ export const DEFAULT_OFFLINE_PASSAGES: CachedPassage[] = [
           "They prevent all fish from leaving the shore",
         ],
         answer: "They act as natural breakwaters reducing wave energy",
+      },
+    ],
+  },
+  {
+    id: "builtin-ks2-passage-4",
+    title: "Phil-IRI Grade 4: The Helpful Carabao",
+    gradeLevel: 4,
+    text:
+      "The carabao is known as the national animal of the Philippines. " +
+      "It is a strong and hardworking beast of burden that assists farmers in plowing muddy rice fields. " +
+      "During hot sunny days, the carabao loves to wallow in cool mud to protect its thick dark skin from insect bites and the intense tropical heat. " +
+      "Farmers take good care of their carabaos because they are faithful partners in producing food for the whole country.",
+    questions: [
+      {
+        question: "What is the national animal of the Philippines?",
+        options: ["The Carabao", "The Tamaraw", "The Eagle", "The Tarsier"],
+        answer: "The Carabao",
+      },
+      {
+        question: "Why does the carabao wallow in cool mud?",
+        options: ["To protect its skin from heat and insect bites", "To sleep peacefully", "To hide from other animals", "To clean its horns"],
+        answer: "To protect its skin from heat and insect bites",
+      },
+    ],
+  },
+  {
+    id: "builtin-ks2-passage-5",
+    title: "Phil-IRI Grade 5: The Coconut — Tree of Life",
+    gradeLevel: 5,
+    text:
+      "The coconut palm is widely celebrated across the Philippines as the Tree of Life. " +
+      "Every single part of the tree has a practical and economic use for Filipino families. " +
+      "Its sweet water is a refreshing natural beverage, while its white meat can be eaten fresh or pressed into cooking oil. " +
+      "The tough coconut fronds are woven into sturdy baskets, mats, and thatched roofs for countryside homes. " +
+      "Even the fibrous husk is turned into durable ropes, brushes, and soil fertilizer.",
+    questions: [
+      {
+        question: "Why is the coconut palm called the Tree of Life?",
+        options: ["Every single part of the tree has a practical use", "It grows taller than all other trees", "It only grows in the Philippines", "It can live for thousands of years"],
+        answer: "Every single part of the tree has a practical use",
+      },
+      {
+        question: "What can be made from the fibrous coconut husk?",
+        options: ["Ropes, brushes, and fertilizer", "Cooking oil and sweet juice", "Building walls and glass", "Paper and medicine"],
+        answer: "Ropes, brushes, and fertilizer",
+      },
+    ],
+  },
+  {
+    id: "builtin-ks2-passage-6",
+    title: "Phil-IRI Grade 6: The Spirit of Bayanihan",
+    gradeLevel: 6,
+    text:
+      "Bayanihan is a cherished Filipino cultural tradition that embodies genuine community unity and selfless cooperation. " +
+      "In traditional rural villages, neighbors willingly gathered to help a family relocate their traditional nipa hut to a new location. " +
+      "Dozens of volunteers placed sturdy bamboo poles underneath the house and lifted the entire structure onto their strong shoulders. " +
+      "Walking rhythmically in unison, they carried the home through dusty village roads while singing cheerful folk tunes. " +
+      "Today, the spirit of Bayanihan lives on whenever citizens volunteer and support one another during natural calamities and community crises.",
+    questions: [
+      {
+        question: "What Filipino tradition symbolizes community unity and mutual cooperation?",
+        options: ["Bayanihan", "Harana", "Fiesta", "Simbang Gabi"],
+        answer: "Bayanihan",
+      },
+      {
+        question: "How does the spirit of Bayanihan manifest in modern times?",
+        options: ["Volunteering and helping others during crises and calamities", "Building larger concrete houses", "Traveling to distant islands", "Trading goods in markets"],
+        answer: "Volunteering and helping others during crises and calamities",
       },
     ],
   },

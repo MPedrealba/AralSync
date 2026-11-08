@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
       if (!username || !identifier || !role) {
         return NextResponse.json(
-          { error: 'Please provide your Role, Username, and Registered DepEd Email or Full Name.' },
+          { error: 'Please provide your Role, Username, and Registered DepEd Email.' },
           { status: 400 }
         );
       }
@@ -75,18 +75,24 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Identity validation: match either registered email OR full registered name
+      // Identity validation: require registered email matching the account
       const storedEmail = (user.email || '').trim().toLowerCase();
-      const storedName = (user.name || '').trim().toLowerCase();
 
-      const emailMatches = Boolean(storedEmail && storedEmail === normalizedIdentifier);
-      const nameMatches = Boolean(storedName && storedName === normalizedIdentifier);
-
-      if (!emailMatches && !nameMatches) {
+      if (!storedEmail) {
         return NextResponse.json(
           {
             error:
-              'The DepEd email or full name provided does not match our records for this account.',
+              'No registered DepEd email is configured for this account. Please contact your system administrator to reset your password.',
+          },
+          { status: 400 }
+        );
+      }
+
+      if (storedEmail !== normalizedIdentifier) {
+        return NextResponse.json(
+          {
+            error:
+              'The registered DepEd email provided does not match our records for this account.',
           },
           { status: 400 }
         );
@@ -150,18 +156,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify Birthdate on file
-    if (learner.birthDate) {
-      const storedDate = learner.birthDate.split('T')[0].trim();
-      const inputDate = trimmedBirthDate.split('T')[0].trim();
-      if (storedDate !== inputDate) {
-        return NextResponse.json(
-          { error: 'The birthdate provided does not match your school records on file.' },
-          { status: 400 }
-        );
-      }
-    } else {
-      learner.birthDate = trimmedBirthDate;
-      await learner.save();
+    if (!learner.birthDate) {
+      return NextResponse.json(
+        {
+          error:
+            'No birthdate is on file for your learner record. Please contact your teacher or administrator to update your profile.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const storedDate = learner.birthDate.split('T')[0].trim();
+    const inputDate = trimmedBirthDate.split('T')[0].trim();
+    if (storedDate !== inputDate) {
+      return NextResponse.json(
+        { error: 'The birthdate provided does not match your school records on file.' },
+        { status: 400 }
+      );
     }
 
     // Locate associated User account

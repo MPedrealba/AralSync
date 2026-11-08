@@ -48,8 +48,18 @@ export async function POST(
       const file = formData.get('file') as File | null;
 
       if (file && file.size > 0) {
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        if (file.size > MAX_SIZE) {
+          return fail('Uploaded file exceeds the maximum allowed limit of 10MB.', 400);
+        }
+
         const origName = file.name || 'submission.pdf';
-        const ext = path.extname(origName).toLowerCase() || '.pdf';
+        const ext = path.extname(origName).toLowerCase();
+        const ALLOWED_EXTS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+        if (!ALLOWED_EXTS.includes(ext)) {
+          return fail('Invalid file type. Only PDF, JPG, PNG, and WebP files are allowed.', 400);
+        }
+
         const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'submissions');
         await fs.mkdir(uploadDir, { recursive: true });
 

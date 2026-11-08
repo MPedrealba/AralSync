@@ -20,6 +20,55 @@ export async function GET(req: NextRequest) {
     await requireAuth(req, ['coordinator', 'principal']);
     await connectDB();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+
     const { searchParams } = new URL(req.url);
     const grade = searchParams.get('grade');
     const section = searchParams.get('section');

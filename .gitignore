@@ -62,4 +62,7 @@ context/
 
 # scratch temporary scripts
 scratch/
+earist_*
+slider_*
+parse_earist.js
 

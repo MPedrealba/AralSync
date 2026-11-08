@@ -594,6 +594,68 @@ export function combinedReadingLevel(
   return evaluateReadingPerformance(accuracy, comprehension, attempted, decoded).combinedLevel;
 }
 
+export type FilipinoReadingLevel =
+  | 'Malaya'
+  | 'Pampagkatuto'
+  | 'Pagkabigo'
+  | 'Hindi Makabasa'
+  | 'Hindi Pa Naitatasa';
+
+export const FILIPINO_READING_LEVEL_MAP: Record<string, FilipinoReadingLevel> = {
+  Independent: 'Malaya',
+  Instructional: 'Pampagkatuto',
+  Frustration: 'Pagkabigo',
+  'Non-Reader': 'Hindi Makabasa',
+  'Not Assessed': 'Hindi Pa Naitatasa',
+};
+
+export const ENGLISH_READING_LEVEL_MAP: Record<
+  string,
+  'Independent' | 'Instructional' | 'Frustration' | 'Non-Reader' | 'Not Assessed'
+> = {
+  Malaya: 'Independent',
+  Pampagkatuto: 'Instructional',
+  Pagkabigo: 'Frustration',
+  'Hindi Makabasa': 'Non-Reader',
+  'Hindi Pa Naitatasa': 'Not Assessed',
+};
+
+export function toFilipinoReadingLevel(level?: string | null): FilipinoReadingLevel {
+  if (!level) return 'Hindi Pa Naitatasa';
+  const trimmed = level.trim();
+  if (FILIPINO_READING_LEVEL_MAP[trimmed]) return FILIPINO_READING_LEVEL_MAP[trimmed];
+  const l = trimmed.toLowerCase();
+  if (l.includes('independent') || l.includes('malaya')) return 'Malaya';
+  if (l.includes('instructional') || l.includes('pampagkatuto')) return 'Pampagkatuto';
+  if (l.includes('non-reader') || l.includes('hindi makabasa') || l.includes('di-makabasa')) return 'Hindi Makabasa';
+  if (l.includes('frustration') || l.includes('pagkabigo')) return 'Pagkabigo';
+  return 'Hindi Pa Naitatasa';
+}
+
+export function readingLevelFilipino(
+  accuracy: number,
+  wordsDecoded?: number,
+  wordsAttempted?: number
+): FilipinoReadingLevel {
+  const eng = readingLevel(accuracy, wordsDecoded, wordsAttempted);
+  return toFilipinoReadingLevel(eng);
+}
+
+export function comprehensionLevelFilipino(score: number): FilipinoReadingLevel {
+  const eng = comprehensionLevel(score);
+  return toFilipinoReadingLevel(eng);
+}
+
+export function combinedReadingLevelFilipino(
+  accuracy: number,
+  comprehension: number,
+  wordsDecoded?: number,
+  wordsAttempted?: number
+): FilipinoReadingLevel {
+  const eng = combinedReadingLevel(accuracy, comprehension, wordsDecoded, wordsAttempted);
+  return toFilipinoReadingLevel(eng);
+}
+
 /**
  * Groq Whisper verbatim transcription → { text, segments }.
  * Settings calibrated for verbatim oral reading assessment:
@@ -938,4 +1000,203 @@ export async function analyzeMiscuesOpenAI(
       feedback: 'Scored via Phil-IRI classification engine.',
     };
   }
+}
+
+export interface GstEvaluation {
+  isGradeReady: boolean;
+  gstStatus: 'Grade-Ready' | 'Needs Individualized Assessment';
+  recommendedStartingGrade: number | null;
+  levelOffset: number;
+  explanation: string;
+}
+
+/**
+ * DepEd Phil-IRI 2024 Stage 1 (Group Screening Test - GST) Automated Starting-Level Engine
+ * Based on the official DepEd 2024 Junior High School Manual (Pages 8–9).
+ *
+ * Rules:
+ * 1. 40-item Group Screening Test.
+ * 2. Cut-off evaluation:
+ *    - Raw score >= 28: Grade-Ready (Passed). Does NOT need individualized graded passages.
+ *    - Raw score < 28: Needs Individualized Assessment (Stage 2).
+ * 3. Stage 2 Starting Passage Level Determination:
+ *    - Raw score 0–15: Start 3 grade levels below current grade. Floor at Grade 4.
+ *    - Raw score 16–27: Start 2 grade levels below current grade. Floor at Grade 4.
+ *
+ * @param rawScore - GST raw score (0–40)
+ * @param studentGrade - Learner's current grade level (e.g. 7, 8, 9, 10)
+ */
+export function evaluateGstScore(rawScore: number, studentGrade: number): GstEvaluation {
+  const clampedScore = Math.max(0, Math.min(40, Math.round(Number(rawScore) || 0)));
+  const grade = Math.max(4, Math.round(Number(studentGrade) || 7));
+
+  if (clampedScore >= 28) {
+    return {
+      isGradeReady: true,
+      gstStatus: 'Grade-Ready',
+      recommendedStartingGrade: null,
+      levelOffset: 0,
+      explanation: `Learner scored ${clampedScore}/40 (>= 28), achieving Grade-Ready status. Individualized graded assessment is not required under DepEd Phil-IRI 2024 Stage 1 guidelines.`,
+    };
+  }
+
+  // Raw score < 28: Needs Individualized Assessment
+  if (clampedScore <= 15) {
+    const recommendedStartingGrade = Math.max(4, grade - 3);
+    return {
+      isGradeReady: false,
+      gstStatus: 'Needs Individualized Assessment',
+      recommendedStartingGrade,
+      levelOffset: 3,
+      explanation: `Learner scored ${clampedScore}/40 (0–15). DepEd Phil-IRI 2024 Stage 2 recommends administering an oral reading passage 3 grade levels below current enrollment (Grade ${recommendedStartingGrade}, floor Grade 4).`,
+    };
+  }
+
+  // Raw score 16–27
+  const recommendedStartingGrade = Math.max(4, grade - 2);
+  return {
+    isGradeReady: false,
+    gstStatus: 'Needs Individualized Assessment',
+    recommendedStartingGrade,
+    levelOffset: 2,
+    explanation: `Learner scored ${clampedScore}/40 (16–27). DepEd Phil-IRI 2024 Stage 2 recommends administering an oral reading passage 2 grade levels below current enrollment (Grade ${recommendedStartingGrade}, floor Grade 4).`,
+  };
+}
+
+export interface CompQuestion {
+  id: number;
+  question: string;
+  options?: string[];
+  answer: string;
+  category: 'Literal' | 'Inferential' | 'Critical';
+}
+
+/**
+ * Loads or compiles the official 5–8 Phil-IRI comprehension questions for an oral reading passage.
+ * Automatically distributes questions across Literal, Inferential, and Critical domains.
+ */
+export function compilePassageComprehensionQuestions(
+  passageQuestions: Array<{ question: string; options?: string[]; answer?: string; category?: string }> | undefined,
+  passageText: string = '',
+  passageTitle: string = 'Reading Selection',
+  targetCount: number = 6
+): CompQuestion[] {
+  const cleanTitle = (passageTitle || 'the selection').replace(/\s+/g, ' ').trim();
+  const sentences = passageText
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 15);
+
+  const firstSentence = sentences[0] || 'The passage details the essential facts and events.';
+  const middleSentence = sentences[Math.floor(sentences.length / 2)] || 'The events develop through interconnected stages.';
+  const lastSentence = sentences[sentences.length - 1] || 'The selection concludes with an important reflection.';
+
+  const results: CompQuestion[] = [];
+  const count = Math.max(5, Math.min(8, targetCount));
+
+  // 1. Ingest existing passage questions if available
+  if (Array.isArray(passageQuestions) && passageQuestions.length > 0) {
+    for (let i = 0; i < passageQuestions.length && results.length < count; i++) {
+      const pq = passageQuestions[i];
+      if (!pq?.question) continue;
+      const qText = pq.question.trim();
+      const qLower = qText.toLowerCase();
+
+      let cat: 'Literal' | 'Inferential' | 'Critical' = 'Literal';
+      if (
+        pq.category === 'Critical' ||
+        qLower.includes('message') ||
+        qLower.includes('lesson') ||
+        qLower.includes('theme') ||
+        qLower.includes('opinion') ||
+        qLower.includes('purpose') ||
+        qLower.includes('apply') ||
+        qLower.includes('author')
+      ) {
+        cat = 'Critical';
+      } else if (
+        pq.category === 'Inferential' ||
+        qLower.includes('why') ||
+        qLower.includes('infer') ||
+        qLower.includes('cause') ||
+        qLower.includes('imply') ||
+        qLower.includes('conclude') ||
+        qLower.includes('bunga') ||
+        qLower.includes('dahilan')
+      ) {
+        cat = 'Inferential';
+      } else {
+        cat = 'Literal';
+      }
+
+      results.push({
+        id: results.length + 1,
+        question: qText,
+        options: Array.isArray(pq.options) && pq.options.length ? pq.options : undefined,
+        answer: pq.answer || (Array.isArray(pq.options) && pq.options[0]) || firstSentence,
+        category: cat,
+      });
+    }
+  }
+
+  // 2. Synthesize additional high-quality benchmark questions across Literal, Inferential, and Critical if needed
+  const benchmarkTemplates: Array<{ q: string; a: string; cat: 'Literal' | 'Inferential' | 'Critical' }> = [
+    {
+      q: `Based directly on the passage "${cleanTitle}", what is the primary subject or central event described?`,
+      a: firstSentence,
+      cat: 'Literal',
+    },
+    {
+      q: `What logical cause or motive drives the actions and outcomes described in "${cleanTitle}"?`,
+      a: 'The sequence of interactions and necessary conditions required to sustain the described process.',
+      cat: 'Inferential',
+    },
+    {
+      q: `What is the most enduring theme, lesson, or real-world insight conveyed by the author in "${cleanTitle}"?`,
+      a: lastSentence,
+      cat: 'Critical',
+    },
+    {
+      q: `What key fact or condition is highlighted regarding how the events unfold?`,
+      a: middleSentence,
+      cat: 'Literal',
+    },
+    {
+      q: `What would most likely happen if the key factors or resources described in the selection were removed?`,
+      a: 'The progression would break down, producing deficiency or failure in the dependent system.',
+      cat: 'Inferential',
+    },
+    {
+      q: `How can a student apply the ideas in this selection to practical responsibilities in school or community?`,
+      a: 'By making informed, thoughtful decisions that maintain balance, safety, and cooperation.',
+      cat: 'Critical',
+    },
+    {
+      q: `How does the author support the credibility and factual clarity of the ideas in "${cleanTitle}"?`,
+      a: 'By presenting concrete descriptive details, orderly progression, and verifiable observations.',
+      cat: 'Critical',
+    },
+  ];
+
+  // Ensure missing categories are prioritized so all 3 DepEd domains (Literal, Inferential, Critical) are represented
+  const existingCats = new Set(results.map((r) => r.category));
+  const prioritizedTemplates = [
+    ...benchmarkTemplates.filter((t) => !existingCats.has(t.cat)),
+    ...benchmarkTemplates.filter((t) => existingCats.has(t.cat)),
+  ];
+
+  for (const t of prioritizedTemplates) {
+    if (results.length >= count) break;
+    if (!results.some((r) => r.question.toLowerCase() === t.q.toLowerCase())) {
+      results.push({
+        id: results.length + 1,
+        question: t.q,
+        answer: t.a,
+        category: t.cat,
+      });
+      existingCats.add(t.cat);
+    }
+  }
+
+  return results;
 }

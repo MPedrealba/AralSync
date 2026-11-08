@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const AnswerKeySchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
-    subject: { type: String, enum: ['Math', 'Reading', 'Science'] },
+    subject: { type: String, enum: ['Math', 'Reading', 'Science', 'English', 'Filipino', 'Reading - Filipino', 'Reading - English'] },
     items: { type: Number },
     totalItems: { type: Number },
     examId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomExam', default: null },
@@ -27,6 +27,7 @@ const AnswerKeySchema = new mongoose.Schema(
     sections: { type: mongoose.Schema.Types.Mixed, default: [] },
     passageTitle: { type: String, default: '' },
     passageText: { type: String, default: '' },
+    passageImage: { type: String, default: '' },
     // ── Online CBT Delivery Settings ──
     isOnline: { type: Boolean, default: false },
     timeLimitMinutes: { type: Number, default: 0 }, // 0 = untimed

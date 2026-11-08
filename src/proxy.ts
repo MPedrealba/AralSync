@@ -127,7 +127,7 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Apply middleware to the specified routes
+// Apply proxy to the specified routes
 export const config = {
   matcher: [
     '/',
@@ -143,3 +143,5 @@ export const config = {
     '/api/teacher/omr/:path*',
   ],
 };
+
+export default proxy;
