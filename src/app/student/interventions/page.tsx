@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   FileText,
@@ -106,7 +107,11 @@ const fmtDate = (d?: string | null) => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-export default function StudentInterventionsPage() {
+function StudentInterventionsContent() {
+  const searchParams = useSearchParams();
+  const urlId = searchParams.get("id");
+  const initialAutoSelected = useRef(false);
+
   const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [selected, setSelected] = useState<Intervention | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,10 +137,21 @@ export default function StudentInterventionsPage() {
       const res = await fetch("/api/student/interventions");
       const json = await parseJsonResponse(res);
       if (json.success && json.data?.interventions) {
-        setInterventions(json.data.interventions);
-        // keep selected synced if open
-        if (selected) {
-          const fresh = json.data.interventions.find((i: Intervention) => i.id === selected.id);
+        const normalized = json.data.interventions.map((i: Intervention) => ({
+          ...i,
+          type: i.type === "Video" ? "Worksheet" : i.type,
+        }));
+        setInterventions(normalized);
+
+        // Auto-select on initial load if ?id= matches an intervention
+        if (urlId && !initialAutoSelected.current) {
+          const match = normalized.find((i: Intervention) => i.id === urlId);
+          if (match) {
+            setSelected(match);
+            initialAutoSelected.current = true;
+          }
+        } else if (selected) {
+          const fresh = normalized.find((i: Intervention) => i.id === selected.id);
           if (fresh) setSelected(fresh);
         }
       } else {
@@ -151,6 +167,17 @@ export default function StudentInterventionsPage() {
   useEffect(() => {
     loadInterventions();
   }, []);
+
+  // Synchronize deep-link ?id= parameter if interventions load after initial mount
+  useEffect(() => {
+    if (urlId && interventions.length > 0 && !initialAutoSelected.current) {
+      const match = interventions.find((i) => i.id === urlId);
+      if (match) {
+        setSelected(match);
+        initialAutoSelected.current = true;
+      }
+    }
+  }, [urlId, interventions]);
 
   // When selected assignment changes, populate work inputs
   useEffect(() => {
@@ -451,7 +478,7 @@ export default function StudentInterventionsPage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                      {s.type}
+                      {s.type === "Video" ? "Worksheet" : s.type}
                     </span>
                     {s.keyStage && (
                       <span className="rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 border border-red-100">
@@ -1057,7 +1084,7 @@ export default function StudentInterventionsPage() {
                         {subj}
                       </span>
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                        {item.type}
+                        {item.type === "Video" ? "Worksheet" : item.type}
                       </span>
                       {item.sessionInfo && (
                         <span className="rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800 border border-red-100">
@@ -1118,5 +1145,22 @@ export default function StudentInterventionsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function StudentInterventionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-96 items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-red-800" />
+            <p className="text-xs font-semibold text-slate-500">Loading your learning activities…</p>
+          </div>
+        </div>
+      }
+    >
+      <StudentInterventionsContent />
+    </Suspense>
   );
 }

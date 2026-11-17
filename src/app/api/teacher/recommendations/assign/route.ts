@@ -7,10 +7,11 @@ import Intervention from '../../../../../../models/Intervention';
 
 /** Kind → Intervention.type mapping (Quiz becomes an Activity material). */
 const TYPE_MAP: Record<string, string> = {
-  Video: 'Video',
+  Video: 'Worksheet',
   Quiz: 'Activity',
   Activity: 'Activity',
   Module: 'Module',
+  Worksheet: 'Worksheet',
 };
 
 /** POST /api/teacher/recommendations/assign — turn a catalog item into an Intervention. */

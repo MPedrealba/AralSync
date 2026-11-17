@@ -14,7 +14,7 @@ function toRow(a: any) {
     id: String(a._id),
     title: a.title || a.type || 'Untitled',
     type: a.type,
-    subject: a.subject || (isFluency ? 'Reading' : isComp ? 'Science' : 'Math'),
+    subject: a.subject || (isFluency || isComp ? 'Reading' : 'Math'),
     score: a.score ?? null,
     masteryLevel: a.masteryLevel || '—',
     competency: a.competency || null,

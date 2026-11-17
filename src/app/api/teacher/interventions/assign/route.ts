@@ -9,10 +9,11 @@ import { logAudit } from '@/lib/audit';
 import { getTeacherSubject } from '@/lib/teacherScope';
 
 const TYPE_MAP: Record<string, string> = {
-  Video: 'Video',
+  Video: 'Worksheet',
   Quiz: 'Activity',
   Activity: 'Activity',
   Module: 'Module',
+  Worksheet: 'Worksheet',
 };
 
 /**

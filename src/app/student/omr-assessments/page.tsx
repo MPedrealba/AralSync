@@ -45,10 +45,12 @@ export default function OMRAssessmentsPage() {
 
   const mathRows = rows.filter((r) => r.subject === "Math");
   const sciRows = rows.filter((r) => r.subject === "Science");
+  const readingRows = rows.filter((r) => r.subject === "Reading");
   const avg = (arr: OMRRow[]) =>
     arr.length ? Math.round(arr.reduce((a, r) => a + (r.score ?? 0), 0) / arr.length) : null;
   const mathAvg = avg(mathRows);
   const sciAvg = avg(sciRows);
+  const readingAvg = avg(readingRows);
   const lowest = rows.length
     ? [...rows].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0]
     : null;
@@ -68,8 +70,8 @@ export default function OMRAssessmentsPage() {
         <p className="page-subtitle">View your diagnostic exam scores and competency breakdown.</p>
       </div>
 
-      {/* Top 3 Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+      {/* Top Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <div className="card" style={{ textAlign: "center" }} aria-label={`Math average score: ${mathAvg != null ? `${mathAvg}%` : "no data"}`}>
           <div className="card-title">MATH AVERAGE SCORE</div>
           <div className="card-value">{mathAvg != null ? `${mathAvg}%` : "—"}</div>
@@ -77,6 +79,10 @@ export default function OMRAssessmentsPage() {
         <div className="card" style={{ textAlign: "center" }} aria-label={`Science average score: ${sciAvg != null ? `${sciAvg}%` : "no data"}`}>
           <div className="card-title">SCIENCE AVERAGE SCORE</div>
           <div className="card-value">{sciAvg != null ? `${sciAvg}%` : "—"}</div>
+        </div>
+        <div className="card" style={{ textAlign: "center" }} aria-label={`Reading average score: ${readingAvg != null ? `${readingAvg}%` : "no data"}`}>
+          <div className="card-title">READING AVERAGE SCORE</div>
+          <div className="card-value">{readingAvg != null ? `${readingAvg}%` : "—"}</div>
         </div>
         <div className="card" style={{ textAlign: "center" }} aria-label={error ? `${error}` : `Lowest competency: ${lowest ? `${lowest.title || lowest.competency} at ${lowest.score}%` : "none"}`}>
           <div className="card-title">LOWEST COMPETENCY</div>
@@ -94,7 +100,7 @@ export default function OMRAssessmentsPage() {
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {["All", "Math", "Science"].map((tab) => (
+        {["All", "Math", "Science", "Reading"].map((tab) => (
           <button
             key={tab}
             className={`btn ${filter === tab ? "btn-primary" : "btn-outline"}`}

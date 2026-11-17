@@ -97,11 +97,11 @@ export default function StudentDashboardPage() {
 
   const typeChip = (type: string) => {
     const styles: Record<string, string> = {
-      Video: "bg-violet-50 text-violet-700",
+      Worksheet: "bg-emerald-50 text-emerald-700",
       Activity: "bg-amber-50 text-amber-700",
-      Worksheet: "bg-sky-50 text-sky-700",
+      Module: "bg-blue-50 text-blue-700",
     };
-    return styles[type] || "bg-blue-50 text-blue-700";
+    return styles[type] || "bg-emerald-50 text-emerald-700";
   };
 
   const formatDate = (dateString: string) => {
@@ -363,14 +363,14 @@ export default function StudentDashboardPage() {
                 <div className="mt-5 flex gap-3">
                   {intervention.status === "In Progress" && (
                     <Link
-                      href="/student/interventions"
+                      href={`/student/interventions?id=${intervention._id || intervention.id}`}
                       className="flex-1 rounded-lg bg-blue-600 py-2 text-center text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700"
                     >
                       Continue
                     </Link>
                   )}
                   <Link
-                    href="/student/interventions"
+                    href={`/student/interventions?id=${intervention._id || intervention.id}`}
                     className="flex-1 rounded-lg border border-gray-200 bg-white py-2 text-center text-sm font-medium text-gray-600 transition-colors hover:border-blue-200 hover:text-blue-600"
                   >
                     View

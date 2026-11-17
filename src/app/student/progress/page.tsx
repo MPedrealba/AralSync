@@ -60,33 +60,69 @@ export default function ProgressPage() {
   const passed = scores.filter((s) => s >= 75).length;
   const total = rows.length;
 
-  // Latest per competency per subject group
-  const latestByTitle = (types: string[]) => {
-    const map = new Map<string, Row>();
-    rows.forEach((r) => {
-      if (!types.includes(r.type)) return;
-      const existing = map.get(r.title);
-      if (!existing || new Date(r.date) > new Date(existing.date)) map.set(r.title, r);
-    });
-    return [...map.values()];
-  };
-  const mathRows = latestByTitle(["OMR"]);
-  const sciRows = latestByTitle(["COMPREHENSION"]);
+  // Subject-specific diagnostic / OMR assessments
+  const mathRows = rows.filter((r) => {
+    if (r.type === "READING_FLUENCY" || r.type === "COMPREHENSION") return false;
+    return r.subject === "Math" || (!r.subject && r.type === "OMR");
+  });
+  const mathMap = new Map<string, Row>();
+  mathRows.forEach((r) => {
+    const key = r.title || r.competency || r.type;
+    const existing = mathMap.get(key);
+    if (!existing || new Date(r.date) > new Date(existing.date)) mathMap.set(key, r);
+  });
+  const distinctMathRows = [...mathMap.values()];
 
-  // Reading fluency — latest assessment metrics
+  // Science: genuine Science diagnostic/OMR assessments ONLY
+  const sciRows = rows.filter((r) => {
+    if (r.type === "READING_FLUENCY" || r.type === "COMPREHENSION") return false;
+    return r.subject === "Science";
+  });
+  const sciMap = new Map<string, Row>();
+  sciRows.forEach((r) => {
+    const key = r.title || r.competency || r.type;
+    const existing = sciMap.get(key);
+    if (!existing || new Date(r.date) > new Date(existing.date)) sciMap.set(key, r);
+  });
+  const distinctSciRows = [...sciMap.values()];
+
+  // Reading: Oral Fluency and Comprehension strictly grouped under Reading
   const fluencyRows = rows
     .filter((r) => r.type === "READING_FLUENCY")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestFluency = fluencyRows[0];
-  // Only metrics with an inherent 0–100% scale (accuracy / reading score) get
-  // a bar — WPM is shown as a plain measured value, no invented target.
-  const readingRows = latestFluency
-    ? [
-        { title: "Oral Reading Speed", val: `${latestFluency.wpm ?? "—"} WPM`, pct: null, m: null },
-        { title: "Word Accuracy", val: latestFluency.accuracy != null ? `${latestFluency.accuracy}%` : "—", pct: latestFluency.accuracy != null ? latestFluency.accuracy : null, m: null },
-        { title: "Reading Level", val: latestFluency.masteryLevel, pct: latestFluency.score != null ? latestFluency.score : null, m: latestFluency.masteryLevel },
-      ]
-    : [];
+
+  const compRows = rows
+    .filter((r) => r.type === "COMPREHENSION" || (r.subject === "Reading" && r.type !== "READING_FLUENCY"))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const latestComp = compRows[0];
+
+  const readingRows: Array<{ title: string; val: string; pct: number | null; m: string | null }> = [];
+
+  if (latestFluency) {
+    readingRows.push(
+      { title: "Oral Reading Speed", val: `${latestFluency.wpm ?? "—"} WPM`, pct: null, m: null },
+      { title: "Word Accuracy", val: latestFluency.accuracy != null ? `${latestFluency.accuracy}%` : "—", pct: latestFluency.accuracy != null ? latestFluency.accuracy : null, m: null },
+      { title: "Reading Fluency Level", val: latestFluency.masteryLevel, pct: latestFluency.score != null ? latestFluency.score : null, m: latestFluency.masteryLevel }
+    );
+  }
+
+  if (compRows.length > 0) {
+    const compMap = new Map<string, Row>();
+    compRows.forEach((r) => {
+      const key = r.title || r.competency || "Reading Comprehension";
+      const existing = compMap.get(key);
+      if (!existing || new Date(r.date) > new Date(existing.date)) compMap.set(key, r);
+    });
+    [...compMap.values()].forEach((c) => {
+      readingRows.push({
+        title: c.title && c.title !== "COMPREHENSION" ? c.title : "Reading Comprehension",
+        val: c.score != null ? `${c.score}%` : "—",
+        pct: c.score != null ? c.score : null,
+        m: c.masteryLevel && c.masteryLevel !== "—" ? c.masteryLevel : null,
+      });
+    });
+  }
 
   // Summarize a competency row into the display shape
   const renderComp = (r: Row) => {
@@ -95,13 +131,13 @@ export default function ProgressPage() {
       : masteryFromScore(r.score ?? 0);
     return { title: r.title || r.competency || "Untitled", pct: r.score ?? 0, badge: level.label, badgeClass: level.badge, fillClass: level.fill };
   };
-  const mathDisplay = mathRows.map(renderComp);
-  const sciDisplay = sciRows.map(renderComp);
+  const mathDisplay = distinctMathRows.map(renderComp);
+  const sciDisplay = distinctSciRows.map(renderComp);
 
   const subjectAvg = (arr: Row[]) =>
     arr.length ? Math.round(arr.filter((r) => r.score != null).reduce((a, r) => a + (r.score ?? 0), 0) / arr.filter((r) => r.score != null).length) : null;
-  const mathAvg = subjectAvg(mathRows);
-  const sciAvg = subjectAvg(sciRows);
+  const mathAvg = subjectAvg(distinctMathRows);
+  const sciAvg = subjectAvg(distinctSciRows);
 
   return (
     <div>
@@ -201,7 +237,7 @@ export default function ProgressPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid #e5e7eb", paddingBottom: "0.75rem" }}>
               <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#111827" }}>READING</h3>
               <span style={{ fontSize: "0.82rem", color: "#4b5563", fontWeight: 600 }}>
-                Level: <strong>{latestFluency?.masteryLevel || "—"}</strong>
+                Level: <strong>{latestFluency?.masteryLevel || latestComp?.masteryLevel || "—"}</strong>
               </span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>

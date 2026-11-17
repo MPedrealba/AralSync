@@ -4,7 +4,7 @@ const InterventionSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   title: { type: String },
   category: { type: String },
-  type: { type: String, enum: ['Video', 'Activity', 'Module'] },
+  type: { type: String, enum: ['Activity', 'Module', 'Worksheet'] },
   status: {
     type: String,
     enum: ['Not Started', 'In Progress', 'Submitted', 'Reviewed', 'Completed'],

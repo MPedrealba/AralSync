@@ -244,15 +244,15 @@ const seedDB = async () => {
     console.log('Creating Interventions...');
 
     const interventionTemplates = [
-      { title: 'Intensive Reading', category: 'Reading Intervention', type: 'Video' },
+      { title: 'Intensive Reading Worksheet', category: 'Reading Intervention', type: 'Worksheet' },
       { title: 'Basic Operation Drills', category: 'Numeracy', type: 'Activity' },
       { title: 'Phonics Reinforcement', category: 'Reading Intervention', type: 'Activity' },
       { title: 'Vocabulary Building', category: 'Reading Intervention', type: 'Module' },
       { title: 'Fractions Workshop', category: 'Numeracy', type: 'Activity' },
       { title: 'Guided Reading Sessions', category: 'Reading Intervention', type: 'Module' },
       { title: 'Cell Biology Module', category: 'Science', type: 'Module' },
-      { title: 'Number Talks', category: 'Numeracy', type: 'Video' },
-      { title: 'Comprehension Strategies', category: 'Reading Intervention', type: 'Video' },
+      { title: 'Number Talks Practice', category: 'Numeracy', type: 'Worksheet' },
+      { title: 'Comprehension Strategies Worksheet', category: 'Reading Intervention', type: 'Worksheet' },
       { title: 'Geometry Visuals', category: 'Science', type: 'Activity' },
     ];
 
@@ -276,15 +276,15 @@ const seedDB = async () => {
     console.log('Creating Recommendations...');
 
     const recommendations = [
-      { title: 'Decodable Readers Series', kind: 'Video', subject: 'Reading', description: 'Structured phonics videos with leveled decodable readers.', depedCode: 'EN7LT-Ia-1', source: 'DepEd Grade 7 English LM', meta: { lessons: 8, duration: '15 min' } },
+      { title: 'Decodable Readers Series', kind: 'Activity', subject: 'Reading', description: 'Structured phonics practice with leveled decodable readers.', depedCode: 'EN7LT-Ia-1', source: 'DepEd Grade 7 English LM', meta: { lessons: 8, duration: '15 min' } },
       { title: 'Multiplication Mastery', kind: 'Quiz', subject: 'Math', description: 'Interactive timed quizzes on times tables.', depedCode: 'M7NS-Ia-1', source: 'DepEd Grade 7 Math LM', meta: { items: 20 } },
       { title: 'Fraction Manipulatives', kind: 'Activity', subject: 'Math', description: 'Hands-on fraction tiles and visual exercises.', depedCode: 'M7NS-If-1', source: 'DepEd Grade 7 Math LM', meta: { duration: '30 min' } },
       { title: 'Comprehension Toolkit', kind: 'Module', subject: 'Reading', description: 'Self-paced module on main idea and inference.', depedCode: 'EN8RC-Ib-7.2', source: 'DepEd Grade 8 English LM', meta: { lessons: 6, duration: '20 min' } },
       { title: 'Linear Equations Drill', kind: 'Activity', subject: 'Math', description: 'Guided practice on solving linear equations.', depedCode: 'M8AL-Ie-1', source: 'DepEd Grade 8 Math LM', meta: { duration: '25 min' } },
-      { title: 'Cell Structure Explainer', kind: 'Video', subject: 'Science', description: 'Visual walkthrough of plant and animal cells.', depedCode: 'S7LT-IIe-5', source: 'DepEd Grade 7 Science LM', meta: { duration: '12 min' } },
+      { title: 'Cell Structure Explainer', kind: 'Activity', subject: 'Science', description: 'Visual diagram and analysis worksheet of plant and animal cells.', depedCode: 'S7LT-IIe-5', source: 'DepEd Grade 7 Science LM', meta: { duration: '15 min' } },
       { title: 'Vocabulary Builder', kind: 'Module', subject: 'Reading', description: 'Context-based vocabulary with grade-level texts.', depedCode: 'EN8V-Ia-10.2', source: 'DepEd Grade 8 English LM', meta: { lessons: 5, duration: '18 min' } },
       { title: 'Force & Motion Lab', kind: 'Activity', subject: 'Science', description: 'Simple experiments illustrating force and motion.', depedCode: 'S7FE-IIIb-1', source: 'DepEd Grade 7 Science LM', meta: { duration: '40 min' } },
-      { title: 'Number Talks', kind: 'Video', subject: 'Math', description: 'Short mental-math strategy videos.', depedCode: 'M7NS-IIa-1', source: 'DepEd Grade 7 Math LM', meta: { duration: '10 min' } },
+      { title: 'Number Talks Practice', kind: 'Activity', subject: 'Math', description: 'Mental-math strategy exercises and worksheets.', depedCode: 'M7NS-IIa-1', source: 'DepEd Grade 7 Math LM', meta: { duration: '15 min' } },
     ];
     await Recommendation.insertMany(recommendations);
 

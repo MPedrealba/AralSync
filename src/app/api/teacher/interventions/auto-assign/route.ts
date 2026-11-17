@@ -19,10 +19,11 @@ const SUBJECT_BY_WEAKNESS: Record<string, string> = {
 
 /** Recommendation kind → Intervention.type (Quiz becomes an Activity material). */
 const TYPE_MAP: Record<string, string> = {
-  Video: 'Video',
+  Video: 'Worksheet',
   Quiz: 'Activity',
   Activity: 'Activity',
   Module: 'Module',
+  Worksheet: 'Worksheet',
 };
 
 /** Score below 75 is treated as a learning weakness. */
