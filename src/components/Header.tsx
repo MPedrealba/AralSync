@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getUserInitials } from "@/lib/greeting";
 import {
   Bell,
   CheckCircle2,
@@ -73,6 +74,8 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
   const [hasReadingAccess, setHasReadingAccess] = useState(false);
   const [canSwitchStream, setCanSwitchStream] = useState(false);
   const [activeStream, setActiveStream] = useState<"english" | "filipino">("english");
+  const [userName, setUserName] = useState("");
+  const [roleBadge, setRoleBadge] = useState("Teacher");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -80,9 +83,11 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
       .then((json) => {
         if (json.success && json.data) {
           const user = json.data;
+          setUserName(user.name || "");
           const assigned = user.assignedSubject || "";
           const spec = user.specialization || "";
-          const role = user.role || "";
+          const role = user.role || "teacher";
+          setRoleBadge(assigned && assigned !== "All" ? `${role} • ${assigned}` : role);
 
           // Only dual-subject holders ("English & Filipino", "All") or leadership roles see the switcher
           const canSwitch =
@@ -328,6 +333,19 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
             </>
           )}
         </div>
+
+        {/* User Identity Chip */}
+        {mounted && userName && (
+          <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-800 text-xs font-bold text-white shadow-2xs">
+              {getUserInitials(userName)}
+            </div>
+            <div className="text-left text-xs leading-tight">
+              <p className="font-bold text-slate-800 line-clamp-1">{userName}</p>
+              <p className="text-[10px] text-slate-400 capitalize">{roleBadge}</p>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

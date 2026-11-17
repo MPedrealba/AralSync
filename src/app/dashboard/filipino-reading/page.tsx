@@ -65,13 +65,17 @@ export default function FilipinoReadingDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [userName, setUserName] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => parseJsonResponse(r))
       .then((json) => {
-        if (json.success && json.data?.assignedSubject === "English") {
-          router.replace("/dashboard");
+        if (json.success && json.data) {
+          if (json.data.name) setUserName(json.data.name);
+          if (json.data.assignedSubject === "English") {
+            router.replace("/dashboard");
+          }
         }
       })
       .catch(() => {});
@@ -139,11 +143,11 @@ export default function FilipinoReadingDashboardPage() {
                   Baitang 7 hanggang 10
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                AralSync FILIPINO READING TEACHER PORTAL
+              <h1 suppressHydrationWarning className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                Maligayang pagbabalik, {userName || "Guro"}! 👋
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-red-100 max-w-2xl">
-                Pinag-isang portal para sa Pangkatang Pagtatasa ng Klase (GST Stage 1), Indibidwal na Pagtataya (Stage 2), at Pagsubaybay sa Kakayahan sa Pagbasa ng mga mag-aaral.
+                Narito ang iyong buod sa ARAL Program para sa Pangkatang Pagtatasa (GST Stage 1) at Indibidwal na Pagbasa (Stage 2).
               </p>
             </div>
 

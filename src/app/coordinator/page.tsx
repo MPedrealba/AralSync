@@ -6,6 +6,7 @@ import StatCard from "@/components/StatCard";
 import Link from "next/link";
 import { Users, GraduationCap, ShieldCheck, Activity, LogIn, History, UserPlus, ArrowRight } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getTimeOfDayGreeting } from "@/lib/greeting";
 
 interface CoordData {
   overview: {
@@ -28,8 +29,20 @@ const fmtTime = (d: string) => {
 export default function CoordinatorDashboardPage() {
   const [data, setData] = useState<CoordData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string>("");
+  const [greeting, setGreeting] = useState<string>("Good day");
 
   useEffect(() => {
+    setGreeting(getTimeOfDayGreeting());
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data?.name) {
+          setUserName(json.data.name);
+        }
+      })
+      .catch(() => {});
+
     const fetchData = async () => {
       try {
         const res = await fetch("/api/coordinator/dashboard");
@@ -75,9 +88,11 @@ export default function CoordinatorDashboardPage() {
         {/* Title & Quick Actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">ARAL Coordinator Dashboard</h1>
+            <h1 suppressHydrationWarning className="text-2xl font-bold tracking-tight text-slate-900">
+              {greeting}, {userName || "Coordinator"}! 👋
+            </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Account overview — program users, learners, and recent system activity.
+              Schoolwide ARAL Program overview — active learners, assigned teachers, and system metrics.
             </p>
           </div>
 

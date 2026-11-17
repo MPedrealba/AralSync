@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import StatCard from "@/components/StatCard";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getTimeOfDayGreeting } from "@/lib/greeting";
 import { Users, AlertTriangle, UserCheck, FileCheck } from "lucide-react";
 import {
   PieChart,
@@ -21,8 +22,20 @@ import {
 export default function PrincipalDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string>("");
+  const [greeting, setGreeting] = useState<string>("Good day");
 
   useEffect(() => {
+    setGreeting(getTimeOfDayGreeting());
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data?.name) {
+          setUserName(json.data.name);
+        }
+      })
+      .catch(() => {});
+
     const fetchData = async () => {
       try {
         const res = await fetch("/api/principal/dashboard");
@@ -69,11 +82,11 @@ export default function PrincipalDashboardPage() {
       <main className="flex-1 overflow-y-auto bg-gray-50 p-8 space-y-8">
         {/* Title */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Principal Dashboard
+          <h1 suppressHydrationWarning className="text-2xl font-bold text-gray-900">
+            {greeting}, {userName || "Principal"}! 👋
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Welcome back! Here&apos;s your school&apos;s live database overview.
+            Executive schoolwide overview — live enrollment, interventions, and learning recovery indicators.
           </p>
         </div>
 

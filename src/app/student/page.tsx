@@ -5,14 +5,17 @@ import { BookOpen, ShieldCheck, TrendingUp, Target, Laptop, ArrowRight } from "l
 import Link from "next/link";
 import StatCard from "@/components/StatCard";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getTimeOfDayGreeting } from "@/lib/greeting";
 
 export default function StudentDashboardPage() {
   const [data, setData] = useState<any>(null);
   const [pendingExams, setPendingExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [timeGreeting, setTimeGreeting] = useState("Good day");
 
   useEffect(() => {
+    setTimeGreeting(getTimeOfDayGreeting());
     const fetchData = async () => {
       try {
         const [res, examsRes] = await Promise.all([
@@ -122,11 +125,11 @@ export default function StudentDashboardPage() {
       {/* Greeting */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            Good morning, {user?.name?.split(" ")[0]} 👋
+          <h1 suppressHydrationWarning className="text-2xl font-bold tracking-tight text-gray-900">
+            {timeGreeting}, {user?.name || "Learner"}! 👋
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Here is your latest learning recovery progress.
+            Here is your latest learning recovery progress and assigned activities.
           </p>
         </div>
         <Link

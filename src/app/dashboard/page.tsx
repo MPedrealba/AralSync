@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import StatCard from "@/components/StatCard";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getTimeOfDayGreeting } from "@/lib/greeting";
 import {
   Users,
   AlertTriangle,
@@ -62,13 +63,19 @@ export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [userName, setUserName] = useState<string>("");
+  const [greeting, setGreeting] = useState<string>("Good day");
 
   useEffect(() => {
+    setGreeting(getTimeOfDayGreeting());
     fetch("/api/auth/me")
       .then((r) => parseJsonResponse(r))
       .then((json) => {
-        if (json.success && json.data?.assignedSubject === "Filipino") {
-          router.replace("/dashboard/filipino-reading");
+        if (json.success && json.data) {
+          if (json.data.name) setUserName(json.data.name);
+          if (json.data.assignedSubject === "Filipino") {
+            router.replace("/dashboard/filipino-reading");
+          }
         }
       })
       .catch(() => {});
@@ -139,8 +146,8 @@ export default function DashboardPage() {
       <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8 space-y-5 sm:space-y-8">
         {/* ── A. Welcome Header ── */}
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Welcome back, Teacher!
+          <h1 suppressHydrationWarning className="text-2xl font-bold tracking-tight text-slate-900">
+            {greeting}, {userName || "Teacher"}! 👋
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Here is your ARAL Program learning recovery overview for Grade 7 &amp; 8 cohorts.

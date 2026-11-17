@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { getUserInitials } from "@/lib/greeting";
 import {
   Bell,
   CheckCircle2,
@@ -68,6 +69,8 @@ export default function PrincipalHeader({ title, onOpenMobileMenu }: PrincipalHe
   const [items, setItems] = useState<Notif[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("");
+  const [roleBadge, setRoleBadge] = useState("Staff");
 
   const fetchNotifs = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -87,6 +90,16 @@ export default function PrincipalHeader({ title, onOpenMobileMenu }: PrincipalHe
 
   useEffect(() => {
     setMounted(true);
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data) {
+          setUserName(json.data.name || "");
+          setRoleBadge(json.data.role || "Principal");
+        }
+      })
+      .catch(() => {});
+
     fetchNotifs(false);
     const t = setInterval(() => fetchNotifs(true), 30000);
     const onFocus = () => fetchNotifs(true);
@@ -229,6 +242,19 @@ export default function PrincipalHeader({ title, onOpenMobileMenu }: PrincipalHe
             </>
           )}
         </div>
+
+        {/* User Identity Chip */}
+        {mounted && userName && (
+          <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-800 text-xs font-bold text-white shadow-2xs">
+              {getUserInitials(userName)}
+            </div>
+            <div className="text-left text-xs leading-tight">
+              <p className="font-bold text-slate-800 line-clamp-1">{userName}</p>
+              <p className="text-[10px] text-slate-400 capitalize">{roleBadge}</p>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
