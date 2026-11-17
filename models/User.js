@@ -6,7 +6,7 @@ const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   role: { type: String, enum: ['student', 'teacher', 'principal', 'coordinator'], required: true },
   specialization: { type: String, enum: ['reading', 'all-subjects'], default: 'all-subjects' },
-  assignedSubject: { type: String, enum: ['English', 'Filipino', 'Reading', 'Math', 'Science', 'All'], default: 'All' },
+  assignedSubject: { type: String, enum: ['English', 'Filipino', 'English & Filipino', 'Reading', 'Math', 'Science', 'All'], default: 'All' },
   email: { type: String },
   active: { type: Boolean, default: true },
   mustChangePassword: { type: Boolean, default: false }

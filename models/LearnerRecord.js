@@ -15,6 +15,7 @@ const PhilIriLanguageMetricsSchema = new mongoose.Schema(
       ],
       default: 'Unassessed',
     },
+    recommendedStartingLevel: { type: Number, default: null },
     readingLevel: {
       type: String,
       enum: [

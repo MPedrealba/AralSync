@@ -21,7 +21,10 @@ describe('Reading Fluency Passage Viewer, Dual Selectors & Edit Mode Suite', () 
     test('renders separate Passage Selector with label and passageTitle select', () => {
       assert.ok(content.includes('Select Passage:'), 'Must include Select Passage: label');
       assert.ok(content.includes('value={passageTitle}'), 'Passage select must bind to passageTitle');
-      assert.ok(content.includes('passages.map'), 'Passage select must iterate over passages');
+      assert.ok(
+        content.includes('displayPassages.map') || content.includes('passages.map'),
+        'Passage select must iterate over passages'
+      );
       assert.ok(content.includes('words'), 'Passage select options must display word counts');
     });
 

@@ -11,6 +11,7 @@ export interface CachedPassage {
   title: string;
   text: string;
   gradeLevel: number | null;
+  language?: string;
   questions: Array<{
     question: string;
     options: string[];
@@ -200,6 +201,163 @@ export const DEFAULT_OFFLINE_PASSAGES: CachedPassage[] = [
         question: "How does the spirit of Bayanihan manifest in modern times?",
         options: ["Volunteering and helping others during crises and calamities", "Building larger concrete houses", "Traveling to distant islands", "Trading goods in markets"],
         answer: "Volunteering and helping others during crises and calamities",
+      },
+    ],
+  },
+  // ── Official DepEd Phil-IRI Graded Passages (Filipino pp. 133–179) ──
+  {
+    id: "builtin-philiri-fil-g4",
+    title: "Phil-IRI Filipino Baitang 4: Ang Masipag na Kalabaw",
+    gradeLevel: 4,
+    language: "filipino",
+    text:
+      "Ang kalabaw ang pambansang hayop ng Pilipinas. Ito ay kilala sa kaniyang lakas at sipag sa pag-aararo ng palayan. " +
+      "Tuwing mainit ang panahon, gustong-gusto ng kalabaw na maglublob sa malamig na putik upang maprotektahan ang kaniyang balat sa init at kagat ng insekto. " +
+      "Mahalaga ang kalabaw sa bawat magsasakang Pilipino dahil ito ang katuwang sa pagtatanim at pag-aani.",
+    questions: [
+      {
+        question: "Ano ang pambansang hayop ng Pilipinas ayon sa teksto?",
+        options: ["Kalabaw", "Tamaraw", "Agila", "Tarsier"],
+        answer: "Kalabaw",
+      },
+      {
+        question: "Bakit naglulublob sa putik ang kalabaw tuwing mainit ang panahon?",
+        options: ["Upang maprotektahan ang balat sa init at insekto", "Upang makatulog nang mahimbing", "Upang maglinis ng kaniyang sungay", "Upang magtago sa ibang hayop"],
+        answer: "Upang maprotektahan ang balat sa init at insekto",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g5",
+    title: "Phil-IRI Filipino Baitang 5: Ang Puno ng Buhay",
+    gradeLevel: 5,
+    language: "filipino",
+    text:
+      "Ang puno ng niyog ay tinaguriang Puno ng Buhay sa Pilipinas dahil ang bawat bahagi nito ay may kapakinabangan. " +
+      "Ang tubig nito ay masarap na inumin at ang laman ay ginagawang langis at sangkap sa lutuin. " +
+      "Ang mga dahon ay hinahabi bilang bubong at banig, habang ang bao at bunot ay ginagawang bunot, lubid, at panggatong. " +
+      "Walang nasasayang sa puno ng niyog.",
+    questions: [
+      {
+        question: "Bakit tinawag na Puno ng Buhay ang puno ng niyog?",
+        options: ["Bawat bahagi nito ay may kapakinabangan", "Ito ang pinakamataas na puno", "Nakatira rito ang mga ibon", "Mabilis itong tumubo"],
+        answer: "Bawat bahagi nito ay may kapakinabangan",
+      },
+      {
+        question: "Aling bahagi ng niyog ang hinahabi upang maging bubong at banig?",
+        options: ["Mga dahon", "Mga ugat", "Bao ng niyog", "Bunot ng niyog"],
+        answer: "Mga dahon",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g6",
+    title: "Phil-IRI Filipino Baitang 6: Bayanihan sa Nayon",
+    gradeLevel: 6,
+    language: "filipino",
+    text:
+      "Ang bayanihan ay isang katangi-tanging kaugaliang Pilipino na nagpapakita ng pagkakaisa at pagtutulungan. " +
+      "Noong unang panahon, nagtitipon ang mga kalalakihan upang buhatin ang isang bahay-kubo patungo sa bagong lupain. " +
+      "Sa pamamagitan ng mahahabang kawayan at sabay-sabay na paghakbang, naisasakatuparan ang mabigat na gawain nang may ngiti at awitan. " +
+      "Sa kasalukuyan, nananatiling buhay ang diwa ng bayanihan sa panahon ng kalamidad.",
+    questions: [
+      {
+        question: "Anong kaugaliang Pilipino ang inilarawan sa seleksiyon?",
+        options: ["Bayanihan", "Pagmamano", "Harana", "Pamamanhikan"],
+        answer: "Bayanihan",
+      },
+      {
+        question: "Paano ipinapakita ang bayanihan sa kasalukuyang panahon?",
+        options: ["Sa pamamagitan ng pagtutulungan sa panahon ng kalamidad", "Sa pagbili ng mga mamahaling gadyet", "Sa paglalakbay sa ibang bansa", "Sa pagtatrabaho nang mag-isa"],
+        answer: "Sa pamamagitan ng pagtutulungan sa panahon ng kalamidad",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g7",
+    title: "Phil-IRI Filipino Baitang 7: Isandaang Piso",
+    gradeLevel: 7,
+    language: "filipino",
+    text:
+      "Alas-sais na ng umaga nang makauwi si Rona galing trabaho. Nakita niya ang kaniyang ama na nakaupo sa hapag-kainan. " +
+      "Nang humingi ang ama ng isandaang piso, napabuntong-hininga si Rona dahil sa puyat at pagod. " +
+      "Ngunit lumambot ang kaniyang puso nang ipaliwanag ng ama na nais lamang nitong bumili ng isang oras ng panahon ni Rona upang makasabay siyang kumain at makausap bago siya matulog.",
+    questions: [
+      {
+        question: "Bakit nais humiram ng isandaang piso ng ama ni Rona?",
+        options: ["Upang bumili ng isang oras ng panahon ni Rona", "Upang bumili ng gamot", "Upang ipambayad sa kuryente", "Upang mamalengke"],
+        answer: "Upang bumili ng isang oras ng panahon ni Rona",
+      },
+      {
+        question: "Anong damdamin ang naramdaman ni Rona sa huli?",
+        options: ["Pagkaantig ng puso at pagkaunawa sa ama", "Labis na pagkagalit", "Kawalang-bahala", "Takot at pagkabahala"],
+        answer: "Pagkaantig ng puso at pagkaunawa sa ama",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g8",
+    title: "Phil-IRI Filipino Baitang 8: Foul",
+    gradeLevel: 8,
+    language: "filipino",
+    text:
+      "Tahimik niyang binaybay ang makitid na eskinita papunta sa basketball court ng barangay. " +
+      "Ito na ang huling laro sa liga at bilang point guard, hawak niya ang direksiyon ng bawat opensa. " +
+      "Mabigat ang kaniyang dibdib dahil sa alok na salapi kapalit ng pagpapatalo, ngunit pinili niyang maglaro nang tapat at buong puso, sapagkat ang tunay na pagkatalo ay ang paggawa ng maruming foul sa sariling dignidad.",
+    questions: [
+      {
+        question: "Anong posisyon sa basketball ang hawak ng pangunahing tauhan?",
+        options: ["Point guard", "Center", "Shooting guard", "Power forward"],
+        answer: "Point guard",
+      },
+      {
+        question: "Ano ang tunay na pagkatalo ayon sa tauhan?",
+        options: ["Paggawa ng maruming foul sa sariling dignidad", "Hindi pagkamit ng tropeo", "Pagkakaroon ng injury", "Pagkatalo sa huling minuto"],
+        answer: "Paggawa ng maruming foul sa sariling dignidad",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g9",
+    title: "Phil-IRI Filipino Baitang 9: ES-TUD-YAN-TE",
+    gradeLevel: 9,
+    language: "filipino",
+    text:
+      "Butil-butil ang pawis at nanlalamig ang katawan habang nakaupo sa tapat ng silid ng prinsipal hawak ang kaniyang report card. " +
+      "Sa ilalim ng kaniyang pangalan, may tatlong bituin na iginuhit ng kaniyang nakababatang kapatid bilang pampasuwerte. " +
+      "Napangiti siya sa gitna ng kaba nang maalala ang sakripisyo ng kaniyang mga magulang para lamang makapagtapos siya.",
+    questions: [
+      {
+        question: "Ano ang iginuhit ng nakababatang kapatid sa report card?",
+        options: ["Tatlong bituin", "Isang puso", "Guhit ng araw", "Isang ibon"],
+        answer: "Tatlong bituin",
+      },
+      {
+        question: "Ano ang nagpalakas ng loob ng mag-aaral sa gitna ng kaba?",
+        options: ["Ang alaala ng sakripisyo ng kaniyang mga magulang", "Ang pangako ng regalo", "Ang kaniyang mga kaibigan", "Ang sariling katalinuhan"],
+        answer: "Ang alaala ng sakripisyo ng kaniyang mga magulang",
+      },
+    ],
+  },
+  {
+    id: "builtin-philiri-fil-g10",
+    title: "Phil-IRI Filipino Baitang 10: Abal-abal",
+    gradeLevel: 10,
+    language: "filipino",
+    text:
+      "Pagsapit ng dapit-hapon, naghahanda na kami para manghuli ng abal-abal o salagubang. " +
+      "Dala-dala ang flashlight at lalagyan ng tubig, matiyaga kaming naghintay sa ilalim ng mga puno ng mangga at bayabas. " +
+      "Ang abal-abal ay hindi lamang simpleng insekto kundi isang masustansyang putahe kapag iginisa, na nagbubuklod sa pamilya at nagtuturo ng pagpapahalaga sa kalikasan.",
+    questions: [
+      {
+        question: "Ano ang lokal na katawagan sa salagubang sa kuwento?",
+        options: ["Abal-abal", "Tipaklong", "Gagamba", "Kuliglig"],
+        answer: "Abal-abal",
+      },
+      {
+        question: "Anong aral ang natutuhan ng pamilya sa panghuhuli ng abal-abal?",
+        options: ["Pagbubuklod ng pamilya at pagpapahalaga sa kalikasan", "Panghuhuli ng mamahaling insekto", "Pagbebenta sa pamilihan", "Paggala sa gabi"],
+        answer: "Pagbubuklod ng pamilya at pagpapahalaga sa kalikasan",
       },
     ],
   },

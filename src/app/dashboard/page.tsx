@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import StatCard from "@/components/StatCard";
@@ -57,11 +58,21 @@ const CustomTooltip = ({
 
 /* ━━━ MAIN PAGE ━━━ */
 export default function DashboardPage() {
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data?.assignedSubject === "Filipino") {
+          router.replace("/dashboard/filipino-reading");
+        }
+      })
+      .catch(() => {});
+
     const fetchData = async () => {
       try {
         const res = await fetch("/api/teacher/dashboard");

@@ -67,7 +67,7 @@ export default function CoordinatorTeachersPage() {
   const [teachers, setTeachers] = useState<TeacherRoster[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState<"all" | "Reading" | "Math" | "Science">("all");
+  const [subjectFilter, setSubjectFilter] = useState<"all" | "English" | "Filipino" | "English & Filipino" | "Reading" | "Math" | "Science">("all");
   const [updatingSubjectId, setUpdatingSubjectId] = useState<string | null>(null);
   const [selectedTeacherForModal, setSelectedTeacherForModal] = useState<TeacherRoster | null>(null);
   const [modalSearch, setModalSearch] = useState("");
@@ -126,7 +126,9 @@ export default function CoordinatorTeachersPage() {
               ? {
                   ...t,
                   assignedSubject,
-                  specialization: assignedSubject === "Reading" ? "reading" : "all-subjects",
+                  specialization: ["Reading", "English", "Filipino", "English & Filipino"].includes(assignedSubject)
+                    ? "reading"
+                    : "all-subjects",
                 }
               : t
           )
@@ -260,6 +262,9 @@ export default function CoordinatorTeachersPage() {
             {(
               [
                 { key: "all", label: "All Subjects" },
+                { key: "English", label: "English" },
+                { key: "Filipino", label: "Filipino" },
+                { key: "English & Filipino", label: "Dual (En & Fil)" },
                 { key: "Reading", label: "Reading" },
                 { key: "Math", label: "Math" },
                 { key: "Science", label: "Science" },
@@ -311,10 +316,27 @@ export default function CoordinatorTeachersPage() {
                         <p className="font-mono text-[11px] text-slate-400">@{teacher.username}</p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                      <CheckCircle className="h-2.5 w-2.5" />
-                      Active
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                        <CheckCircle className="h-2.5 w-2.5" />
+                        Active
+                      </span>
+                      {teacher.assignedSubject === "English" && (
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                          English Only
+                        </span>
+                      )}
+                      {teacher.assignedSubject === "Filipino" && (
+                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                          Filipino Only
+                        </span>
+                      )}
+                      {teacher.assignedSubject === "English & Filipino" && (
+                        <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
+                          Dual Language
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-2.5 text-xs text-slate-600">
@@ -347,22 +369,24 @@ export default function CoordinatorTeachersPage() {
                         ) : (
                           <span
                             className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                              teacher.assignedSubject === "Reading"
+                              teacher.assignedSubject === "English"
                                 ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : teacher.assignedSubject === "Filipino"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : teacher.assignedSubject === "English & Filipino"
+                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                : teacher.assignedSubject === "Reading"
+                                ? "bg-sky-50 text-sky-700 border border-sky-200"
                                 : teacher.assignedSubject === "Math"
                                 ? "bg-amber-50 text-amber-700 border border-amber-200"
                                 : teacher.assignedSubject === "Science"
-                                ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-700 border border-slate-200"
                             }`}
                           >
-                            {teacher.assignedSubject === "Reading"
-                              ? "Reading"
-                              : teacher.assignedSubject === "Math"
-                              ? "Math"
-                              : teacher.assignedSubject === "Science"
-                              ? "Science"
-                              : "All Subjects"}
+                            {teacher.assignedSubject === "English & Filipino"
+                              ? "English & Filipino"
+                              : teacher.assignedSubject || "All Subjects"}
                           </span>
                         )}
                       </div>
@@ -372,13 +396,16 @@ export default function CoordinatorTeachersPage() {
                         onChange={(e) => handleAssignSubject(teacher.id, e.target.value)}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-colors focus:border-red-800 focus:bg-white disabled:opacity-60"
                       >
-                        <option value="Reading">Reading (Active — ARAL Workbooks)</option>
-                        <option value="Math">Math (Materials Pending)</option>
-                        <option value="Science">Science (Materials Pending)</option>
-                        <option value="All">All Subjects (Unrestricted)</option>
+                        <option value="English">English — English Reading Teacher (English-only portal)</option>
+                        <option value="Filipino">Filipino — Filipino Reading Teacher (Filipino-only portal)</option>
+                        <option value="English & Filipino">English &amp; Filipino — Dual Subject Holder (Access to both portals with switcher)</option>
+                        <option value="Reading">Reading (General Reading Portal)</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="All">All Subjects</option>
                       </select>
                       <p className="mt-1 text-[10px] text-slate-400">
-                        Locks this teacher's questionnaire generator to their assigned subject.
+                        Configures teacher portal access and Phil-IRI assessment stream.
                       </p>
                     </div>
 

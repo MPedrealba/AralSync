@@ -20,13 +20,14 @@ import {
   FileText,
   FileSpreadsheet,
   X,
+  ClipboardCheck,
 } from "lucide-react";
 import { useMobileNav } from "@/components/MobileNavContext";
 
 /** Items only visible to reading-specialized teachers. */
 const READING_ONLY_HREFS = new Set([
+  "/dashboard/gst",
   "/dashboard/reading-fluency",
-  "/dashboard/comprehension",
 ]);
 
 const allNavSections = [
@@ -40,9 +41,10 @@ const allNavSections = [
   {
     label: "ASSESSMENTS",
     items: [
+      { name: "Group Screening Test (GST)", href: "/dashboard/gst", icon: ClipboardCheck },
+      { name: "Oral Reading & Comprehension", href: "/dashboard/reading-fluency", icon: Mic },
       { name: "OMR Assessments", href: "/dashboard/omr-assessments", icon: ScanLine },
       { name: "OMR Scan", href: "/dashboard/omr-scan?scan=1", icon: Camera },
-      { name: "Oral Reading & Comprehension", href: "/dashboard/reading-fluency", icon: Mic },
     ],
   },
   {
@@ -79,9 +81,10 @@ const filipinoNavSections = [
   {
     label: "MGA PAGTATASA",
     items: [
+      { name: "Pangkatang Pagtatasa (GST)", href: "/dashboard/gst?stream=filipino", icon: ClipboardCheck },
+      { name: "Pagbasa at Pag-unawa", href: "/dashboard/reading-fluency?stream=filipino", icon: Mic },
       { name: "OMR Pagtatasa", href: "/dashboard/omr-assessments?stream=filipino", icon: ScanLine },
       { name: "OMR Scan", href: "/dashboard/omr-scan?scan=1&stream=filipino", icon: Camera },
-      { name: "Pagbasa at Pag-unawa", href: "/dashboard/reading-fluency?stream=filipino", icon: Mic },
     ],
   },
   {
@@ -102,7 +105,7 @@ const filipinoNavSections = [
   {
     label: "MGA ULAT",
     items: [
-      { name: "Mga Ulat at PDF", href: "/dashboard/reports?stream=filipino", icon: FileText },
+      { name: "Mga Ulat", href: "/dashboard/reports?stream=filipino", icon: FileText },
     ],
   },
 ];
@@ -134,16 +137,23 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
       .catch(() => /* ignore — default to all-subjects */ {});
   }, []);
 
+  const isFilipinoTeacher = assignedSubject === "Filipino";
+  const isEnglishTeacher = assignedSubject === "English";
+
   const isFilipino =
-    pathname?.includes("filipino-reading") ||
-    assignedSubject === "Filipino" ||
-    (typeof window !== "undefined" && window.location.search.includes("stream=filipino"));
+    isFilipinoTeacher ||
+    (!isEnglishTeacher && (
+      pathname?.includes("filipino-reading") ||
+      (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
+      (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino")
+    ));
 
   const isReading =
     isFilipino ||
-    specialization === "reading" ||
+    isEnglishTeacher ||
+    assignedSubject === "English & Filipino" ||
     assignedSubject === "Reading" ||
-    assignedSubject === "English";
+    specialization === "reading";
 
   // Filter out reading-only items for non-reading teachers
   const navSections = isFilipino
@@ -159,9 +169,13 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
         }))
         .filter((section) => section.items.length > 0);
 
-  const portalLabel = isFilipino
+  const portalLabel = isFilipinoTeacher || (isFilipino && !isEnglishTeacher)
     ? "Filipino Reading Teacher"
-    : ["Math", "Science", "Reading", "English"].includes(assignedSubject)
+    : isEnglishTeacher
+    ? "English Reading Teacher"
+    : assignedSubject === "English & Filipino"
+    ? "Dual Reading Teacher (En/Fil)"
+    : ["Math", "Science", "Reading"].includes(assignedSubject)
     ? `${assignedSubject} Teacher`
     : specialization === "reading"
     ? "Reading Teacher"

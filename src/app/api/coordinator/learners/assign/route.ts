@@ -27,6 +27,8 @@ export async function PATCH(req: NextRequest) {
       subject,
       assignedTeachers,
       readingTeacherId,
+      englishTeacherId,
+      filipinoTeacherId,
       mathTeacherId,
       scienceTeacherId,
     } = body;
@@ -76,8 +78,44 @@ export async function PATCH(req: NextRequest) {
 
       // Support subject-specific assignments
       const reqReadingId = assignedTeachers?.reading !== undefined ? assignedTeachers.reading : readingTeacherId;
+      const reqEnglishId = assignedTeachers?.english !== undefined ? assignedTeachers.english : englishTeacherId;
+      const reqFilipinoId = assignedTeachers?.filipino !== undefined ? assignedTeachers.filipino : filipinoTeacherId;
       const reqMathId = assignedTeachers?.math !== undefined ? assignedTeachers.math : mathTeacherId;
       const reqScienceId = assignedTeachers?.science !== undefined ? assignedTeachers.science : scienceTeacherId;
+
+      if (reqEnglishId !== undefined) {
+        if (!reqEnglishId || reqEnglishId === 'unassigned') {
+          updateFields['assignedTeachers.english'] = null;
+          updateFields.englishTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqEnglishId)) {
+          const tDoc = await User.findById(reqEnglishId);
+          if (tDoc) {
+            updateFields['assignedTeachers.english'] = tDoc._id;
+            updateFields.englishTeacherName = tDoc.name;
+            if (!updateFields.assignedTeacherId) {
+              updateFields.assignedTeacherId = tDoc._id;
+              updateFields.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqFilipinoId !== undefined) {
+        if (!reqFilipinoId || reqFilipinoId === 'unassigned') {
+          updateFields['assignedTeachers.filipino'] = null;
+          updateFields.filipinoTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqFilipinoId)) {
+          const tDoc = await User.findById(reqFilipinoId);
+          if (tDoc) {
+            updateFields['assignedTeachers.filipino'] = tDoc._id;
+            updateFields.filipinoTeacherName = tDoc.name;
+            if (!updateFields.assignedTeacherId) {
+              updateFields.assignedTeacherId = tDoc._id;
+              updateFields.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
 
       if (reqReadingId !== undefined) {
         if (!reqReadingId || reqReadingId === 'unassigned') {
@@ -130,7 +168,13 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      if (normalizedSubject === 'reading') {
+      if (normalizedSubject === 'english') {
+        updateFields['assignedTeachers.english'] = assignedTeacherId;
+        updateFields.englishTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'filipino') {
+        updateFields['assignedTeachers.filipino'] = assignedTeacherId;
+        updateFields.filipinoTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'reading') {
         updateFields['assignedTeachers.reading'] = assignedTeacherId;
         updateFields.readingTeacherName = assignedTeacherName;
       } else if (normalizedSubject === 'math') {
@@ -141,7 +185,13 @@ export async function PATCH(req: NextRequest) {
         updateFields.scienceTeacherName = assignedTeacherName;
       } else if (teacherDoc?.assignedSubject) {
         const subjKey = teacherDoc.assignedSubject.toLowerCase();
-        if (['reading', 'math', 'science'].includes(subjKey)) {
+        if (subjKey === 'english') {
+          updateFields['assignedTeachers.english'] = assignedTeacherId;
+          updateFields.englishTeacherName = assignedTeacherName;
+        } else if (subjKey === 'filipino') {
+          updateFields['assignedTeachers.filipino'] = assignedTeacherId;
+          updateFields.filipinoTeacherName = assignedTeacherName;
+        } else if (['reading', 'math', 'science'].includes(subjKey)) {
           updateFields[`assignedTeachers.${subjKey}`] = assignedTeacherId;
           updateFields[`${subjKey}TeacherName`] = assignedTeacherName;
         }
@@ -203,8 +253,44 @@ export async function PATCH(req: NextRequest) {
 
       // Subject-specific assignment resolving
       const reqReadingId = assignedTeachers?.reading !== undefined ? assignedTeachers.reading : readingTeacherId;
+      const reqEnglishId = assignedTeachers?.english !== undefined ? assignedTeachers.english : englishTeacherId;
+      const reqFilipinoId = assignedTeachers?.filipino !== undefined ? assignedTeachers.filipino : filipinoTeacherId;
       const reqMathId = assignedTeachers?.math !== undefined ? assignedTeachers.math : mathTeacherId;
       const reqScienceId = assignedTeachers?.science !== undefined ? assignedTeachers.science : scienceTeacherId;
+
+      if (reqEnglishId !== undefined) {
+        if (!reqEnglishId || reqEnglishId === 'unassigned') {
+          batchUpdate['assignedTeachers.english'] = null;
+          batchUpdate.englishTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqEnglishId)) {
+          const tDoc = await User.findById(reqEnglishId);
+          if (tDoc) {
+            batchUpdate['assignedTeachers.english'] = tDoc._id;
+            batchUpdate.englishTeacherName = tDoc.name;
+            if (!batchUpdate.assignedTeacherId) {
+              batchUpdate.assignedTeacherId = tDoc._id;
+              batchUpdate.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
+
+      if (reqFilipinoId !== undefined) {
+        if (!reqFilipinoId || reqFilipinoId === 'unassigned') {
+          batchUpdate['assignedTeachers.filipino'] = null;
+          batchUpdate.filipinoTeacherName = null;
+        } else if (mongoose.Types.ObjectId.isValid(reqFilipinoId)) {
+          const tDoc = await User.findById(reqFilipinoId);
+          if (tDoc) {
+            batchUpdate['assignedTeachers.filipino'] = tDoc._id;
+            batchUpdate.filipinoTeacherName = tDoc.name;
+            if (!batchUpdate.assignedTeacherId) {
+              batchUpdate.assignedTeacherId = tDoc._id;
+              batchUpdate.assignedTeacherName = tDoc.name;
+            }
+          }
+        }
+      }
 
       if (reqReadingId !== undefined) {
         if (!reqReadingId || reqReadingId === 'unassigned') {
@@ -257,7 +343,13 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      if (normalizedSubject === 'reading') {
+      if (normalizedSubject === 'english') {
+        batchUpdate['assignedTeachers.english'] = assignedTeacherId;
+        batchUpdate.englishTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'filipino') {
+        batchUpdate['assignedTeachers.filipino'] = assignedTeacherId;
+        batchUpdate.filipinoTeacherName = assignedTeacherName;
+      } else if (normalizedSubject === 'reading') {
         batchUpdate['assignedTeachers.reading'] = assignedTeacherId;
         batchUpdate.readingTeacherName = assignedTeacherName;
       } else if (normalizedSubject === 'math') {
@@ -268,7 +360,13 @@ export async function PATCH(req: NextRequest) {
         batchUpdate.scienceTeacherName = assignedTeacherName;
       } else if (teacherDoc?.assignedSubject) {
         const subjKey = teacherDoc.assignedSubject.toLowerCase();
-        if (['reading', 'math', 'science'].includes(subjKey)) {
+        if (subjKey === 'english') {
+          batchUpdate['assignedTeachers.english'] = assignedTeacherId;
+          batchUpdate.englishTeacherName = assignedTeacherName;
+        } else if (subjKey === 'filipino') {
+          batchUpdate['assignedTeachers.filipino'] = assignedTeacherId;
+          batchUpdate.filipinoTeacherName = assignedTeacherName;
+        } else if (['reading', 'math', 'science'].includes(subjKey)) {
           batchUpdate[`assignedTeachers.${subjKey}`] = assignedTeacherId;
           batchUpdate[`${subjKey}TeacherName`] = assignedTeacherName;
         }

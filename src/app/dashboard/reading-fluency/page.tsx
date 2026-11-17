@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
 import { parseJsonResponse } from "@/lib/safeFetch";
@@ -129,23 +130,54 @@ const fmtShort = (d: string) => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
-export default function ReadingFluencyPage() {
+function ReadingFluencyPageContent() {
+  const searchParams = useSearchParams();
+  const initialStudentId = searchParams.get("studentId") || undefined;
+  const initialStartingLevel = searchParams.get("startingLevel")
+    ? Number(searchParams.get("startingLevel"))
+    : undefined;
+
+  const [assignedSubject, setAssignedSubject] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => parseJsonResponse(r))
+      .then((json) => {
+        if (json.success && json.data?.assignedSubject) {
+          setAssignedSubject(json.data.assignedSubject);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const streamParam = searchParams.get("stream")?.toLowerCase();
+  const isFilipino =
+    assignedSubject === "Filipino" ||
+    (assignedSubject !== "English" && (
+      streamParam === "filipino" ||
+      (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino")
+    ));
+
   const [activeTab, setActiveTab] = useState<Tab>("New Session");
   const [selectedLearner, setSelectedLearner] = useState<FluencyRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
     <>
-      <Header title="Oral Reading & Comprehension" />
+      <Header title={isFilipino ? "Pagbasa at Pag-unawa" : "Oral Reading & Comprehension"} />
       <main className="flex-1 overflow-y-auto bg-slate-50 p-3.5 sm:p-6 md:p-8">
         {/* Title */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-              Phil-IRI Stage 2: Oral Reading & Comprehension Workstation
+              {isFilipino
+                ? "Phil-IRI Ikalawang Yugto: Pagtataya sa Pagbasa at Pag-unawa"
+                : "Phil-IRI Stage 2: Oral Reading & Comprehension Workstation"}
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Unified DepEd Phil-IRI Stage 2: Record learner oral reading, calibrate miscues in real time, score comprehension questions, and derive the Table 3 Joint Profile.
+              {isFilipino
+                ? "Pinag-isang Phil-IRI Stage 2: Itala ang pagbasa ng mag-aaral, sukatin ang miscues sa real time, tasahin ang pag-unawa, at alamin ang Table 3 Joint Profile."
+                : "Unified DepEd Phil-IRI Stage 2: Record learner oral reading, calibrate miscues in real time, score comprehension questions, and derive the Table 3 Joint Profile."}
             </p>
           </div>
         </div>
@@ -162,7 +194,11 @@ export default function ReadingFluencyPage() {
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
-              {tab}
+              {isFilipino && tab === "New Session"
+                ? "Bagong Pagtatasa"
+                : isFilipino && tab === "Result History"
+                ? "Kasaysayan ng Resulta"
+                : tab}
             </button>
           ))}
         </div>
@@ -170,6 +206,9 @@ export default function ReadingFluencyPage() {
         {activeTab === "New Session" && (
           <NewSessionTab
             onAnalyzed={() => setRefreshKey((k) => k + 1)}
+            initialStudentId={initialStudentId}
+            initialStartingLevel={initialStartingLevel}
+            isFilipino={isFilipino}
           />
         )}
         {activeTab === "Result History" && (
@@ -193,6 +232,20 @@ export default function ReadingFluencyPage() {
         />
       )}
     </>
+  );
+}
+
+export default function ReadingFluencyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-slate-50">
+          <Loader2 className="h-8 w-8 animate-spin text-red-800" />
+        </div>
+      }
+    >
+      <ReadingFluencyPageContent />
+    </Suspense>
   );
 }
 
@@ -226,6 +279,7 @@ interface PassageOption {
   text: string;
   gradeLevel: number | null;
   questions: PassageQuestion[];
+  language?: string;
 }
 interface Miscues {
   substitutions: number;
@@ -855,29 +909,86 @@ function WordByWordReader({
 const fmtTimer = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+const toFilipinoLevel = (level?: string) => {
+  switch (level) {
+    case "Independent":
+    case "Proficient":
+      return "Malaya";
+    case "Instructional":
+    case "Approaching":
+    case "Developing":
+      return "Pampagkatuto";
+    case "Frustration":
+      return "Pagkabigo";
+    case "Non-Reader":
+      return "Hindi Makabasa";
+    case "Unassessed":
+      return "Hindi Pa Naitatasa";
+    default:
+      return level || "";
+  }
+};
+
 const levelColor = (lv?: string) =>
-  lv === "Independent" || lv === "Proficient"
+  lv === "Independent" || lv === "Proficient" || lv === "Malaya"
     ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-    : lv === "Instructional" || lv === "Approaching"
+    : lv === "Instructional" || lv === "Approaching" || lv === "Pampagkatuto"
     ? "text-amber-700 bg-amber-50 border-amber-200"
     : lv === "Developing"
     ? "text-orange-700 bg-orange-50 border-orange-200"
-    : lv === "Non-Reader"
+    : lv === "Non-Reader" || lv === "Hindi Makabasa"
     ? "text-slate-800 bg-slate-100 border-slate-200"
     : "text-rose-700 bg-rose-50 border-rose-200";
 
-function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
+function NewSessionTab({
+  onAnalyzed,
+  initialStudentId,
+  initialStartingLevel,
+  isFilipino = false,
+}: {
+  onAnalyzed: () => void;
+  initialStudentId?: string;
+  initialStartingLevel?: number;
+  isFilipino?: boolean;
+}) {
   const [learners, setLearners] = useState<LearnerOption[]>([]);
   const [passages, setPassages] = useState<PassageOption[]>([]);
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId || "");
   const [selectedGrade, setSelectedGrade] = useState<string>("");
   const [selectedSection, setSelectedSection] = useState<string>("");
   const [passageTitle, setPassageTitle] = useState("Oral Reading Passage");
   const [passageText, setPassageText] = useState(SAMPLE_PASSAGE);
   const [isEditingPassage, setIsEditingPassage] = useState(false);
 
+  /* Strictly filter passages by active language stream (English vs Filipino) */
+  const displayPassages = useMemo(() => {
+    return passages.filter((p) => {
+      const pLang = (p.language || "").toLowerCase();
+      const isFil =
+        pLang === "filipino" ||
+        pLang === "tl" ||
+        p.title.toLowerCase().includes("filipino") ||
+        p.title.toLowerCase().includes("baitang");
+      return isFilipino ? isFil : !isFil;
+    });
+  }, [passages, isFilipino]);
+
   /* DepEd Phil-IRI Stage 2: Immediate Comprehension Check State */
   const [compAnswers, setCompAnswers] = useState<Record<number, boolean>>({});
+
+  /* Sync initial student from GST handoff query parameters */
+  useEffect(() => {
+    if (initialStudentId && learners.length > 0) {
+      const match = learners.find(
+        (l) => l.studentId === initialStudentId || String(l.studentId) === initialStudentId
+      );
+      if (match) {
+        setStudentId(match.studentId);
+        if (match.gradeLevel) setSelectedGrade(String(match.gradeLevel));
+        if (match.section) setSelectedSection(match.section);
+      }
+    }
+  }, [initialStudentId, learners]);
 
   /* Reset comprehension answers when passage or student changes */
   useEffect(() => {
@@ -917,28 +1028,40 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     [learners, studentId]
   );
 
-  /* Auto-select Phil-IRI recommended starting grade passage when student is selected */
+  /* Auto-select Phil-IRI recommended starting grade passage when student is selected or GST handoff */
   useEffect(() => {
-    if (!selectedStudentObj) return;
-
-    let targetGrade: number | null = selectedStudentObj.recommendedStartingLevel ?? null;
-    if (targetGrade === null && selectedStudentObj.gstScore !== null && selectedStudentObj.gstScore !== undefined) {
-      const evalRes = evaluateGstScore(selectedStudentObj.gstScore, selectedStudentObj.gradeLevel);
-      if (!evalRes.isGradeReady && evalRes.recommendedStartingGrade) {
-        targetGrade = evalRes.recommendedStartingGrade;
+    let targetGrade: number | null = initialStartingLevel ?? null;
+    if (targetGrade === null && selectedStudentObj) {
+      targetGrade = selectedStudentObj.recommendedStartingLevel ?? null;
+      if (targetGrade === null && selectedStudentObj.gstScore !== null && selectedStudentObj.gstScore !== undefined) {
+        const evalRes = evaluateGstScore(selectedStudentObj.gstScore, selectedStudentObj.gradeLevel);
+        if (!evalRes.isGradeReady && evalRes.recommendedStartingGrade) {
+          targetGrade = evalRes.recommendedStartingGrade;
+        }
+      } else if (targetGrade === null && selectedStudentObj.gstStatus === "Needs Individualized Assessment") {
+        targetGrade = Math.max(4, (selectedStudentObj.gradeLevel || 7) - 2);
       }
-    } else if (targetGrade === null && selectedStudentObj.gstStatus === "Needs Individualized Assessment") {
-      targetGrade = Math.max(4, (selectedStudentObj.gradeLevel || 7) - 2);
     }
 
-    if (targetGrade !== null) {
-      const match = passages.find((p) => p.gradeLevel === targetGrade);
+    if (targetGrade !== null && displayPassages.length > 0) {
+      const match = displayPassages.find((p) => p.gradeLevel === targetGrade);
       if (match) {
         setPassageTitle(match.title);
         setPassageText(match.text);
       }
     }
-  }, [selectedStudentObj, passages]);
+  }, [selectedStudentObj, displayPassages, initialStartingLevel]);
+
+  /* Ensure selected passage belongs to the active stream */
+  useEffect(() => {
+    if (displayPassages.length > 0) {
+      const exists = displayPassages.some((p) => p.title === passageTitle);
+      if (!exists || passageTitle === "Oral Reading Passage" || passageText === SAMPLE_PASSAGE) {
+        setPassageTitle(displayPassages[0].title);
+        setPassageText(displayPassages[0].text);
+      }
+    }
+  }, [displayPassages, passageTitle, passageText]);
 
   /* Filter learners by grade and section */
   const filteredLearners = useMemo(() => {
@@ -949,12 +1072,14 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
     });
   }, [learners, selectedGrade, selectedSection]);
 
-  /* Clear studentId if filtered out */
+  /* Clear studentId if filtered out (unless it's initialStudentId) */
   useEffect(() => {
     if (studentId && !filteredLearners.some((l) => l.studentId === studentId)) {
-      setStudentId("");
+      if (!initialStudentId || studentId !== initialStudentId) {
+        setStudentId("");
+      }
     }
-  }, [filteredLearners, studentId]);
+  }, [filteredLearners, studentId, initialStudentId]);
 
   /* Recording state */
   const [isRecording, setIsRecording] = useState(false);
@@ -1064,7 +1189,8 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         if (cached.length > 0) setLearners(cached);
       }
       try {
-        const res = await fetch("/api/teacher/reading/passages?keyStage=All");
+        const streamParam = isFilipino ? "&stream=filipino" : "&stream=english";
+        const res = await fetch(`/api/teacher/reading/passages?keyStage=All${streamParam}`);
         const json = await parseJsonResponse(res);
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setPassages(json.data);
@@ -1080,7 +1206,7 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
         setPassages(getCachedPassages());
       }
     })();
-  }, []);
+  }, [isFilipino]);
 
 
   /* Clean up on unmount */
@@ -1734,10 +1860,10 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Select Passage:
+                  {isFilipino ? "Pumili ng Babasahin:" : "Select Passage:"}
                 </label>
                 <span className="text-[10px] text-slate-400 font-medium">
-                  {passages.length} passages
+                  {displayPassages.length} {isFilipino ? "babasahin" : "passages"}
                 </span>
               </div>
               <select
@@ -1745,19 +1871,23 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
                 onChange={(e) => {
                   const title = e.target.value;
                   setPassageTitle(title);
-                  const p = passages.find((item) => item.title === title);
+                  const p = displayPassages.find((item) => item.title === title);
                   if (p) {
                     setPassageText(p.text);
                   }
                 }}
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
               >
-                <option value="">Select Phil-IRI Graded Passage ({passages.length})...</option>
-                {passages.map((p) => {
+                <option value="">
+                  {isFilipino
+                    ? `Pumili ng Phil-IRI Graded Passage (${displayPassages.length})...`
+                    : `Select Phil-IRI Graded Passage (${displayPassages.length})...`}
+                </option>
+                {displayPassages.map((p) => {
                   const wCount = p.text ? p.text.split(/\s+/).filter(Boolean).length : 0;
                   return (
                     <option key={p.id || p.title} value={p.title}>
-                      {p.gradeLevel ? `[Grade ${p.gradeLevel}] ` : ""}{p.title} ({wCount} words)
+                      {p.gradeLevel ? `[Grade ${p.gradeLevel}] ` : ""}{p.title} ({wCount} {isFilipino ? "salita" : "words"})
                     </option>
                   );
                 })}
@@ -2251,26 +2381,30 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Phil-IRI 2024 Level
+                  {isFilipino ? "Antas sa Phil-IRI" : "Phil-IRI 2024 Level"}
                 </p>
                 <span
                   className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
                     liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level
                   )}`}
                 >
-                  {liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration"}
+                  {isFilipino
+                    ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration")
+                    : (liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration")}
                 </span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Mastery
+                  {isFilipino ? "Kasanayan" : "Mastery"}
                 </p>
                 <span
                   className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
                     liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel
                   )}`}
                 >
-                  {liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel}
+                  {isFilipino
+                    ? toFilipinoLevel(liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel)
+                    : (liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel)}
                 </span>
               </div>
             </div>
@@ -2290,26 +2424,38 @@ function NewSessionTab({ onAnalyzed }: { onAnalyzed: () => void }) {
               <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-red-800" />
-                  Phil-IRI Table 3 Joint Profile
+                  {isFilipino ? "Phil-IRI Pinagsamang Antas (Talahanayan 3)" : "Phil-IRI Table 3 Joint Profile"}
                 </span>
                 <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${levelColor(combinedLevel)}`}>
-                  {combinedLevel}
+                  {isFilipino ? toFilipinoLevel(combinedLevel) : combinedLevel}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-slate-200/70 bg-white p-2">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Oral Reading (Table 1)</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">
+                    {isFilipino ? "Pang-unawa sa Pagbasa (Tal. 1)" : "Oral Reading (Table 1)"}
+                  </p>
                   <p className="text-base font-black text-slate-900 mt-0.5">{liveMetrics?.accuracy ?? result.accuracy}%</p>
-                  <p className="text-[10px] font-medium text-slate-500">{liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration"}</p>
+                  <p className="text-[10px] font-medium text-slate-500">
+                    {isFilipino
+                      ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration")
+                      : (liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration")}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-slate-200/70 bg-white p-2">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Comprehension (Table 2)</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">
+                    {isFilipino ? "Pag-unawa (Tal. 2)" : "Comprehension (Table 2)"}
+                  </p>
                   <p className="text-base font-black text-slate-900 mt-0.5">{compScorePct}%</p>
-                  <p className="text-[10px] font-medium text-slate-500">{compLevel} ({compCorrectCount}/{compTotal})</p>
+                  <p className="text-[10px] font-medium text-slate-500">
+                    {isFilipino ? toFilipinoLevel(compLevel) : compLevel} ({compCorrectCount}/{compTotal})
+                  </p>
                 </div>
               </div>
               <p className="mt-2 text-[10px] text-slate-500 leading-snug">
-                Official Phil-IRI Standard: Combined reading profile integrates Oral Accuracy + Comprehension check.
+                {isFilipino
+                  ? "Opisyal na Batayan ng DepEd Phil-IRI: Pinagsasama ang Oral Reading Accuracy at Comprehension."
+                  : "Official Phil-IRI Standard: Combined reading profile integrates Oral Accuracy + Comprehension check."}
               </p>
             </div>
 

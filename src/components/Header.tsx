@@ -71,15 +71,10 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasReadingAccess, setHasReadingAccess] = useState(false);
+  const [canSwitchStream, setCanSwitchStream] = useState(false);
   const [activeStream, setActiveStream] = useState<"english" | "filipino">("english");
 
   useEffect(() => {
-    // Check current stream from pathname or search or storage
-    const isFil =
-      pathname?.includes("filipino-reading") ||
-      (typeof window !== "undefined" && window.location.search.includes("stream=filipino"));
-    setActiveStream(isFil ? "filipino" : "english");
-
     fetch("/api/auth/me")
       .then((r) => parseJsonResponse(r))
       .then((json) => {
@@ -87,12 +82,34 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
           const user = json.data;
           const assigned = user.assignedSubject || "";
           const spec = user.specialization || "";
+          const role = user.role || "";
+
+          // Only dual-subject holders ("English & Filipino", "All") or leadership roles see the switcher
+          const canSwitch =
+            assigned === "English & Filipino" ||
+            assigned === "All" ||
+            ["principal", "coordinator", "admin"].includes(role);
+          setCanSwitchStream(canSwitch);
+
           const isReadingAllowed =
-            ["Reading", "English", "Filipino", "All"].includes(assigned) ||
+            ["Reading", "English", "Filipino", "English & Filipino", "All"].includes(assigned) ||
             spec === "reading" ||
             spec === "all-subjects" ||
-            ["principal", "coordinator", "admin"].includes(user.role);
+            ["principal", "coordinator", "admin"].includes(role);
           setHasReadingAccess(isReadingAllowed);
+
+          // Dedicated subject teachers lock strictly to their assigned portal
+          if (assigned === "Filipino") {
+            setActiveStream("filipino");
+          } else if (assigned === "English") {
+            setActiveStream("english");
+          } else {
+            const isFil =
+              pathname?.includes("filipino-reading") ||
+              (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
+              (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino");
+            setActiveStream(isFil ? "filipino" : "english");
+          }
         }
       })
       .catch(() => {});
@@ -188,7 +205,7 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
 
       {/* Right: Stream Switcher Pill & Notification Bell */}
       <div className="flex items-center gap-3">
-        {mounted && hasReadingAccess && (
+        {mounted && canSwitchStream && (
           <div className="hidden sm:flex items-center rounded-full bg-slate-100 p-1 border border-slate-200 text-xs font-semibold shadow-xs">
             <button
               type="button"

@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
       $or: [
         { assignedTeacherId: { $ne: null } },
         { 'assignedTeachers.reading': { $ne: null } },
+        { 'assignedTeachers.english': { $ne: null } },
+        { 'assignedTeachers.filipino': { $ne: null } },
         { 'assignedTeachers.math': { $ne: null } },
         { 'assignedTeachers.science': { $ne: null } },
       ],
@@ -37,6 +39,8 @@ export async function GET(req: NextRequest) {
       const teacherIds = new Set<string>();
       if (r.assignedTeacherId) teacherIds.add(r.assignedTeacherId.toString());
       if (r.assignedTeachers?.reading) teacherIds.add(r.assignedTeachers.reading.toString());
+      if (r.assignedTeachers?.english) teacherIds.add(r.assignedTeachers.english.toString());
+      if (r.assignedTeachers?.filipino) teacherIds.add(r.assignedTeachers.filipino.toString());
       if (r.assignedTeachers?.math) teacherIds.add(r.assignedTeachers.math.toString());
       if (r.assignedTeachers?.science) teacherIds.add(r.assignedTeachers.science.toString());
 
@@ -115,7 +119,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     teacher.assignedSubject = assignedSubject;
-    if (assignedSubject === 'Reading') {
+    if (['Reading', 'English', 'Filipino', 'English & Filipino'].includes(assignedSubject)) {
       teacher.specialization = 'reading';
     } else {
       teacher.specialization = 'all-subjects';

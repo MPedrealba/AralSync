@@ -15,6 +15,7 @@ export interface QuestionnaireSection {
   passageTitle?: string;
   passageText?: string;
   passageImage?: string;
+  author?: string;
   referenceType?: 'poem' | 'article' | 'advisory' | 'infographic';
 }
 

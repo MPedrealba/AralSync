@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useReactToPrint } from "react-to-print";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
@@ -202,6 +203,7 @@ interface AnswerKeyRow {
     correctAnswer?: string;
   }>;
   passageTitle?: string;
+  passageAuthor?: string;
   passageText?: string;
   passageImage?: string;
   sections?: QuestionnaireSection[];
@@ -1914,6 +1916,20 @@ interface GeneratedQuestion {
   competency: string;
   topic: string;
   correctAnswer?: string;
+  domain?: string;
+  cognitiveDomain?: string;
+}
+
+function getQuestionDomain(q: GeneratedQuestion): string | null {
+  if (q.domain) return q.domain;
+  if (q.cognitiveDomain) return q.cognitiveDomain;
+  if (q.difficulty) {
+    const d = q.difficulty.toLowerCase();
+    if (d.includes("literal") || d === "easy") return "Literal";
+    if (d.includes("infer") || d === "medium" || d === "average") return "Inferential";
+    if (d.includes("crit") || d.includes("eval") || d === "hard" || d === "difficult") return "Critical";
+  }
+  return null;
 }
 
 interface GeneratedDoc {
@@ -1926,6 +1942,7 @@ interface GeneratedDoc {
   gradeLevel: number;
   itemCount: number;
   passageTitle?: string;
+  passageAuthor?: string;
   passageText?: string;
   passageImage?: string;
   writtenCount: number;
@@ -1964,6 +1981,14 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
     Boolean(doc.title && /filipino|sipi|pangkatang/i.test(doc.title)) ||
     sections.some((s) => s.title?.includes("BAHAGI"));
 
+  const isReadingDoc =
+    doc.subject === "Reading" ||
+    doc.subject === "English" ||
+    doc.subject === "Filipino" ||
+    Boolean(doc.passageText && doc.passageText.length > 0) ||
+    Boolean(sections.some((s) => s.passageText && s.passageText.length > 0)) ||
+    Boolean(doc.title && /reading|phil-iri|gst|screening|diagnostic/i.test(doc.title));
+
   return (
     <div className="bg-white p-8 text-black font-sans max-w-4xl mx-auto print:p-0 print:m-0 print:max-w-none">
       {/* ── PAGE 1: OFFICIAL COVER & GENERAL INSTRUCTIONS ── */}
@@ -1973,89 +1998,138 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
       >
         <div>
           {/* Official DepEd School Header with Top Middle Logo and School Name */}
-          <div className="mb-6 border-b-2 border-black pb-4 text-center">
+          <div className="mb-6 border-b-2 border-black pb-4 text-center relative">
+            {isReadingDoc && (
+              <div className="absolute top-0 right-0 border border-black rounded px-3 py-0.5 text-xs font-bold tracking-wider">
+                Phil-IRI
+              </div>
+            )}
             <img
               src="/aral-logo.png"
               alt="School Logo"
               className="h-16 w-16 object-contain mx-auto mb-2 print:block"
             />
-            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-              {isFilipino ? "Republika ng Pilipinas" : "Republic of the Philippines"}
-            </p>
-            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-              {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
-            </p>
-            <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-              {isFilipino ? "Pambansang Punong Rehiyon — Sangay ng mga Paaralang Lungsod" : "National Capital Region — Division of City Schools"}
-            </p>
-            <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
-              GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
-            </h1>
-            <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
-              {doc.title}
-            </h2>
-            <p className="text-xs text-gray-700 mt-0.5">
-              {isFilipino ? "Asignatura: Filipino" : `Subject: ${doc.subject === "Math" ? "Mathematics" : doc.subject}`} • {isFilipino ? `Baitang ${doc.gradeLevel || 7}` : `Grade ${doc.gradeLevel || 7}`} • {doc.itemCount} {isFilipino ? "Aytem" : "Items"}
-              {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
-            </p>
+            {isReadingDoc ? (
+              <>
+                <h1 className="text-sm font-extrabold uppercase tracking-wide text-black mt-1">
+                  {doc.title.includes("Grade") || doc.title.includes("Baitang")
+                    ? doc.title
+                    : `${doc.title}, ${isFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
+                </h1>
+                <p className="text-[11px] text-gray-700 italic mt-0.5">
+                  GEN. EMILIO AGUINALDO INTEGRATED SCHOOL{"  "}{isFilipino ? "Filipino Reading" : "English Reading"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+                  {isFilipino ? "Republika ng Pilipinas" : "Republic of the Philippines"}
+                </p>
+                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+                  {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
+                </p>
+                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
+                  {isFilipino ? "Pambansang Punong Rehiyon — Sangay ng mga Paaralang Lungsod" : "National Capital Region — Division of City Schools"}
+                </p>
+                <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
+                  GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+                </h1>
+                <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
+                  {doc.title}
+                </h2>
+                <p className="text-xs text-gray-700 mt-0.5">
+                  {isFilipino ? "Asignatura: Filipino" : `Subject: ${doc.subject === "Math" ? "Mathematics" : doc.subject}`} • {isFilipino ? `Baitang ${doc.gradeLevel || 7}` : `Grade ${doc.gradeLevel || 7}`} • {doc.itemCount} {isFilipino ? "Aytem" : "Items"}
+                  {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Student Info Fields: Name, LRN, Grade & Section, Date, Score */}
-          <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-xs font-semibold border-b border-black pb-4 text-black">
-            <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider">{isFilipino ? "PANGALAN:" : "NAME:"}</span>
-              <span className="flex-1 border-b border-black" />
+          {/* Student Info Fields */}
+          {isReadingDoc ? (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{isFilipino ? "Pangalan:" : "Name:"}</span>
+                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{isFilipino ? "Pangkat:" : "Section:"}</span>
+                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{isFilipino ? "Petsa:" : "Date:"}</span>
+                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{isFilipino ? "Guro:" : "Teacher:"}</span>
+                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider">LRN:</span>
-              <span className="flex-1 border-b border-black" />
+          ) : (
+            <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-xs font-semibold border-b border-black pb-4 text-black">
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-wider">{isFilipino ? "PANGALAN:" : "NAME:"}</span>
+                <span className="flex-1 border-b border-black" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-wider">LRN:</span>
+                <span className="flex-1 border-b border-black" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-wider">{isFilipino ? "SEKSIYON:" : "SECTION:"}</span>
+                <span className="flex-1 border-b border-black" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-wider">{isFilipino ? "PETSA:" : "DATE:"}</span>
+                <span className="flex-1 border-b border-black" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-wider">{isFilipino ? "MARKA:" : "SCORE:"}</span>
+                <span className="flex-1 border-b border-black" />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider">{isFilipino ? "SEKSIYON:" : "SECTION:"}</span>
-              <span className="flex-1 border-b border-black" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider">{isFilipino ? "PETSA:" : "DATE:"}</span>
-              <span className="flex-1 border-b border-black" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider">{isFilipino ? "MARKA:" : "SCORE:"}</span>
-              <span className="flex-1 border-b border-black" />
-            </div>
-          </div>
+          )}
 
           {/* General Directions */}
           <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed text-black">
             <h3 className="font-bold uppercase tracking-wider text-black mb-2">
-              {isFilipino ? "PANGKALAHATANG PANUTO" : "General Instructions"}
+              {isFilipino ? "PANGKALAHATANG PANUTO" : "General Direction"}
             </h3>
-            <ol className="list-decimal pl-5 space-y-2 text-gray-900 text-[11.5px] leading-relaxed">
-              {isFilipino ? (
-                <>
-                  <li>Basahing mabuti ang bawat tanong bago piliin ang iyong sagot.</li>
-                  <li>HUWAG susulatan o mamarkahan ang assessment booklet na ito.</li>
-                  <li>Itiman nang buo at malinaw ang bilog na tumutugma sa iyong napiling titik (A, B, C, o D) sa iyong opisyal na 50-Item OMR Sagutang Papel.</li>
-                  <li>Gumamit lamang ng itim o asul na bolpen o lapis (No. 2). Iwasan ang bura o labis na marka.</li>
-                  {isMultiSection && (
-                    <li>
-                      Ang booklet na ito ay naglalaman ng <strong>{sections.length} Bahagi</strong>. Bawat bahagi ay nagsisimula sa sarili nitong pahina kasama ang kaugnay na seleksiyon, kuwento, tula, o infographic.
-                    </li>
-                  )}
-                </>
-              ) : (
-                <>
-                  <li>Read each question carefully before choosing your answer.</li>
-                  <li>Do NOT write, mark, or shade your answers on this questionnaire booklet.</li>
-                  <li>Shade the circle corresponding to your chosen letter (A, B, C, or D) cleanly and completely on your official 50-Item OMR Bubble Sheet.</li>
-                  <li>Use only a black or dark blue pen / pencil (No. 2) to shade the bubbles. Avoid erasures or stray marks.</li>
-                  {isMultiSection && (
-                    <li>
-                      This assessment booklet contains <strong>{sections.length} Parts</strong>. Each part begins on its own page with its required reference reading material, poem, advisory, or infographic.
-                    </li>
-                  )}
-                </>
-              )}
-            </ol>
+            {isReadingDoc ? (
+              <p className="text-[11px] text-black leading-snug">
+                {isFilipino
+                  ? "Basahin ang bawat seleksyon. Pagkatapos, basahin ang mga tanong at isulat ang titik ng tamang sagot sa sagutang papel (o itiman ang bilog sa opisyal na OMR Sagutang Papel):"
+                  : "Read each selection. Then read the questions that follow and write the letter of the correct answer in the answer sheet:"}
+              </p>
+            ) : (
+              <ol className="list-decimal pl-5 space-y-2 text-gray-900 text-[11.5px] leading-relaxed">
+                {isFilipino ? (
+                  <>
+                    <li>Basahing mabuti ang bawat tanong bago piliin ang iyong sagot.</li>
+                    <li>HUWAG susulatan o mamarkahan ang assessment booklet na ito.</li>
+                    <li>Itiman nang buo at malinaw ang bilog na tumutugma sa iyong napiling titik (A, B, C, o D) sa iyong opisyal na 50-Item OMR Sagutang Papel.</li>
+                    <li>Gumamit lamang ng itim o asul na bolpen o lapis (No. 2). Iwasan ang bura o labis na marka.</li>
+                    {isMultiSection && (
+                      <li>
+                        Ang booklet na ito ay naglalaman ng <strong>{sections.length} Bahagi</strong>. Bawat bahagi ay nagsisimula sa sarili nitong pahina kasama ang kaugnay na seleksiyon, kuwento, tula, o infographic.
+                      </li>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <li>Read each question carefully before choosing your answer.</li>
+                    <li>Do NOT write, mark, or shade your answers on this questionnaire booklet.</li>
+                    <li>Shade the circle corresponding to your chosen letter (A, B, C, or D) cleanly and completely on your official 50-Item OMR Bubble Sheet.</li>
+                    <li>Use only a black or dark blue pen / pencil (No. 2) to shade the bubbles. Avoid erasures or stray marks.</li>
+                    {isMultiSection && (
+                      <li>
+                        This assessment booklet contains <strong>{sections.length} Parts</strong>. Each part begins on its own page with its required reference reading material, poem, advisory, or infographic.
+                      </li>
+                    )}
+                  </>
+                )}
+              </ol>
+            )}
           </div>
 
           {/* Multi-Section Reference Material Index on Cover Page */}
@@ -2081,12 +2155,18 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
 
           {/* Single-section fallback passage if not multi-section */}
           {!isMultiSection && doc.passageText && (
-            <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed">
-              <p className="font-bold uppercase tracking-wider text-black mb-1">
-                {isFilipino ? "Seleksiyon sa Pagbasa:" : "Reading Selection:"} {doc.passageTitle}
-              </p>
-              <div className="whitespace-pre-line text-gray-800 font-serif text-[11.5px]">
-                {doc.passageText}
+            <div className="mb-4 break-inside-avoid reading-passage-box">
+              <div className="w-full border border-black p-3.5 bg-white text-black mb-1">
+                <h2 className="text-center font-bold text-xs sm:text-sm uppercase tracking-wide mb-1.5 text-black">
+                  {doc.passageTitle || (isFilipino ? "Seleksiyon sa Pagbasa" : "Reading Selection")}
+                </h2>
+                <div className="font-serif text-[11px] leading-relaxed text-left text-black whitespace-pre-line indent-6 select-text">
+                  {doc.passageText}
+                </div>
+              </div>
+              {/* Word Count Tag */}
+              <div className="text-right text-[10px] text-black italic mb-2">
+                {doc.passageText.split(/\s+/).filter(Boolean).length} words
               </div>
             </div>
           )}
@@ -2110,13 +2190,14 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
           return (
             <div
               key={sIdx}
-              className={isMultiSection ? "section-page pt-1 print:pt-0" : "break-inside-avoid"}
+              className={isMultiSection ? "section-page print-booklet-page print-page-break pt-1 print:pt-0" : "break-inside-avoid"}
               style={
                 isMultiSection
                   ? {
                       breakAfter: !isLastSection ? "page" : "auto",
                       pageBreakAfter: !isLastSection ? "always" : "auto",
                       /* Page-break enforcement: pageBreakBefore: "always" */
+                      pageBreakBefore: "always",
                     }
                   : undefined
               }
@@ -2206,22 +2287,22 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
               {/* Part II: 2 Justified Columns Article */}
               {section.referenceType === "article" && section.passageText && (
                 <div
-                  className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                  className="mb-2 break-inside-avoid"
                   style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
                 >
-                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
-                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
-                      Reading Selection: {section.passageTitle || section.topic}
-                    </p>
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
-                      Article
-                    </span>
+                  <div className="border border-black p-3.5 rounded-none bg-white text-black mb-1">
+                    <h3 className="text-center font-bold text-xs sm:text-sm uppercase tracking-wide mb-2 text-black">
+                      {section.passageTitle || section.topic}
+                    </h3>
+                    <div
+                      className="text-[10px] leading-tight text-gray-800 font-serif whitespace-pre-line text-justify indent-6 select-text"
+                      style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
+                    >
+                      {section.passageText}
+                    </div>
                   </div>
-                  <div
-                    className="text-[10px] leading-tight text-gray-800 font-serif whitespace-pre-line text-justify"
-                    style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
-                  >
-                    {section.passageText}
+                  <div className="text-right text-[10px] text-black italic mb-2">
+                    {section.passageText.trim().split(/\s+/).filter(Boolean).length} words
                   </div>
                 </div>
               )}
@@ -2229,22 +2310,22 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
               {/* Part III: 2 Justified Columns Advisory */}
               {section.referenceType === "advisory" && section.passageText && (
                 <div
-                  className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                  className="mb-2 break-inside-avoid"
                   style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
                 >
-                  <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
-                    <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
-                      Reading Selection: {section.passageTitle || section.topic}
-                    </p>
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border border-gray-400 text-gray-700 bg-gray-50">
-                      Advisory
-                    </span>
+                  <div className="border border-black p-3.5 rounded-none bg-white text-black mb-1">
+                    <h3 className="text-center font-bold text-xs sm:text-sm uppercase tracking-wide mb-2 text-black">
+                      {section.passageTitle || section.topic}
+                    </h3>
+                    <div
+                      className="text-[10px] leading-tight text-gray-800 font-sans whitespace-pre-line text-justify indent-6 select-text"
+                      style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
+                    >
+                      {section.passageText}
+                    </div>
                   </div>
-                  <div
-                    className="text-[10px] leading-tight text-gray-800 font-sans whitespace-pre-line text-justify"
-                    style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
-                  >
-                    {section.passageText}
+                  <div className="text-right text-[10px] text-black italic mb-2">
+                    {section.passageText.trim().split(/\s+/).filter(Boolean).length} words
                   </div>
                 </div>
               )}
@@ -2299,63 +2380,91 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
               {!["poem", "article", "advisory", "infographic"].includes(section.referenceType || "") &&
                 (section.passageImage || section.passageText) && (
                   <div
-                    className="mb-2 rounded border border-gray-300 p-2 text-xs leading-tight break-inside-avoid bg-white"
+                    className="mb-2 break-inside-avoid"
                     style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
                   >
-                    <div className="flex items-center justify-between border-b border-gray-300 pb-0.5 mb-1">
-                      <p className="font-bold uppercase tracking-wider text-black text-[10.5px]">
-                        Reading Selection: {section.passageTitle || section.topic}
-                      </p>
+                    <div className="w-full border border-black p-3.5 bg-white text-black mb-1">
+                      <h2 className="text-center font-bold text-xs sm:text-sm uppercase tracking-wide mb-1.5 text-black">
+                        {section.passageTitle || section.topic}
+                      </h2>
+                      {section.passageImage && (
+                        <div className="mb-2 text-center">
+                          <img
+                            src={section.passageImage}
+                            alt={section.passageTitle || "Reference"}
+                            className="max-h-[160px] w-auto mx-auto object-contain rounded border border-gray-300"
+                          />
+                        </div>
+                      )}
+                      {section.passageText && (
+                        <div className="font-serif text-[11px] leading-relaxed text-left text-black whitespace-pre-line indent-6 select-text">
+                          {section.passageText}
+                        </div>
+                      )}
                     </div>
-                    {section.passageImage && (
-                      <div className="mb-2 text-center">
-                        <img
-                          src={section.passageImage}
-                          alt={section.passageTitle || "Reference"}
-                          className="max-h-[160px] w-auto mx-auto object-contain rounded border border-gray-300"
-                        />
-                      </div>
-                    )}
                     {section.passageText && (
-                      <div
-                        className="text-[10px] leading-tight text-gray-800 font-serif whitespace-pre-line text-justify"
-                        style={{ columns: 2, columnGap: "1.5rem", textAlign: "justify" }}
-                      >
-                        {section.passageText}
+                      <div className="text-right text-[10px] text-black italic mb-2">
+                        {section.passageText.trim().split(/\s+/).filter(Boolean).length} words
                       </div>
                     )}
                   </div>
                 )}
 
               {/* Section Questions: Compact 10.5px font, tight line-height, mb-1.5 */}
-              <div className="pl-0.5">
-                {sectionQuestions.map((q) => (
-                  <div
-                    key={q.number}
-                    className="question-item break-inside-avoid mb-1.5"
-                    style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
-                  >
-                    <p className="font-medium text-black leading-tight text-[10.5px]">
-                      <span className="font-bold mr-1">{q.number}.</span>
-                      {q.prompt}
-                    </p>
-                    {q.mode === "written" ? (
-                      <div className="mt-1 border-b border-black pl-6" style={{ width: "60%" }} />
-                    ) : (
-                      <div
-                        className="mt-0.5 grid grid-cols-2 gap-x-4 gap-y-0.5 pl-3 text-[10.5px] leading-tight"
-                        style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
-                      >
-                        {q.choices.map((c, i) => (
-                          <div key={i} className="flex items-baseline gap-1">
-                            <span className="font-bold">{PrintAry[i]}.</span>
-                            <span>{c}</span>
+              <div className="pl-0.5 space-y-2">
+                {sectionQuestions.map((q) => {
+                  const domainTag = getQuestionDomain(q);
+                  return (
+                    <div
+                      key={q.number}
+                      className="question-item break-inside-avoid mb-1.5"
+                      style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                    >
+                      <p className="font-medium text-black leading-tight text-[10.5px] mb-0.5">
+                        <span className="font-bold">{q.number}. </span>
+                        <span>{q.prompt} </span>
+                        <span className="italic text-gray-700 font-normal">({domainTag || "Literal"})</span>
+                      </p>
+                      {q.mode === "written" ? (
+                        <div className="mt-1 border-b border-black pl-6" style={{ width: "60%" }} />
+                      ) : isReadingDoc && q.choices.length === 4 ? (
+                        <div
+                          className="grid grid-cols-2 gap-x-2 sm:gap-x-8 gap-y-0.5 pl-4 text-[10.5px] leading-normal"
+                          style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                        >
+                          <div className="flex items-start gap-1">
+                            <span className="font-semibold shrink-0">a.</span>
+                            <span className="text-black break-words">{q.choices[0]}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                          <div className="flex items-start gap-1">
+                            <span className="font-semibold shrink-0">c.</span>
+                            <span className="text-black break-words">{q.choices[2]}</span>
+                          </div>
+                          <div className="flex items-start gap-1">
+                            <span className="font-semibold shrink-0">b.</span>
+                            <span className="break-words text-black">{q.choices[1]}</span>
+                          </div>
+                          <div className="flex items-start gap-1">
+                            <span className="font-semibold shrink-0">d.</span>
+                            <span className="break-words text-black">{q.choices[3]}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className="mt-0.5 grid grid-cols-2 gap-x-4 gap-y-0.5 pl-3 text-[10.5px] leading-tight"
+                          style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
+                        >
+                          {q.choices.map((c, i) => (
+                            <div key={i} className="flex items-baseline gap-1">
+                              <span className="font-bold">{PrintAry[i]}.</span>
+                              <span className="break-words">{c}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -2380,10 +2489,67 @@ function ExamViewerModal({
   const [printThis, setPrintThis] = useState<"questionnaire" | null>(null);
   const [selectedEnlargedImage, setSelectedEnlargedImage] = useState<string | null>(null);
   const activeBubbleSheet = getSubjectBubbleSheet(currentKey.subject || "Reading");
+  const isReadingExam =
+    currentKey.subject === "Reading" ||
+    currentKey.subject === "English" ||
+    currentKey.subject === "Filipino" ||
+    Boolean(currentKey.passageText && currentKey.passageText.length > 0) ||
+    Boolean(currentKey.title && /reading|phil-iri|gst|screening|diagnostic/i.test(currentKey.title));
 
   useEffect(() => {
     setCurrentKey(examKey);
   }, [examKey]);
+
+  const viewerPrintRef = useRef<HTMLDivElement | null>(null);
+
+  const handlePrintViewer = useReactToPrint({
+    contentRef: viewerPrintRef,
+    documentTitle: currentKey ? `AralSync_${currentKey.title.replace(/\s+/g, "_")}` : "Questionnaire",
+    pageStyle: `
+      @page {
+        size: A4 portrait; /* size: portrait; margin: 0.6cm; */
+        margin: 8mm;
+      }
+      @media print {
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          color: black !important;
+        }
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          box-sizing: border-box !important;
+          letter-spacing: normal !important;
+          word-spacing: normal !important;
+          text-align: left !important;
+        }
+        .text-center {
+          text-align: center !important;
+        }
+        .text-right {
+          text-align: right !important;
+        }
+        .print-cover-page {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .section-page:not(:last-child) {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .print-page-break {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .print-avoid-break, .question-item, .break-inside-avoid {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+      }
+    `,
+  });
 
   useEffect(() => {
     if (!printThis) return;
@@ -2499,7 +2665,7 @@ function ExamViewerModal({
               </Link>
               <button
                 type="button"
-                onClick={() => setPrintThis("questionnaire")}
+                onClick={() => handlePrintViewer()}
                 className="h-9 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap"
               >
                 <Printer className="h-3.5 w-3.5 text-slate-500" />
@@ -2625,10 +2791,36 @@ function ExamViewerModal({
                                 {q.number}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
+                                <p className="text-sm font-medium text-slate-900 leading-relaxed">
+                                  {q.prompt}
+                                  {isReadingExam && getQuestionDomain(q as any) && (
+                                    <span className="italic text-gray-700 font-normal ml-1">
+                                      ({getQuestionDomain(q as any)})
+                                    </span>
+                                  )}
+                                </p>
                                 {q.mode === "written" ? (
                                   <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
                                     Teacher graded
+                                  </div>
+                                ) : isReadingExam && q.choices && q.choices.length === 4 ? (
+                                  <div className="mt-2 grid grid-cols-2 gap-x-2 sm:gap-x-8 gap-y-0.5 pl-4 text-[10.5px] leading-normal">
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-semibold shrink-0">a.</span>
+                                      <span className="text-black break-words">{q.choices[0]}</span>
+                                    </div>
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-semibold shrink-0">c.</span>
+                                      <span className="text-black break-words">{q.choices[2]}</span>
+                                    </div>
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-semibold shrink-0">b.</span>
+                                      <span className="break-words text-black">{q.choices[1]}</span>
+                                    </div>
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-semibold shrink-0">d.</span>
+                                      <span className="break-words text-black">{q.choices[3]}</span>
+                                    </div>
                                   </div>
                                 ) : (
                                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -2658,13 +2850,19 @@ function ExamViewerModal({
               <>
                 {/* Fallback Reading Selection if available */}
                 {currentKey.passageText && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                    <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                      📖 Reading Selection: {currentKey.passageTitle || "Passage"}
-                    </p>
-                    <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-700 font-serif">
-                      {currentKey.passageText}
-                    </p>
+                  <div className="mb-4">
+                    <div className="w-full border border-black p-3.5 bg-white text-black mb-1">
+                      <h2 className="text-center font-bold text-xs sm:text-sm uppercase tracking-wide mb-1.5 text-black">
+                        {currentKey.passageTitle || "Reading Selection"}
+                      </h2>
+                      <div className="font-serif text-[11px] leading-relaxed text-left text-black whitespace-pre-line indent-6 select-text">
+                        {currentKey.passageText}
+                      </div>
+                    </div>
+                    {/* Word Count Tag */}
+                    <div className="text-right text-[10px] text-black italic mb-2">
+                      {currentKey.passageText.split(/\s+/).filter(Boolean).length} words
+                    </div>
                   </div>
                 )}
 
@@ -2678,10 +2876,36 @@ function ExamViewerModal({
                           {q.number}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900 leading-relaxed">{q.prompt}</p>
+                          <p className="text-sm font-medium text-slate-900 leading-relaxed">
+                            {q.prompt}
+                            {isReadingExam && getQuestionDomain(q as any) && (
+                              <span className="italic text-gray-700 font-normal ml-1">
+                                ({getQuestionDomain(q as any)})
+                              </span>
+                            )}
+                          </p>
                           {q.mode === "written" ? (
                             <div className="mt-2 border-b border-dashed border-slate-300 w-48 text-[11px] text-slate-400">
                               Teacher graded
+                            </div>
+                          ) : isReadingExam && q.choices && q.choices.length === 4 ? (
+                            <div className="mt-2 grid grid-cols-2 gap-x-2 sm:gap-x-8 gap-y-0.5 pl-4 text-[10.5px] leading-normal">
+                              <div className="flex items-start gap-1">
+                                <span className="font-semibold shrink-0">a.</span>
+                                <span className="text-black break-words">{q.choices[0]}</span>
+                              </div>
+                              <div className="flex items-start gap-1">
+                                <span className="font-semibold shrink-0">c.</span>
+                                <span className="text-black break-words">{q.choices[2]}</span>
+                              </div>
+                              <div className="flex items-start gap-1">
+                                <span className="font-semibold shrink-0">b.</span>
+                                <span className="break-words text-black">{q.choices[1]}</span>
+                              </div>
+                              <div className="flex items-start gap-1">
+                                <span className="font-semibold shrink-0">d.</span>
+                                <span className="break-words text-black">{q.choices[3]}</span>
+                              </div>
                             </div>
                           ) : (
                             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -2732,6 +2956,13 @@ function ExamViewerModal({
         />
       )}
 
+      {/* Hidden 1:1 Print Preview container for react-to-print */}
+      <div style={{ position: "absolute", left: "-99999px", top: "-99999px" }}>
+        <div ref={viewerPrintRef} className="w-full bg-white text-black p-4">
+          <QuestionnairePrint doc={viewerDoc} />
+        </div>
+      </div>
+
       {/* Print overlay */}
       {printThis && (
         <>
@@ -2740,10 +2971,16 @@ function ExamViewerModal({
               body * { visibility: hidden; }
               .print-exam-modal-overlay, .print-exam-modal-overlay * { visibility: visible; }
               .print-exam-modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
-              @page { size: portrait; margin: 0.8cm; }
+              @page { size: portrait; margin: 0.6cm; /* margin: 0.5cm */ }
+              html, body { height: 100% !important; font-size: 10pt !important; }
               .print-cover-page { page-break-after: always !important; break-after: page !important; }
               .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
+              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 0.4cm !important; border: none !important; box-shadow: none !important; }
+              .print-booklet-page:last-child { page-break-after: auto !important; break-after: auto !important; }
+              .print-page-break { page-break-after: always !important; break-after: page !important; }
               .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+              .reading-passage-box { page-break-inside: avoid !important; break-inside: avoid !important; }
+              .print-avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
             }
           `}</style>
           <div className="print-exam-modal-overlay fixed inset-0 z-[999] overflow-auto bg-white p-8 text-black">
@@ -3218,6 +3455,57 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     }
   };
 
+
+  const omrPreviewSheetRef = useRef<HTMLDivElement | null>(null);
+
+  const handlePrintQuestionnaire = useReactToPrint({
+    contentRef: omrPreviewSheetRef,
+    documentTitle: doc ? `AralSync_Questionnaire_${doc.title.replace(/\s+/g, "_")}_Grade${doc.gradeLevel || 7}` : "Questionnaire",
+    pageStyle: `
+      @page {
+        size: A4 portrait; /* size: portrait; margin: 0.6cm; */
+        margin: 8mm;
+      }
+      @media print {
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          color: black !important;
+        }
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          box-sizing: border-box !important;
+          letter-spacing: normal !important;
+          word-spacing: normal !important;
+          text-align: left !important;
+        }
+        .text-center {
+          text-align: center !important;
+        }
+        .text-right {
+          text-align: right !important;
+        }
+        .print-cover-page {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .section-page:not(:last-child) {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .print-page-break {
+          page-break-after: always !important;
+          break-after: page !important;
+        }
+        .print-avoid-break, .question-item, .break-inside-avoid {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+      }
+    `,
+  });
 
   // Trigger a browser print whenever a printable document is opened.
   useEffect(() => {
@@ -4429,7 +4717,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   )}
                   <button
                     type="button"
-                    onClick={() => setPrintMode("questionnaire")}
+                    onClick={() => handlePrintQuestionnaire()}
                     className="h-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all cursor-pointer"
                   >
                     <Printer className="h-4 w-4 text-slate-500" />
@@ -4562,88 +4850,158 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               {/* Desk Preview Container */}
               <div className="bg-slate-100/90 p-4 sm:p-8 rounded-b-2xl overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-thin scrollbar-thumb-slate-300">
                 {/* Authentic DepEd Test Paper Sheet */}
-                <div className="bg-white shadow-xl border border-slate-300 rounded-sm p-6 sm:p-12 max-w-4xl mx-auto text-slate-900 font-sans transition-all">
-                  {/* Official DepEd School Header with Top Middle Logo and School Name */}
-                  <div className="text-center flex flex-col items-center justify-center border-b-2 border-slate-900 pb-4">
-                    <img
-                      src="/aral-logo.png"
-                      alt="School Logo"
-                      className="h-16 w-16 object-contain mb-2 drop-shadow-xs"
-                    />
-                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                      Republic of the Philippines
-                    </p>
-                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                      Department of Education
-                    </p>
-                    <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                      National Capital Region — Division of City Schools
-                    </p>
-                    <h2 className="text-base sm:text-lg font-extrabold tracking-wider uppercase text-slate-900 mt-1">
-                      GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
-                    </h2>
-                    <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 mt-1">
-                      {doc.title}
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-0.5">
-                      Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
-                      {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
-                    </p>
-                  </div>
+                {(() => {
+                  const isDeskReading = Boolean(
+                    doc.subject === "Reading" ||
+                    doc.subject === "English" ||
+                    doc.subject === "Filipino" ||
+                    (doc.passageText && doc.passageText.length > 0) ||
+                    (doc.sections?.some((s: any) => s.passageText && s.passageText.length > 0)) ||
+                    (doc.title && /reading|phil-iri|gst|screening|diagnostic/i.test(doc.title))
+                  );
+                  const isDeskFilipino = Boolean(
+                    doc.subject === "Filipino" ||
+                    (doc.title && /filipino|sipi|pangkatang/i.test(doc.title))
+                  );
 
-                  {/* 4 Header Fields: Name, Section, Date, Score */}
-                  <div className="my-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold text-slate-900 border-b border-slate-900 pb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold tracking-wider">NAME:</span>
-                      <span className="flex-1 border-b border-slate-500 border-dashed" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold tracking-wider">SECTION:</span>
-                      <span className="flex-1 border-b border-slate-500 border-dashed" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold tracking-wider">DATE:</span>
-                      <span className="flex-1 border-b border-slate-500 border-dashed" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold tracking-wider">SCORE:</span>
-                      <span className="flex-1 border-b border-slate-500 border-dashed" />
-                    </div>
-                  </div>
+                  return (
+                    <div
+                      ref={omrPreviewSheetRef}
+                      className="bg-white shadow-xl border border-slate-300 rounded-sm p-6 sm:p-12 max-w-4xl mx-auto text-slate-900 font-sans transition-all"
+                    >
+                      {/* Official DepEd School Header with Top Middle Logo and School Name */}
+                      {isDeskReading ? (
+                          <div className="relative mb-3">
+                            {/* Top Right Phil-IRI Boxed Badge */}
+                            <div className="absolute top-0 right-0 border border-black rounded px-3 py-0.5 text-xs font-bold tracking-wider">
+                              Phil-IRI
+                            </div>
 
-                  {/* General Directions */}
-                  <div className="mb-5 text-xs text-slate-800 italic bg-slate-50/70 p-2.5 rounded border border-slate-200">
-                    <span className="font-bold not-italic text-slate-900">General Directions:</span> Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
-                  </div>
+                            {/* Center Title */}
+                            <div className="text-center mb-2">
+                              <h1 className="text-sm font-extrabold uppercase tracking-wide text-black">
+                                {doc.title.includes("Grade") || doc.title.includes("Baitang")
+                                  ? doc.title
+                                  : `${doc.title}, ${isDeskFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
+                              </h1>
+                              <p className="text-[11px] text-gray-700 italic">
+                                GEN. EMILIO AGUINALDO INTEGRATED SCHOOL{"  "}{isDeskFilipino ? "Filipino Reading" : "English Reading"}
+                              </p>
+                            </div>
+
+                            {/* Student Credentials: Name, Section, Date, Teacher */}
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold">{isDeskFilipino ? "Pangalan:" : "Name:"}</span>
+                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold">{isDeskFilipino ? "Pangkat:" : "Section:"}</span>
+                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold">{isDeskFilipino ? "Petsa:" : "Date:"}</span>
+                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold">{isDeskFilipino ? "Guro:" : "Teacher:"}</span>
+                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                              </div>
+                            </div>
+
+                            {/* General Direction */}
+                            <p className="text-[11px] text-black leading-snug mb-3">
+                              {isDeskFilipino
+                                ? "Basahin ang bawat seleksyon. Pagkatapos, basahin ang mga tanong at isulat ang titik ng tamang sagot sa sagutang papel (o itiman ang bilog sa opisyal na OMR Sagutang Papel):"
+                                : "Read each selection. Then read the questions that follow and write the letter of the correct answer in the answer sheet:"}
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-center flex flex-col items-center justify-center border-b-2 border-slate-900 pb-4 relative">
+                              <img
+                                src="/aral-logo.png"
+                                alt="School Logo"
+                                className="h-16 w-16 object-contain mb-2 drop-shadow-xs"
+                              />
+                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                                Republic of the Philippines
+                              </p>
+                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                                Department of Education
+                              </p>
+                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                                National Capital Region — Division of City Schools
+                              </p>
+                              <h2 className="text-base sm:text-lg font-extrabold tracking-wider uppercase text-slate-900 mt-1">
+                                GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+                              </h2>
+                              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 mt-1">
+                                {doc.title}
+                              </h3>
+                              <p className="text-xs text-slate-600 mt-0.5">
+                                Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
+                                {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
+                              </p>
+                            </div>
+
+                            {/* Student Information Grid */}
+                            <div className="my-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold text-slate-900 border-b border-slate-900 pb-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold tracking-wider">NAME:</span>
+                                <span className="flex-1 border-b border-slate-500 border-dashed" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold tracking-wider">SECTION:</span>
+                                <span className="flex-1 border-b border-slate-500 border-dashed" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold tracking-wider">DATE:</span>
+                                <span className="flex-1 border-b border-slate-500 border-dashed" />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold tracking-wider">SCORE:</span>
+                                <span className="flex-1 border-b border-slate-500 border-dashed" />
+                              </div>
+                            </div>
+
+                            {/* General Directions */}
+                            <div className="mb-5 text-xs text-slate-800 italic bg-slate-50/70 p-2.5 rounded border border-slate-200">
+                              <span className="font-bold not-italic text-slate-900">General Direction:</span>{" "}
+                              Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
+                            </div>
+                          </>
+                        )}
 
                   {/* Reading Selection if present */}
                   {doc.passageText && (!doc.sections || doc.sections.every((s: any) => !s.passageText)) && (
-                    <div className="mb-6 rounded-xl border border-red-200/90 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm text-xs leading-relaxed text-slate-900">
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-red-100">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-800">
-                            <BookOpen className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100/60 px-2 py-0.5 rounded-full border border-red-200/60">
-                              Reading Selection
-                            </span>
-                            <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
-                              {doc.passageTitle || "Extracted Reading Story"}
-                            </h4>
-                          </div>
+                    <div className="mb-2">
+                      <div className="w-full border border-black p-3 bg-white text-black mb-2">
+                        <h2 className="text-center font-bold text-xs uppercase tracking-wide mb-1 text-black">
+                          {doc.passageTitle || (isDeskFilipino ? "Seleksiyon sa Pagbasa" : "Reading Selection")}
+                        </h2>
+                        {doc.passageAuthor && (
+                          <p className="text-center text-[10px] italic text-gray-700 mb-1.5">
+                            {isDeskFilipino ? "Akda ni:" : "By"} {doc.passageAuthor}
+                          </p>
+                        )}
+                        <div className="text-[10.5px] leading-relaxed text-black font-serif text-left space-y-1.5 select-text">
+                          {doc.passageText
+                            .replace(new RegExp(`^${(doc.passageTitle || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?\\n`, 'i'), '')
+                            .replace(/^(By|Akda ni)\s+.*?\n/i, '')
+                            .trim()
+                            .split('\n\n')
+                            .map((para: string, pIdx: number) => (
+                              <p key={pIdx} className={doc.title && /poem|tula/i.test(doc.title) ? "text-center whitespace-pre-line" : "indent-6 text-left"}>
+                                {para}
+                              </p>
+                            ))}
                         </div>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
-                          {doc.passageText.trim().split(/\s+/).length} words
-                        </span>
                       </div>
-                      <div className="whitespace-pre-line text-slate-800 font-serif text-[13px] leading-relaxed select-text bg-white/70 p-3.5 rounded-lg border border-slate-200/60">
-                        {doc.passageText}
+                      {/* Word Count Tag */}
+                      <div className="text-right text-[10px] text-gray-600 italic mb-2">
+                        {doc.passageText.trim().split(/\s+/).filter(Boolean).length} words
                       </div>
-                      <p className="mt-2 text-[10px] text-slate-400 italic flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                        <span>Verbatim passage automatically synced to AralSync Reading Passage Bank for Fluency & Comprehension Checks.</span>
-                      </p>
                     </div>
                   )}
 
@@ -4734,59 +5092,31 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
 
                           {/* Reading Selection / Reference Material for this Section */}
                           {(section.passageText || section.passageImage) && (
-                            <div className="mb-5 rounded-xl border border-red-200/90 bg-gradient-to-br from-red-50/40 via-white to-amber-50/30 p-4 sm:p-5 shadow-xs text-xs leading-relaxed text-slate-900">
-                              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-red-100">
-                                <div className="flex items-center gap-2">
-                                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-100 text-red-800">
-                                    {section.referenceType === "infographic" || section.passageImage ? (
-                                      <FileImage className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <BookOpen className="h-3.5 w-3.5" />
-                                    )}
+                            <div className="mb-2">
+                              <div className="w-full border border-black p-3 bg-white text-black mb-2">
+                                <div className="text-center mb-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-black">
+                                    Reading Selection {section.partNumber ? `• Part ${section.partNumber}` : ""}
                                   </span>
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100/60 px-2 py-0.5 rounded-full border border-red-200/60">
-                                        Reading Selection {section.partNumber ? `• Part ${section.partNumber}` : ""}
-                                      </span>
-                                      {section.referenceType && (
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                                          {section.referenceType === "poem"
-                                            ? "Poem"
-                                            : section.referenceType === "infographic"
-                                            ? "Infographic"
-                                            : section.referenceType === "advisory"
-                                            ? "Advisory"
-                                            : "Article"}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 mt-1">
-                                      {section.passageTitle || section.topic || "Reading Selection"}
-                                    </h4>
-                                  </div>
                                 </div>
-                                {section.passageText && (
-                                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
-                                    {section.passageText.trim().split(/\s+/).length} words
-                                  </span>
+                                <h2 className="text-center font-bold text-xs uppercase tracking-wide mb-1 text-black">
+                                  {section.passageTitle || section.topic || (isDeskFilipino ? "Seleksiyon sa Pagbasa" : "Reading Selection")}
+                                </h2>
+                                {section.author && (
+                                  <p className="text-center text-[10px] italic text-gray-700 mb-1.5">
+                                    {isDeskFilipino ? "Akda ni:" : "By"} {section.author}
+                                  </p>
                                 )}
-                              </div>
-
-                              {/* Responsive Infographic Visual with Click to Enlarge modal */}
-                              {section.passageImage && (
-                                <div className="mb-4">
-                                  <div className="relative group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center p-3">
+                                {section.passageImage && (
+                                  <div className="mb-3 text-center">
                                     <img
                                       src={section.passageImage}
                                       alt={section.passageTitle || "Visual material"}
-                                      className="max-h-72 w-auto object-contain rounded-lg shadow-xs cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
+                                      className="max-h-72 w-auto mx-auto object-contain rounded-lg shadow-xs cursor-pointer"
                                       onClick={() => setSelectedEnlargedImage(section.passageImage!)}
                                     />
-                                    <div className="mt-2.5 flex items-center justify-between w-full px-2">
-                                      <span className="text-[11px] text-slate-500 font-medium">
-                                        Official Infographic Reference
-                                      </span>
+                                    <div className="mt-2 flex items-center justify-between px-2">
+                                      <span className="text-[11px] text-slate-500 font-medium">Official Infographic Reference</span>
                                       <button
                                         type="button"
                                         onClick={() => setSelectedEnlargedImage(section.passageImage!)}
@@ -4797,21 +5127,32 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                                       </button>
                                     </div>
                                   </div>
-                                </div>
-                              )}
-
-                              {/* Formatted Passage Text based on Reference Type */}
+                                )}
+                                {section.passageText && (
+                                  <div className="text-[10.5px] leading-relaxed text-black font-serif text-left space-y-1.5 select-text">
+                                    {section.passageText
+                                      .replace(new RegExp(`^${(section.passageTitle || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?\\n`, 'i'), '')
+                                      .replace(/^(By|Akda ni)\s+.*?\n/i, '')
+                                      .trim()
+                                      .split('\n\n')
+                                      .map((para: string, pIdx: number) => (
+                                        <p
+                                          key={pIdx}
+                                          className={
+                                            section.referenceType === "poem" || (section.passageTitle && /poem|tula/i.test(section.passageTitle))
+                                              ? "text-center whitespace-pre-line"
+                                              : "indent-6 text-left"
+                                          }
+                                        >
+                                          {para}
+                                        </p>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
                               {section.passageText && (
-                                <div
-                                  className={`whitespace-pre-line select-text p-3.5 rounded-lg border ${
-                                    section.referenceType === "poem"
-                                      ? "font-serif italic text-[13px] leading-relaxed bg-amber-50/40 text-slate-900 border-amber-200/80 pl-6 border-l-4"
-                                      : section.referenceType === "advisory"
-                                      ? "font-sans text-[12.5px] leading-relaxed bg-blue-50/40 text-slate-900 border-blue-200/70"
-                                      : "font-serif text-[12.5px] leading-relaxed bg-white/70 text-slate-800 border-slate-200/60"
-                                  }`}
-                                >
-                                  {section.passageText}
+                                <div className="text-right text-[10px] text-gray-600 italic mb-2">
+                                  {section.passageText.trim().split(/\s+/).filter(Boolean).length} words
                                 </div>
                               )}
                             </div>
@@ -4832,6 +5173,11 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                                     <p className="font-medium text-slate-900 leading-relaxed">
                                       <span className="font-bold mr-1.5">{q.number}.</span>
                                       {q.prompt}
+                                      {(doc.subject === "Reading" || doc.subject === "English" || doc.subject === "Filipino" || Boolean(doc.passageText)) && (
+                                        <span className="italic text-gray-700 font-normal ml-1">
+                                          ({getQuestionDomain(q) || "Literal"})
+                                        </span>
+                                      )}
                                     </p>
 
                                     {/* Right-hand margin: Interactive Answer Key Selector + Swap Button */}
@@ -4887,6 +5233,25 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                                     <div className="mt-2 pl-4">
                                       <div className="h-6 border-b border-dashed border-slate-400 w-3/4" />
                                     </div>
+                                  ) : (doc.subject === "Reading" || doc.subject === "English" || doc.subject === "Filipino" || Boolean(doc.passageText)) && q.choices.length === 4 ? (
+                                    <div className="mt-1.5 grid grid-cols-2 gap-x-2 sm:gap-x-8 gap-y-0.5 pl-4 text-[10.5px] leading-normal">
+                                      <div className="flex items-start gap-1">
+                                        <span className="font-semibold shrink-0">a.</span>
+                                        <span className="text-black break-words">{q.choices[0]}</span>
+                                      </div>
+                                      <div className="flex items-start gap-1">
+                                        <span className="font-semibold shrink-0">c.</span>
+                                        <span className="text-black break-words">{q.choices[2]}</span>
+                                      </div>
+                                      <div className="flex items-start gap-1">
+                                        <span className="font-semibold shrink-0">b.</span>
+                                        <span className="break-words text-black">{q.choices[1]}</span>
+                                      </div>
+                                      <div className="flex items-start gap-1">
+                                        <span className="font-semibold shrink-0">d.</span>
+                                        <span className="break-words text-black">{q.choices[3]}</span>
+                                      </div>
+                                    </div>
                                   ) : (
                                     <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 pl-4">
                                       {q.choices.map((c, i) => (
@@ -4905,7 +5270,9 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                       );
                     })}
                   </div>
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}
@@ -4920,10 +5287,16 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
               body * { visibility: hidden; }
               .print-overlay, .print-overlay * { visibility: visible; }
               .print-overlay { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important; width: 100%; height: auto !important; overflow: visible !important; }
-              @page { size: portrait; margin: 0.8cm; }
+              @page { size: portrait; margin: 0.6cm; /* margin: 0.5cm */ }
+              html, body { height: 100% !important; font-size: 10pt !important; }
               .print-cover-page { page-break-after: always !important; break-after: page !important; }
               .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
+              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 0.4cm !important; border: none !important; box-shadow: none !important; }
+              .print-booklet-page:last-child { page-break-after: auto !important; break-after: auto !important; }
+              .print-page-break { page-break-after: always !important; break-after: page !important; }
               .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+              .reading-passage-box { page-break-inside: avoid !important; break-inside: avoid !important; }
+              .print-avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
             }
           `}</style>
           <div className="print-overlay fixed inset-0 z-[999] overflow-auto bg-white">

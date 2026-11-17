@@ -4,19 +4,28 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../../../database/db';
 import ReadingPassage from '../../../../../../models/ReadingPassage';
 import LearningMaterial from '../../../../../../models/LearningMaterial';
+import { DEFAULT_OFFLINE_PASSAGES } from '@/lib/offlineStorage';
 
 /**
  * GET /api/teacher/reading/passages
- * Lists the reading passage bank strictly sourced from coordinator-uploaded learning materials.
+ * Lists the reading passage bank strictly sourced from coordinator-uploaded learning materials
+ * or standardized Phil-IRI offline repositories, filtered by language stream (English / Filipino).
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher', 'student', 'coordinator', 'principal']);
+    const user = await requireAuth(req, ['teacher', 'student', 'coordinator', 'principal']);
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const grade = searchParams.get('grade');
     const keyStage = searchParams.get('keyStage');
+    const streamParam = (searchParams.get('stream') || searchParams.get('language') || '').toLowerCase();
+
+    // Determine target stream
+    const isFilipino =
+      streamParam === 'filipino' ||
+      streamParam === 'tl' ||
+      (user as any).assignedSubject === 'Filipino';
 
     const filter: Record<string, unknown> = {};
     if (grade) {
@@ -30,12 +39,18 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    if (isFilipino) {
+      filter.language = { $in: ['filipino', 'tl'] };
+    } else if (streamParam === 'english' || streamParam === 'en' || (user as any).assignedSubject === 'English') {
+      filter.language = { $in: ['english', 'en'] };
+    }
+
     // Fetch passages from DB
     const passages = await ReadingPassage.find(filter).sort({ gradeLevel: 1, title: 1 }).lean();
 
     // Fetch active coordinator-uploaded reading materials
     const coordinatorMaterials = await LearningMaterial.find({
-      subject: { $in: ['Reading', 'General', 'All'] },
+      subject: { $in: ['Reading', 'General', 'All', ...(isFilipino ? ['Filipino'] : ['English'])] as any },
       isActive: true,
     }).lean();
 
@@ -45,7 +60,7 @@ export async function GET(req: NextRequest) {
       text: p.text || '',
       gradeLevel: p.gradeLevel || null,
       keyStage: p.keyStage || (p.gradeLevel >= 7 ? 'KS3' : p.gradeLevel >= 4 ? 'KS2' : 'KS1'),
-      language: p.language || 'en',
+      language: p.language || (isFilipino ? 'filipino' : 'en'),
       sourceMaterial: p.sourceMaterial || 'Coordinator Uploaded Material',
       materialId: p.materialId ? String(p.materialId) : null,
       questionCount: Array.isArray(p.questions) ? p.questions.length : 0,
@@ -57,6 +72,30 @@ export async function GET(req: NextRequest) {
           }))
         : [],
     }));
+
+    // If no individual passages in DB for this stream, expose built-in Phil-IRI graded passages
+    if (rows.length === 0) {
+      const fallbackList = DEFAULT_OFFLINE_PASSAGES.filter((p) => {
+        const pLang = (p.language || 'english').toLowerCase();
+        const isFil = pLang === 'filipino' || pLang === 'tl' || p.title.toLowerCase().includes('filipino') || p.title.toLowerCase().includes('baitang');
+        return isFilipino ? isFil : !isFil;
+      });
+
+      fallbackList.forEach((p) => {
+        rows.push({
+          id: p.id,
+          title: p.title,
+          text: p.text,
+          gradeLevel: p.gradeLevel,
+          keyStage: p.gradeLevel && p.gradeLevel >= 7 ? 'KS3' : 'KS2',
+          language: isFilipino ? 'filipino' : 'en',
+          sourceMaterial: 'Official DepEd Phil-IRI Graded Passages',
+          materialId: null,
+          questionCount: p.questions.length,
+          questions: p.questions,
+        });
+      });
+    }
 
     // If no individual passages were saved yet, expose the uploaded materials directly
     if (rows.length === 0 && coordinatorMaterials.length > 0) {

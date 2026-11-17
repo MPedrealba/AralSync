@@ -128,6 +128,8 @@ export async function GET(req: NextRequest) {
         .populate({ path: 'studentId', select: 'name username active', strictPopulate: false })
         .populate({ path: 'assignedTeacherId', select: 'name username', strictPopulate: false })
         .populate({ path: 'assignedTeachers.reading', select: 'name username', strictPopulate: false })
+        .populate({ path: 'assignedTeachers.english', select: 'name username', strictPopulate: false })
+        .populate({ path: 'assignedTeachers.filipino', select: 'name username', strictPopulate: false })
         .populate({ path: 'assignedTeachers.math', select: 'name username', strictPopulate: false })
         .populate({ path: 'assignedTeachers.science', select: 'name username', strictPopulate: false })
         .sort({ gradeLevel: 1, section: 1 })
@@ -181,10 +183,14 @@ export async function GET(req: NextRequest) {
           assignedTeacherName: teacher.name || r.assignedTeacherName || null,
           assignedTeachers: {
             reading: r.assignedTeachers?.reading?._id ? r.assignedTeachers.reading._id.toString() : (r.assignedTeachers?.reading ? r.assignedTeachers.reading.toString() : null),
+            english: r.assignedTeachers?.english?._id ? r.assignedTeachers.english._id.toString() : (r.assignedTeachers?.english ? r.assignedTeachers.english.toString() : null),
+            filipino: r.assignedTeachers?.filipino?._id ? r.assignedTeachers.filipino._id.toString() : (r.assignedTeachers?.filipino ? r.assignedTeachers.filipino.toString() : null),
             math: r.assignedTeachers?.math?._id ? r.assignedTeachers.math._id.toString() : (r.assignedTeachers?.math ? r.assignedTeachers.math.toString() : null),
             science: r.assignedTeachers?.science?._id ? r.assignedTeachers.science._id.toString() : (r.assignedTeachers?.science ? r.assignedTeachers.science.toString() : null),
           },
           readingTeacherName: r.assignedTeachers?.reading?.name || r.readingTeacherName || null,
+          englishTeacherName: r.assignedTeachers?.english?.name || r.englishTeacherName || null,
+          filipinoTeacherName: r.assignedTeachers?.filipino?.name || r.filipinoTeacherName || null,
           mathTeacherName: r.assignedTeachers?.math?.name || r.mathTeacherName || null,
           scienceTeacherName: r.assignedTeachers?.science?.name || r.scienceTeacherName || null,
         };

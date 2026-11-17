@@ -117,12 +117,13 @@ function CoordinatorLearnersContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Batch Assignment State (3 Subject Remedial Teachers)
+  // Batch Assignment State (English, Filipino, Math, Science)
   const [batchGrade, setBatchGrade] = useState("7");
   const [batchSection, setBatchSection] = useState("");
   const [isBatchCustomSection, setIsBatchCustomSection] = useState(false);
   const [batchCustomSectionText, setBatchCustomSectionText] = useState("");
-  const [batchReadingTeacherId, setBatchReadingTeacherId] = useState("");
+  const [batchEnglishTeacherId, setBatchEnglishTeacherId] = useState("");
+  const [batchFilipinoTeacherId, setBatchFilipinoTeacherId] = useState("");
   const [batchMathTeacherId, setBatchMathTeacherId] = useState("");
   const [batchScienceTeacherId, setBatchScienceTeacherId] = useState("");
   const [isBatchApplying, setIsBatchApplying] = useState(false);
@@ -139,6 +140,9 @@ function CoordinatorLearnersContent() {
 
   // Helper to format teacher subject specialization tag
   const getTeacherSubjectTag = (t: TeacherOption) => {
+    if (t.assignedSubject === "English") return " [English Specialist]";
+    if (t.assignedSubject === "Filipino") return " [Filipino Specialist]";
+    if (t.assignedSubject === "English & Filipino") return " [Dual En/Fil Specialist]";
     if (t.assignedSubject === "Reading" || t.specialization === "reading") return " [Reading Specialist]";
     if (t.assignedSubject === "Math") return " [Math Specialist]";
     if (t.assignedSubject === "Science") return " [Science Specialist]";
@@ -147,9 +151,22 @@ function CoordinatorLearnersContent() {
   };
 
   // Filter teachers by subject specialization for Batch Assignment
-  const readingTeachers = useMemo(() => {
+  const englishTeachers = useMemo(() => {
     return teachers.filter(
       (t) =>
+        t.assignedSubject === "English" ||
+        t.assignedSubject === "English & Filipino" ||
+        t.assignedSubject === "Reading" ||
+        t.assignedSubject === "All" ||
+        t.specialization === "reading"
+    );
+  }, [teachers]);
+
+  const filipinoTeachers = useMemo(() => {
+    return teachers.filter(
+      (t) =>
+        t.assignedSubject === "Filipino" ||
+        t.assignedSubject === "English & Filipino" ||
         t.assignedSubject === "Reading" ||
         t.assignedSubject === "All" ||
         t.specialization === "reading"
@@ -347,7 +364,7 @@ function CoordinatorLearnersContent() {
     }
   };
 
-  // ── 4. Batch Section Assignment (3 Subject Remedial Teachers) ──
+  // ── 4. Batch Section Assignment (English, Filipino, Math, Science Remedial Teachers) ──
   const handleApplyBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalBatchSection = (isBatchCustomSection ? batchCustomSectionText : batchSection).trim();
@@ -356,7 +373,11 @@ function CoordinatorLearnersContent() {
       return;
     }
 
-    const hasAnySelection = batchReadingTeacherId || batchMathTeacherId || batchScienceTeacherId;
+    const hasAnySelection =
+      batchEnglishTeacherId ||
+      batchFilipinoTeacherId ||
+      batchMathTeacherId ||
+      batchScienceTeacherId;
     if (!hasAnySelection) {
       setFeedbackMessage({
         text: "Please select at least one subject remedial teacher to assign or unassign.",
@@ -376,11 +397,15 @@ function CoordinatorLearnersContent() {
           gradeLevel: Number(batchGrade),
           section: finalBatchSection,
           assignedTeachers: {
-            reading: batchReadingTeacherId || undefined,
+            english: batchEnglishTeacherId || undefined,
+            filipino: batchFilipinoTeacherId || undefined,
+            reading: batchEnglishTeacherId || batchFilipinoTeacherId || undefined,
             math: batchMathTeacherId || undefined,
             science: batchScienceTeacherId || undefined,
           },
-          readingTeacherId: batchReadingTeacherId || undefined,
+          englishTeacherId: batchEnglishTeacherId || undefined,
+          filipinoTeacherId: batchFilipinoTeacherId || undefined,
+          readingTeacherId: batchEnglishTeacherId || batchFilipinoTeacherId || undefined,
           mathTeacherId: batchMathTeacherId || undefined,
           scienceTeacherId: batchScienceTeacherId || undefined,
         }),
@@ -669,29 +694,29 @@ function CoordinatorLearnersContent() {
                 </div>
               </div>
 
-              {/* 3 Dedicated ARAL Subject Remedial Teacher Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* 1. Reading Remedial Teacher */}
-                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-rose-300">
+              {/* Dedicated Subject Remedial Teacher Cards: English, Filipino, Math, Science */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. English Reading Teacher */}
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-blue-300">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-rose-100 text-xs">📖</span>
-                      <span>Reading Remedial Teacher</span>
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-blue-100 text-xs">📚</span>
+                      <span>English Reading Teacher</span>
                     </label>
-                    <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/70 px-2 py-0.5 rounded-full">
-                      Reading
+                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full">
+                      English
                     </span>
                   </div>
                   <div className="relative">
                     <select
-                      value={batchReadingTeacherId}
-                      onChange={(e) => setBatchReadingTeacherId(e.target.value)}
+                      value={batchEnglishTeacherId}
+                      onChange={(e) => setBatchEnglishTeacherId(e.target.value)}
                       className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
                     >
-                      <option value="">— Keep Current Reading Teacher —</option>
+                      <option value="">— Keep Current English Teacher —</option>
                       <option value="unassigned">— Set Unassigned (Remove Teacher) —</option>
-                      {readingTeachers.map((t) => (
-                        <option key={`batch-read-${t.id}`} value={t.id}>
+                      {englishTeachers.map((t) => (
+                        <option key={`batch-en-${t.id}`} value={t.id}>
                           {t.name}{getTeacherSubjectTag(t)} ({t.studentCount ?? 0} assigned)
                         </option>
                       ))}
@@ -700,14 +725,43 @@ function CoordinatorLearnersContent() {
                   </div>
                 </div>
 
-                {/* 2. Mathematics Teacher */}
-                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-blue-300">
+                {/* 2. Filipino Reading Teacher */}
+                <div className="rounded-xl border border-amber-100 bg-amber-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-amber-300">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-blue-100 text-xs">📐</span>
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-amber-100 text-xs">📖</span>
+                      <span>Filipino Reading Teacher</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-full">
+                      Filipino
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={batchFilipinoTeacherId}
+                      onChange={(e) => setBatchFilipinoTeacherId(e.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 cursor-pointer"
+                    >
+                      <option value="">— Keep Current Filipino Teacher —</option>
+                      <option value="unassigned">— Set Unassigned (Remove Teacher) —</option>
+                      {filipinoTeachers.map((t) => (
+                        <option key={`batch-fil-${t.id}`} value={t.id}>
+                          {t.name}{getTeacherSubjectTag(t)} ({t.studentCount ?? 0} assigned)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* 3. Mathematics Teacher */}
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-emerald-300">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-emerald-100 text-xs">📐</span>
                       <span>Mathematics Teacher</span>
                     </label>
-                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
                       Numeracy
                     </span>
                   </div>
@@ -729,14 +783,14 @@ function CoordinatorLearnersContent() {
                   </div>
                 </div>
 
-                {/* 3. Science Teacher */}
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-emerald-300">
+                {/* 4. Science Teacher */}
+                <div className="rounded-xl border border-teal-100 bg-teal-50/30 p-3.5 space-y-2.5 transition-all focus-within:border-teal-300">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-emerald-100 text-xs">🔬</span>
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-teal-100 text-xs">🔬</span>
                       <span>Science Remedial Teacher</span>
                     </label>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded-full">
                       Science
                     </span>
                   </div>
@@ -766,11 +820,12 @@ function CoordinatorLearnersContent() {
                 </p>
 
                 <div className="flex items-center gap-2.5">
-                  {(batchReadingTeacherId || batchMathTeacherId || batchScienceTeacherId) && (
+                  {(batchEnglishTeacherId || batchFilipinoTeacherId || batchMathTeacherId || batchScienceTeacherId) && (
                     <button
                       type="button"
                       onClick={() => {
-                        setBatchReadingTeacherId("");
+                        setBatchEnglishTeacherId("");
+                        setBatchFilipinoTeacherId("");
                         setBatchMathTeacherId("");
                         setBatchScienceTeacherId("");
                       }}
@@ -784,7 +839,7 @@ function CoordinatorLearnersContent() {
                     type="submit"
                     disabled={
                       isBatchApplying ||
-                      (!batchReadingTeacherId && !batchMathTeacherId && !batchScienceTeacherId) ||
+                      (!batchEnglishTeacherId && !batchFilipinoTeacherId && !batchMathTeacherId && !batchScienceTeacherId) ||
                       (isBatchCustomSection && !batchCustomSectionText.trim())
                     }
                     className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-800 px-6 text-xs font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
