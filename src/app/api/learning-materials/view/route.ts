@@ -326,6 +326,14 @@ async function findFuzzyUploadMatch(
         score += 15;
       }
 
+      // Subject mismatch penalty: never cross-match Math with non-Math files
+      if (targetSubject.includes('math') && !lower.includes('math')) {
+        score -= 50;
+      }
+      if (!targetSubject.includes('math') && targetSubject.length > 0 && lower.includes('math')) {
+        score -= 50;
+      }
+
       if (score > bestScore) {
         bestScore = score;
         bestFile = file;
@@ -346,6 +354,7 @@ async function findFuzzyUploadMatch(
 /**
  * Curriculum Fallback: Finds an official default Key Stage workbook in public/learning-materials
  * if no uploaded file could be found.
+ * Math materials are strictly isolated and will NEVER fall back to Reading workbooks.
  */
 async function findCurriculumFallback(
   publicDir: string,
@@ -358,16 +367,110 @@ async function findCurriculumFallback(
 
   const docName = isTutor ? 'tutors-guide.pdf' : 'learner-workbook.pdf';
 
-  const candidates: string[] = [];
-
   const titleLower = String(material?.title || '').toLowerCase();
   const subjectLower = String(material?.subject || '').toLowerCase();
+  const cleanPathLower = cleanPath.toLowerCase();
+
+  const isMath =
+    subjectLower.includes('math') ||
+    titleLower.includes('math') ||
+    cleanPathLower.includes('math');
+
+  // Math Materials: MUST NEVER fall back to Reading workbooks (e.g. KS3 Basic/Plus reading)
+  if (isMath) {
+    const mathCandidates: string[] = [];
+
+    // 1. Look specifically for Math workbooks in public/learning-materials/math/
+    mathCandidates.push(path.join('learning-materials', 'math', docName));
+    mathCandidates.push(path.join('learning-materials', 'math', 'learner-workbook.pdf'));
+    const mathLibDir = path.resolve(publicDir, 'learning-materials', 'math');
+    try {
+      const mathLibFiles = await fs.readdir(mathLibDir);
+      for (const f of mathLibFiles) {
+        if (f.toLowerCase().endsWith('.pdf') && !f.startsWith('.')) {
+          mathCandidates.push(path.join('learning-materials', 'math', f));
+        }
+      }
+    } catch {
+      // directory does not exist or cannot be read
+    }
+
+    // 2. Look specifically for Math workbooks in public/uploads/materials/*math*.pdf
+    const uploadsDir = path.resolve(publicDir, 'uploads', 'materials');
+    try {
+      const uploadFiles = await fs.readdir(uploadsDir);
+      const mathUploads = uploadFiles.filter(
+        (f) => f.toLowerCase().endsWith('.pdf') && f.toLowerCase().includes('math') && !f.startsWith('.')
+      );
+
+      // Prioritize grade level if mentioned in material title or path
+      const isG9G10 =
+        titleLower.includes('9') ||
+        titleLower.includes('10') ||
+        cleanPathLower.includes('g9') ||
+        cleanPathLower.includes('g10') ||
+        cleanPathLower.includes('grade 9') ||
+        cleanPathLower.includes('grade 10') ||
+        cleanPathLower.includes('grade_9') ||
+        cleanPathLower.includes('grade_10');
+
+      const isG7G8 =
+        titleLower.includes('7') ||
+        titleLower.includes('8') ||
+        cleanPathLower.includes('g7') ||
+        cleanPathLower.includes('g8') ||
+        cleanPathLower.includes('grade 7') ||
+        cleanPathLower.includes('grade 8') ||
+        cleanPathLower.includes('grade_7') ||
+        cleanPathLower.includes('grade_8');
+
+      mathUploads.sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        if (isG9G10) {
+          if (aLower.includes('g9') || aLower.includes('g10') || aLower.includes('9_and_g10')) return -1;
+          if (bLower.includes('g9') || bLower.includes('g10') || bLower.includes('9_and_g10')) return 1;
+        }
+        if (isG7G8) {
+          if (aLower.includes('g7') || aLower.includes('g8') || aLower.includes('7_and_g8')) return -1;
+          if (bLower.includes('g7') || bLower.includes('g8') || bLower.includes('7_and_g8')) return 1;
+        }
+        return 0;
+      });
+
+      for (const f of mathUploads) {
+        mathCandidates.push(path.join('uploads', 'materials', f));
+      }
+    } catch {
+      // uploads directory error
+    }
+
+    // Verify candidates on disk
+    for (const rel of mathCandidates) {
+      const full = path.resolve(publicDir, rel);
+      try {
+        const stat = await fs.stat(full);
+        if (stat.isFile() && stat.size > 0) {
+          return { path: full, relPath: '/' + rel.replace(/\\/g, '/') };
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+
+    // If no Math file exists on disk, return null so the system displays the clean,
+    // professional "Material File Not Found on Disk — Re-upload PDF" card
+    return null;
+  }
+
+  // Non-Math Materials (Reading, English, Filipino, etc.)
+  const candidates: string[] = [];
 
   if (titleLower.includes('plus') || cleanPath.includes('plus')) {
     candidates.push(path.join('learning-materials', 'ks3-plus', docName));
   }
 
-  // KS3 Junior High School (Grades 7–10) default
+  // KS3 Junior High School (Grades 7–10) default Reading workbooks
   candidates.push(path.join('learning-materials', 'ks3-basic', docName));
   candidates.push(path.join('learning-materials', 'ks3-plus', docName));
 

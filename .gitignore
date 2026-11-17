@@ -59,6 +59,7 @@ context/
 /public/uploads/**
 !/public/uploads/**/
 !/public/uploads/**/.gitkeep
+!/public/uploads/materials/*.pdf
 
 # scratch temporary scripts
 scratch/
