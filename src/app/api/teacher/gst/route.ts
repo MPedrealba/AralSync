@@ -28,37 +28,21 @@ export async function GET(req: NextRequest) {
       ? new mongoose.Types.ObjectId(teacher.id)
       : teacher.id;
 
-    // Discover teacher's assigned sections
-    const teacherSections = await LearnerRecord.distinct('section', {
-      $or: [
-        { assignedTeacherId: teacher.id },
-        { assignedTeacherId: teacherIdObj },
-        { 'assignedTeachers.reading': teacher.id },
-        { 'assignedTeachers.reading': teacherIdObj },
-        { 'assignedTeachers.english': teacher.id },
-        { 'assignedTeachers.english': teacherIdObj },
-        { 'assignedTeachers.filipino': teacher.id },
-        { 'assignedTeachers.filipino': teacherIdObj },
-      ],
-      section: { $ne: null, $exists: true },
-    });
+    // Strictly scope learners to this teacher's direct or reading/language assignments
+    const teacherMatchConditions = [
+      { assignedTeacherId: teacher.id },
+      { assignedTeacherId: teacherIdObj },
+      { 'assignedTeachers.reading': teacher.id },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': teacher.id },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': teacher.id },
+      { 'assignedTeachers.filipino': teacherIdObj },
+    ];
 
-    const filter: Record<string, any> = {};
-
-    // If teacher has assigned sections, prioritize them while allowing filter
-    if (teacherSections.length > 0) {
-      filter.$or = [
-        { assignedTeacherId: teacher.id },
-        { assignedTeacherId: teacherIdObj },
-        { 'assignedTeachers.reading': teacher.id },
-        { 'assignedTeachers.reading': teacherIdObj },
-        { 'assignedTeachers.english': teacher.id },
-        { 'assignedTeachers.english': teacherIdObj },
-        { 'assignedTeachers.filipino': teacher.id },
-        { 'assignedTeachers.filipino': teacherIdObj },
-        { section: { $in: teacherSections } },
-      ];
-    }
+    const filter: Record<string, any> = {
+      $or: teacherMatchConditions,
+    };
 
     if (gradeParam) {
       const g = Number(String(gradeParam).replace(/\D/g, ''));
@@ -75,8 +59,9 @@ export async function GET(req: NextRequest) {
       .populate('studentId', 'name username email')
       .lean();
 
-    // Available filters
+    // Available filters: sections belonging to the teacher's assigned learners
     const allSections = await LearnerRecord.distinct('section', {
+      $or: teacherMatchConditions,
       section: { $ne: null, $exists: true },
       ...(filter.gradeLevel ? { gradeLevel: filter.gradeLevel } : {}),
     });

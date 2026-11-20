@@ -142,34 +142,21 @@ export async function GET(req: NextRequest) {
       ? new mongoose.Types.ObjectId(authUser.id)
       : authUser.id;
 
-    // Discover any sections taught by or assigned to this teacher
-    const teacherSections = await LearnerRecord.distinct('section', {
-      $or: [
-        { assignedTeacherId: authUser.id },
-        { assignedTeacherId: teacherIdObj },
-        { 'assignedTeachers.reading': authUser.id },
-        { 'assignedTeachers.reading': teacherIdObj },
-        { 'assignedTeachers.math': authUser.id },
-        { 'assignedTeachers.math': teacherIdObj },
-        { 'assignedTeachers.science': authUser.id },
-        { 'assignedTeachers.science': teacherIdObj },
-      ],
-      section: { $ne: null, $exists: true },
-    });
-
+    // Strictly scope learners to this teacher's direct or subject-specific assignments
     const teacherMatchConditions: any[] = [
       { assignedTeacherId: authUser.id },
       { assignedTeacherId: teacherIdObj },
       { 'assignedTeachers.reading': authUser.id },
       { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': authUser.id },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': authUser.id },
+      { 'assignedTeachers.filipino': teacherIdObj },
       { 'assignedTeachers.math': authUser.id },
       { 'assignedTeachers.math': teacherIdObj },
       { 'assignedTeachers.science': authUser.id },
       { 'assignedTeachers.science': teacherIdObj },
     ];
-    if (teacherSections.length > 0) {
-      teacherMatchConditions.push({ section: { $in: teacherSections } });
-    }
 
     const learnerScopeQuery = { $or: teacherMatchConditions };
 
