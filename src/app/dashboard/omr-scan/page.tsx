@@ -143,6 +143,7 @@ function OMRWorkstationContent() {
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [competency, setCompetency] = useState("Numeracy");
   const [assessmentTitle, setAssessmentTitle] = useState("Quarterly Diagnostic Exam");
+  const [isMobileConfigOpen, setIsMobileConfigOpen] = useState(false);
 
   // ── Dynamic Grade & Section Cohort Filtering ──
   const availableGrades = useMemo(() => {
@@ -1168,11 +1169,23 @@ function OMRWorkstationContent() {
 
   const selectedStudentObj = students.find((s) => s._id === selectedStudentId);
 
+  // Compact setup summary for mobile collapsed header
+  const activeAnswerKey = answerKeys.find((k) => k.id === selectedKeyId);
+  const activeStudentName = selectedStudentObj ? selectedStudentObj.name : "Select Learner";
+  const activeCohortText = `Gr. ${selectedStudentObj?.gradeLevel || (selectedGrade !== "all" ? selectedGrade : "7")} - ${selectedStudentObj?.section || (selectedSection !== "all" ? selectedSection : "General")}`;
+  const activeKeyText = activeAnswerKey
+    ? `${activeAnswerKey.subject || currentSubject} (${activeAnswerKey.items} Items)`
+    : `${currentSubject} (${effectiveTotalItems} Items)`;
+  const mobileSetupSummary = `${activeStudentName} • ${activeCohortText} • ${activeKeyText}`;
+
   return (
     <>
       <Header title="OMR Scan Workstation" />
 
-      <main className="flex flex-1 flex-col overflow-y-auto min-h-0 pb-12 bg-slate-50">
+      <main
+        className="flex flex-1 flex-col overflow-y-auto min-h-0 pb-20 sm:pb-8 bg-slate-50"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         {/* ── TOP SETUP & BATCH BAR ── */}
         <section className="shrink-0 border-b border-slate-200 bg-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
@@ -1267,9 +1280,30 @@ function OMRWorkstationContent() {
 
           {/* Configuration Form: Clean 2-Row Layout (Single Sheet Mode) */}
           {workstationMode === "single" && (
-            <div className="mt-4 space-y-3 pt-3 border-t border-slate-100">
-              {/* Row 1: Cohort Selection (Grade, Section, Searchable Student Combobox) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+            <div className="mt-3 sm:mt-4 pt-3 border-t border-slate-100">
+              {/* Mobile Collapsed Setup Summary Badge (< 640px) */}
+              <div className="sm:hidden mb-2.5 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-800 text-[10px] font-bold">
+                    ⚙️
+                  </span>
+                  <span className="truncate text-xs font-semibold text-slate-800" title={mobileSetupSummary}>
+                    {mobileSetupSummary}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileConfigOpen((prev) => !prev)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs active:scale-95 transition-colors hover:bg-slate-50"
+                >
+                  <span>{isMobileConfigOpen ? "Hide Setup" : "Edit Setup ⚙️"}</span>
+                </button>
+              </div>
+
+              {/* 6 Configuration Inputs (Collapsible on mobile < 640px, always visible sm:block) */}
+              <div className={`${isMobileConfigOpen ? "block" : "hidden sm:block"} space-y-3`}>
+                {/* Row 1: Cohort Selection (Grade, Section, Searchable Student Combobox) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
                 {/* 1. Grade Level */}
                 <div className="lg:col-span-3">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -1416,6 +1450,7 @@ function OMRWorkstationContent() {
                                 setSelectedStudentId(s._id);
                                 setIsStudentDropdownOpen(false);
                                 setStudentSearchQuery("");
+                                setIsMobileConfigOpen(false);
                               }}
                               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
                                 isSelected
@@ -1463,7 +1498,10 @@ function OMRWorkstationContent() {
                 <div className="relative">
                   <select
                     value={selectedKeyId}
-                    onChange={(e) => setSelectedKeyId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedKeyId(e.target.value);
+                      setIsMobileConfigOpen(false);
+                    }}
                     className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   >
                     <option value="">Auto-detect Exam Key</option>
@@ -1513,7 +1551,8 @@ function OMRWorkstationContent() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
       </section>
 
       {/* ── WORKSTATION VIEW (BATCH vs SINGLE) ── */}
@@ -1570,89 +1609,115 @@ function OMRWorkstationContent() {
         {/* ── WORKSTATION VIEWPORT ── */}
         {!sheetImage ? (
           /* ── INTAKE MODE (When no sheet is loaded) ── */
-          <div className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-2xl flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-10 text-center shadow-xs">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-800">
-                {isScanning ? (
-                  <RefreshCw className="h-8 w-8 animate-spin text-red-800" />
-                ) : (
-                  <Upload className="h-8 w-8" />
-                )}
-              </div>
-              <h2 className="text-xl font-bold text-slate-900">
-                {isScanning ? "Processing Answer Sheet..." : "Upload Scanned Sheet or Take Photo"}
-              </h2>
-              <p className="mt-1 max-w-md text-sm text-slate-500">
-                {isScanning
-                  ? "Running computer vision fiducial alignment and bubble detection algorithms..."
-                  : "Drag and drop a student answer sheet, take a live camera photo, or test with our sample OMR document to begin score verification."}
-              </p>
+          <>
+            <div className="flex-1 w-full p-3.5 sm:p-6 sm:flex sm:items-center sm:justify-center">
+              <div className="mx-auto flex w-full max-w-2xl flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-4 sm:p-8 text-center shadow-xs">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-800">
+                  {isScanning ? (
+                    <RefreshCw className="h-8 w-8 animate-spin text-red-800" />
+                  ) : (
+                    <Upload className="h-8 w-8" />
+                  )}
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  {isScanning ? "Processing Answer Sheet..." : "Upload Scanned Sheet or Take Photo"}
+                </h2>
+                <p className="mt-1 max-w-md text-sm text-slate-500">
+                  {isScanning
+                    ? "Running computer vision fiducial alignment and bubble detection algorithms..."
+                    : "Drag and drop a student answer sheet, take a live camera photo, or test with our sample OMR document to begin score verification."}
+                </p>
 
-              {errorMessage && (
-                <div className="mt-4 w-full max-w-md rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-left shadow-xs">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-rose-900">OMR Scan Failed</h4>
-                      <p className="mt-0.5 text-xs text-rose-700 leading-relaxed">{errorMessage}</p>
+                {errorMessage && (
+                  <div className="mt-4 w-full max-w-md rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-left shadow-xs">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold text-rose-900">OMR Scan Failed</h4>
+                        <p className="mt-0.5 text-xs text-rose-700 leading-relaxed">{errorMessage}</p>
+                      </div>
                     </div>
                   </div>
+                )}
+
+                {/* Upload Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                {/* Primary Action Buttons */}
+                <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    disabled={isScanning}
+                    className="w-full sm:w-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-800 px-5 text-sm font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
+                  >
+                    <Camera className="h-4 w-4" />
+                    <span>Scan with Camera</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isScanning}
+                    className="w-full sm:w-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span>Upload Sheet Image</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLoadSample}
+                    disabled={isScanning}
+                    className="w-full sm:w-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4 text-amber-600" />
+                    <span>Try Sample Sheet</span>
+                  </button>
                 </div>
-              )}
 
-              {/* Upload Input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+                {/* Guide Footnote */}
+                <div className="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs text-slate-400">
+                  <span>&bull; Accepted formats: JPG, PNG, WEBP</span>
+                  <span>&bull; Automatic OpenCV bubble detection</span>
+                  <span>&bull; Real-time override and Phil-IRI sync</span>
+                </div>
+              </div>
+            </div>
 
-              {/* Primary Action Buttons */}
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isScanning}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-red-800 px-5 text-sm font-semibold text-white shadow-xs transition-all hover:bg-red-900 active:scale-95 disabled:opacity-50"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span>Browse Sheet Image</span>
-                </button>
-
+            {/* Sticky Mobile Quick-Action Bar (< 640px, Intake Mode) */}
+            {workstationMode === "single" && (
+              <div className="sm:hidden fixed bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 shadow-lg flex items-center gap-2">
                 <button
                   type="button"
                   onClick={startCamera}
                   disabled={isScanning}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
+                  className="flex-1 h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-red-800 px-3 text-xs font-bold text-white shadow-xs active:scale-95 disabled:opacity-50"
                 >
                   <Camera className="h-4 w-4" />
-                  <span>Capture Photo</span>
+                  <span>📷 Take Photo &amp; Scan</span>
                 </button>
-
                 <button
                   type="button"
-                  onClick={handleLoadSample}
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={isScanning}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 disabled:opacity-50"
+                  className="flex-1 h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs active:scale-95 disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4 text-amber-600" />
-                  <span>Try Sample Sheet</span>
+                  <Upload className="h-4 w-4" />
+                  <span>📁 Upload Sheet</span>
                 </button>
               </div>
-
-              {/* Guide Footnote */}
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
-                <span>&bull; Accepted formats: JPG, PNG, WEBP</span>
-                <span>&bull; Automatic OpenCV bubble detection</span>
-                <span>&bull; Real-time override and Phil-IRI sync</span>
-              </div>
-            </div>
-          </div>
+            )}
+          </>
         ) : (
           /* ── SPLIT-SCREEN WORKSTATION MODE ── */
-          <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-[400px] lg:min-h-[calc(100vh-280px)]">
+          <div className="flex flex-1 flex-col lg:flex-row overflow-visible lg:overflow-hidden min-h-[400px] lg:min-h-[calc(100vh-280px)]">
             {/* ══════════════════════════════════════════════════════
                 LEFT COLUMN (55%): High-Resolution Scanned Paper Viewer
                ══════════════════════════════════════════════════════ */}
@@ -1764,7 +1829,7 @@ function OMRWorkstationContent() {
             {/* ══════════════════════════════════════════════════════
                 RIGHT COLUMN (45%): Interactive Scoring & Override Panel
                ══════════════════════════════════════════════════════ */}
-            <div className="flex flex-1 flex-col overflow-hidden bg-white lg:w-[45%]">
+            <div className="flex flex-1 flex-col overflow-visible lg:overflow-hidden bg-white lg:w-[45%]">
               {/* ── LIVE SCORE HEADER ── */}
               <div className="shrink-0 border-b border-gray-100 bg-slate-50/70 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2252,7 +2317,7 @@ function OMRWorkstationContent() {
               </div>
 
               {/* ── BOTTOM ACTION FOOTER ── */}
-              <div className="shrink-0 border-t border-slate-200 bg-white p-4">
+              <div className="sticky lg:static bottom-0 left-0 right-0 z-20 shrink-0 border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 sm:p-4 shadow-lg lg:shadow-none">
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
