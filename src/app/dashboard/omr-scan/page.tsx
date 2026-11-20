@@ -638,7 +638,7 @@ function OMRWorkstationContent() {
 
       const data = json.data;
       setAssessmentId(data.assessmentId || null);
-      setSheetImage(data.omrSheetUrl || localUrl);
+      setSheetImage(localUrl || data.omrSheetUrl);
 
       const initialDetected: (string | null)[] = data.detectedAnswers || [];
       setDetectedAnswers(initialDetected);
