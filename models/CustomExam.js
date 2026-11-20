@@ -4,7 +4,11 @@ const CustomExamSchema = new mongoose.Schema(
   {
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     title: { type: String, required: true },
-    subject: { type: String, enum: ['Math', 'Reading', 'Science'], required: true },
+    subject: {
+      type: String,
+      enum: ['Math', 'Reading', 'Science', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'],
+      required: true,
+    },
     gradeLevel: { type: Number, min: 7, max: 10, required: true },
     items: {
       type: [
@@ -20,7 +24,11 @@ const CustomExamSchema = new mongoose.Schema(
     },
     totalItems: { type: Number, required: true },
     writtenCount: { type: Number, default: 0 },
-    assessmentType: { type: String, enum: ['quiz', 'exam'], default: 'quiz' },
+    assessmentType: {
+      type: String,
+      enum: ['quiz', 'exam', 'pre-test', 'post-test'],
+      default: 'quiz',
+    },
     topics: { type: [String], default: [] },
     answerKeyRef: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },
     answerKeyId: { type: mongoose.Schema.Types.ObjectId, ref: 'AnswerKey' },

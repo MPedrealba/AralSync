@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '../../../../../database/db';
 import CustomExam from '../../../../../models/CustomExam';
 import AnswerKey from '../../../../../models/AnswerKey';
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { title, subject, gradeLevel, items, assessmentType, topics, answerKeyId, sections, passageTitle, passageText, passageImage } = body;
-    const finalSubject = teacherSubject !== 'All' ? teacherSubject : subject;
+    const finalSubject = subject || (teacherSubject !== 'All' ? teacherSubject : 'Reading');
 
     if (!title || !finalSubject || !gradeLevel || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -75,7 +76,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const resolvedType = assessmentType || (title.toLowerCase().includes('exam') ? 'exam' : 'quiz');
+    const resolvedType = (assessmentType && ['quiz', 'exam', 'pre-test', 'post-test'].includes(assessmentType))
+      ? assessmentType
+      : (title.toLowerCase().includes('exam') ? 'exam' : 'quiz');
     const resolvedTopics = Array.isArray(topics) ? topics : [];
 
     // Normalize and validate items
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
 
     // Find existing or create new AnswerKey
     let answerKey = null;
-    if (answerKeyId) {
+    if (answerKeyId && mongoose.Types.ObjectId.isValid(answerKeyId)) {
       answerKey = await AnswerKey.findById(answerKeyId);
     }
 
@@ -183,6 +186,17 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     if (e instanceof AuthError) return authErrorResponse(e);
     console.error('Teacher Exams POST Error:', e);
-    return NextResponse.json({ error: e.message || 'Internal server error' }, { status: 500 });
+
+    if (e.name === 'ValidationError' || e.name === 'CastError') {
+      return NextResponse.json(
+        { success: false, error: e.message || 'Validation error while saving exam.' },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, error: e.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
