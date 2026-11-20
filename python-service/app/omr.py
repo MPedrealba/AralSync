@@ -267,7 +267,7 @@ def find_bubble_grid(warped_gray: np.ndarray,
     if hc is not None:
         for pt in hc[0]:
             cx, cy, r = int(pt[0]), int(pt[1]), int(pt[2])
-            if cy > 450:  # Below header
+            if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
                 all_bubbles.append((cx, cy, r))
 
     # 2. Combined with contour detection to capture shaded/faint bubbles
@@ -289,7 +289,7 @@ def find_bubble_grid(warped_gray: np.ndarray,
         cx = int(M["m10"] / M["m00"])
         cy = int(M["m01"] / M["m00"])
         r = int(np.sqrt(area / np.pi))
-        if cy > 450:
+        if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
             if not any(abs(cx - b[0]) <= 10 and abs(cy - b[1]) <= 10 for b in all_bubbles):
                 all_bubbles.append((cx, cy, r))
 
@@ -297,7 +297,7 @@ def find_bubble_grid(warped_gray: np.ndarray,
         return []
 
     # 3. Filter bubbles inside content boundaries
-    filtered = [b for b in all_bubbles if 0.25 * h < b[1] < 0.98 * h and 0.04 * w < b[0] < 0.96 * w]
+    filtered = [b for b in all_bubbles if 0.08 * h < b[1] < 0.98 * h and 0.04 * w < b[0] < 0.96 * w]
     if not filtered:
         filtered = all_bubbles
 
@@ -341,8 +341,26 @@ def find_bubble_grid(warped_gray: np.ndarray,
     q_idx = 0
 
     # Determine maximum questions per column:
-    # In standard DepEd ARAL 3-column sheets, questions are distributed as [17, 17, 16] for 50 items.
-    col_capacities = [17, 17, 16] if len(col_clusters) == 3 else [25, 25] if len(col_clusters) == 2 else [50]
+    # Proportional column distribution for 3-column, 2-column, or single-column layouts:
+    # - 50 items across 3 cols: [17, 17, 16]
+    # - 40 items across 3 cols: [14, 13, 13]
+    # - General: dynamically distribute remainder across leading columns
+    num_cols = len(col_clusters)
+    if num_cols == 3:
+        if num_questions == 50:
+            col_capacities = [17, 17, 16]
+        elif num_questions == 40:
+            col_capacities = [14, 13, 13]
+        else:
+            base = num_questions // 3
+            rem = num_questions % 3
+            col_capacities = [base + (1 if i < rem else 0) for i in range(3)]
+    elif num_cols == 2:
+        base = num_questions // 2
+        rem = num_questions % 2
+        col_capacities = [base + (1 if i < rem else 0) for i in range(2)]
+    else:
+        col_capacities = [num_questions]
 
     row_gap_threshold = max(18, int(0.012 * h))
 
@@ -352,21 +370,28 @@ def find_bubble_grid(warped_gray: np.ndarray,
 
         max_in_col = col_capacities[col_idx] if col_idx < len(col_capacities) else 20
 
-        # Sort bubbles in this column top-to-bottom by Y
+        # Sort bubbles in this column top-to-bottom by Y, then X
         col_bubbles.sort(key=lambda b: (b[1], b[0]))
         raw_rows: list[list[tuple[int, int, int]]] = []
         curr_row: list[tuple[int, int, int]] = [col_bubbles[0]]
 
         for b in col_bubbles[1:]:
-            if abs(b[1] - curr_row[-1][1]) > row_gap_threshold:
+            row_avg_y = float(np.mean([item[1] for item in curr_row]))
+            y_diff = abs(b[1] - row_avg_y)
+            has_x_collision = any(abs(b[0] - item[0]) < 22 for item in curr_row)
+            is_row_full = len(curr_row) >= 4
+
+            if is_row_full or has_x_collision or y_diff > 12:
                 raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
                 curr_row = [b]
             else:
                 curr_row.append(b)
-        raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
 
-        # Filter rows with at least 3 candidate bubbles
-        valid_rows = [r for r in raw_rows if len(r) >= 3][:max_in_col]
+        if curr_row:
+            raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
+
+        # Filter rows with at least 2 candidate bubbles
+        valid_rows = [r for r in raw_rows if len(r) >= 2][:max_in_col]
         four_rows = [r for r in valid_rows if len(r) == OPTIONS_PER_Q]
 
         ref_x = [int(np.median([r[i][0] for r in four_rows])) for i in range(OPTIONS_PER_Q)] if four_rows else None
@@ -389,6 +414,15 @@ def find_bubble_grid(warped_gray: np.ndarray,
                 else:
                     missing_x = r[2][0] + delta_x
                 q_bubbles = sorted(r + [(missing_x, avg_y, avg_r)], key=lambda b: b[0])
+            elif len(r) == 2 and ref_x:
+                avg_y = int(np.mean([b[1] for b in r]))
+                avg_r = int(np.mean([b[2] for b in r]))
+                matched = {min(range(OPTIONS_PER_Q), key=lambda i: abs(b[0] - ref_x[i])) for b in r}
+                missing_slots = sorted(list(set(range(OPTIONS_PER_Q)) - matched))
+                reconstructed = list(r)
+                for slot in missing_slots:
+                    reconstructed.append((ref_x[slot], avg_y, avg_r))
+                q_bubbles = sorted(reconstructed, key=lambda b: b[0])
             else:
                 if ref_x:
                     best_4 = sorted(list({min(r, key=lambda b: abs(b[0] - xt)) for xt in ref_x}), key=lambda b: b[0])
@@ -415,7 +449,7 @@ def read_bubbles(warped_gray: np.ndarray,
     """
     h, w = warped_gray.shape
     answers = []
-    DIFF_THRESHOLD = 18.0   # Grayscale intensity difference threshold (0-255)
+    DIFF_THRESHOLD = 25.0   # Grayscale intensity difference threshold (0-255)
     RATIO_THRESHOLD = 1.25  # Darker ratio compared to median of other bubbles
 
     for question_bubbles in grid:
