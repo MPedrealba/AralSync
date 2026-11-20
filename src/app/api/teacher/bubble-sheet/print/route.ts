@@ -123,20 +123,25 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // F. Stamp Alignment Frame & 4 Solid Black Corner Anchor Marks
-    // a. Outer Framing Border around the margins (x: 20, y: 20, width: width - 40, height: height - 40)
+    // F. Stamp 4 Corner Registration Marks & Outer Bounding Box Alignment Frame
+    // Connect the 4 corners with a clean 1.5pt outer bounding box border (offset inward by 4pt from the fiducial outer bounds)
     firstPage.drawRectangle({
-      x: 20,
-      y: 20,
-      width: width - 40,
-      height: height - 40,
-      borderWidth: 2,
+      x: 28,
+      y: 28,
+      width: width - 56,
+      height: height - 56,
+      borderWidth: 1.5,
       borderColor: rgb(0, 0, 0),
     });
 
-    // b. 4 Solid Black Corner Anchor Marks (24x24 pt) directly anchored at the 4 corners of the outer frame
+    // 4 solid black fiducial squares (size: 24pt x 24pt, or ~8.5mm x 8.5mm) in the extreme corners:
+    // Top-Left: x = 24, y = height - 24 - 24
+    // Top-Right: x = width - 24 - 24, y = height - 24 - 24
+    // Bottom-Left: x = 24, y = 24
+    // Bottom-Right: x = width - 24 - 24, y = 24
     const regSize = 24;
-    const regMargin = 20;
+    const quietMargin = 4;
+    const regMargin = 24;
     const cornerPositions = [
       { x: regMargin, y: regMargin }, // Bottom-Left
       { x: width - regMargin - regSize, y: regMargin }, // Bottom-Right
@@ -145,6 +150,16 @@ export async function GET(req: NextRequest) {
     ];
 
     for (const pos of cornerPositions) {
+      // Surround each corner fiducial with a 4pt white quiet margin (clear zone)
+      firstPage.drawRectangle({
+        x: pos.x - quietMargin,
+        y: pos.y - quietMargin,
+        width: regSize + quietMargin * 2,
+        height: regSize + quietMargin * 2,
+        color: rgb(1, 1, 1),
+      });
+
+      // Solid black fiducial square
       firstPage.drawRectangle({
         x: pos.x,
         y: pos.y,

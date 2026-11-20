@@ -16,9 +16,12 @@ The bubble sheet layout (printed by the Next.js BubbleSheetPrint component):
 """
 
 import base64
+import logging
 import cv2
 import numpy as np
 from typing import Optional
+
+logger = logging.getLogger("aralsync.omr")
 
 
 # ── Configuration ──────────────────────────────────────────────────────────────
@@ -174,76 +177,104 @@ def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
 
 def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
     """
-    Detect the corner registration marks (solid black squares/circles).
-    Only returns corners if actual registration fiducials are found:
-    - Bounding area between 300 and 25000 px
-    - Aspect ratio between 0.65 and 1.5
-    - Strictly within outer < 9% corner margins of the image width and height
-    If not found, returns None so unwarped pages are not falsely distorted.
+    Detect the 4 printed corner fiducial registration squares.
+    Filters candidate contours by:
+    - Thresholding: Otsu + Adaptive thresholding for varied lighting
+    - Aspect ratio between 0.70 and 1.30 (square-like)
+    - Area between 350px and 30,000px (photo distance & camera resolution)
+    - Solidity / rectangular fill factor > 0.75
+    - Position located in the outer 12% margins of the image width and height
+    Returns ordered coordinates [Top-Left, Top-Right, Bottom-Left, Bottom-Right] or None.
     """
     h, w = img_gray.shape
-    candidates = []
 
-    for thresh_mode in [120, 'otsu']:
-        if thresh_mode == 'otsu':
-            _, binary = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        else:
-            _, binary = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY_INV)
+    # Apply Otsu + Adaptive thresholding to isolate solid dark geometric shapes
+    _, binary_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary_adapt = cv2.adaptiveThreshold(
+        img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 8
+    )
+    _, binary_fixed = cv2.threshold(img_gray, 120, 255, cv2.THRESH_BINARY_INV)
 
+    candidates: list[tuple[float, float, float, float]] = []
+
+    for binary in [binary_otsu, binary_adapt, binary_fixed]:
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area < 300 or area > 25000:
+            area = float(cv2.contourArea(cnt))
+            if not (350 <= area <= 30000):
                 continue
+
             x, y, bw, bh = cv2.boundingRect(cnt)
-            if not (0.65 <= bw / max(bh, 1) <= 1.5):
+            if bh == 0 or bw == 0:
                 continue
-            cx = x + bw // 2
-            cy = y + bh // 2
-            # Extreme outer corner margins (< 9% of width/height)
-            is_extreme = (
-                (cx < 0.09 * w and cy < 0.09 * h) or
-                (cx > 0.91 * w and cy < 0.09 * h) or
-                (cx < 0.09 * w and cy > 0.91 * h) or
-                (cx > 0.91 * w and cy > 0.91 * h)
+
+            aspect_ratio = float(bw) / float(bh)
+            if not (0.70 <= aspect_ratio <= 1.30):
+                continue
+
+            # Solidity / rectangular fill factor > 0.75
+            rect_fill = area / float(bw * bh)
+            hull = cv2.convexHull(cnt)
+            hull_area = float(cv2.contourArea(hull))
+            solidity = area / max(hull_area, 1.0)
+
+            if rect_fill <= 0.75 and solidity <= 0.75:
+                continue
+
+            cx = float(x + bw / 2.0)
+            cy = float(y + bh / 2.0)
+
+            # Position located in the outer 12% margins of the image width and height
+            is_in_outer_margin = (
+                (cx < 0.12 * w and cy < 0.12 * h) or  # Top-Left
+                (cx > 0.88 * w and cy < 0.12 * h) or  # Top-Right
+                (cx < 0.12 * w and cy > 0.88 * h) or  # Bottom-Left
+                (cx > 0.88 * w and cy > 0.88 * h)     # Bottom-Right
             )
-            if is_extreme:
-                candidates.append((cx, cy, area))
-        if len(candidates) >= 4:
-            break
+            if not is_in_outer_margin:
+                continue
+
+            if not any(abs(cx - c[0]) <= 15 and abs(cy - c[1]) <= 15 for c in candidates):
+                candidates.append((cx, cy, area, rect_fill * solidity))
 
     if len(candidates) < 3:
         return None
 
+    # Group into the 4 corner quadrants
     tl = tr = bl = br = None
-    min_d_tl = min_d_tr = min_d_bl = min_d_br = float('inf')
+    tl_dist = tr_dist = bl_dist = br_dist = float('inf')
 
-    for cx, cy, _ in candidates:
-        if cx < 0.09 * w and cy < 0.09 * h:
+    for cx, cy, area, score in candidates:
+        if cx < 0.12 * w and cy < 0.12 * h:
             d = cx**2 + cy**2
-            if d < min_d_tl:
-                min_d_tl = d
+            if d < tl_dist:
+                tl_dist = d
                 tl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.91 * w and cy < 0.09 * h:
+        elif cx > 0.88 * w and cy < 0.12 * h:
             d = (w - cx)**2 + cy**2
-            if d < min_d_tr:
-                min_d_tr = d
+            if d < tr_dist:
+                tr_dist = d
                 tr = np.array([cx, cy], dtype=np.float32)
-        elif cx < 0.09 * w and cy > 0.91 * h:
+        elif cx < 0.12 * w and cy > 0.88 * h:
             d = cx**2 + (h - cy)**2
-            if d < min_d_bl:
-                min_d_bl = d
+            if d < bl_dist:
+                bl_dist = d
                 bl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.91 * w and cy > 0.91 * h:
+        elif cx > 0.88 * w and cy > 0.88 * h:
             d = (w - cx)**2 + (h - cy)**2
-            if d < min_d_br:
-                min_d_br = d
+            if d < br_dist:
+                br_dist = d
                 br = np.array([cx, cy], dtype=np.float32)
 
     found = sum(1 for c in [tl, tr, bl, br] if c is not None)
     if found == 4:
-        return np.array([tl, tr, bl, br], dtype=np.float32)
+        ordered = np.array([tl, tr, bl, br], dtype=np.float32)
+        print(f"[OMR] 4 fiducials detected: TL={ordered[0]}, TR={ordered[1]}, BL={ordered[2]}, BR={ordered[3]}")
+        logger.info(f"4 fiducials detected: {ordered.tolist()}")
+        return ordered
+
     if found == 3:
+        # Complete missing corner via parallelogram vector completion
         if br is None:
             br = tr + bl - tl
         elif bl is None:
@@ -252,7 +283,10 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
             tr = tl + br - bl
         elif tl is None:
             tl = tr + bl - br
-        return np.array([tl, tr, bl, br], dtype=np.float32)
+        completed = np.array([tl, tr, bl, br], dtype=np.float32)
+        print(f"[OMR] 3 fiducials detected (4th completed): TL={completed[0]}, TR={completed[1]}, BL={completed[2]}, BR={completed[3]}")
+        logger.info(f"3 fiducials detected with 4th completed: {completed.tolist()}")
+        return completed
 
     return None
 
@@ -302,7 +336,9 @@ def find_bubble_grid(warped_gray: np.ndarray,
         if hc is not None:
             for pt in hc[0]:
                 cx, cy, r = int(pt[0]), int(pt[1]), int(pt[2])
-                if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
+                # Header boundary: cy >= int(0.28 * h) (~460px on 1650h) excludes header text/logo artifacts
+                # Bottom boundary: cy <= int(0.95 * h) excludes bottom border/markings
+                if int(0.28 * h) <= cy <= int(0.95 * h) and 0.04 * w < cx < 0.96 * w:
                     if not any(abs(cx - b[0]) <= 8 and abs(cy - b[1]) <= 8 for b in all_bubbles):
                         all_bubbles.append((cx, cy, r))
 
@@ -327,15 +363,15 @@ def find_bubble_grid(warped_gray: np.ndarray,
             cx = int(M["m10"] / M["m00"])
             cy = int(M["m01"] / M["m00"])
             r = int(np.sqrt(area / np.pi))
-            if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
+            if int(0.28 * h) <= cy <= int(0.95 * h) and 0.04 * w < cx < 0.96 * w:
                 if not any(abs(cx - b[0]) <= 8 and abs(cy - b[1]) <= 8 for b in all_bubbles):
                     all_bubbles.append((cx, cy, r))
 
     if not all_bubbles:
         return []
 
-    # 3. Filter bubbles inside content boundaries
-    filtered = [b for b in all_bubbles if 0.08 * h < b[1] < 0.98 * h and 0.04 * w < b[0] < 0.96 * w]
+    # 3. Filter bubbles inside content boundaries (grid area strictly below header)
+    filtered = [b for b in all_bubbles if int(0.28 * h) <= b[1] <= int(0.95 * h) and 0.04 * w < b[0] < 0.96 * w]
     if not filtered:
         filtered = all_bubbles
 
@@ -354,23 +390,29 @@ def find_bubble_grid(warped_gray: np.ndarray,
     if not sorted_by_x:
         return []
 
-    # 5. Dynamic Column Clustering by Relative X gaps (> 65px)
+    # 5. Deterministic 3-Column Partitioning for Standard DepEd ARAL Layouts
+    col_bands = [
+        [b for b in merged if 0.08 * w <= b[0] < 0.38 * w],   # Column 1 (Q1 to Q14 / Q17)
+        [b for b in merged if 0.38 * w <= b[0] < 0.68 * w],   # Column 2 (Q15 to Q28 / Q34)
+        [b for b in merged if 0.68 * w <= b[0] <= 0.96 * w],  # Column 3 (Q29 to Q40 / Q50)
+    ]
+    col_clusters = [col for col in col_bands if len(col) >= 4]
+
+    # Fallback to dynamic gap clustering if sheet layout doesn't fit standard 3-column bands
     gap_threshold = max(65, int(0.05 * w))
-    raw_col_clusters: list[list[tuple[int, int, int]]] = []
-    curr_col: list[tuple[int, int, int]] = [sorted_by_x[0]]
-
-    for b in sorted_by_x[1:]:
-        if b[0] - curr_col[-1][0] > gap_threshold:
-            raw_col_clusters.append(curr_col)
-            curr_col = [b]
-        else:
-            curr_col.append(b)
-    raw_col_clusters.append(curr_col)
-
-    # Retain columns that contain sufficient bubbles (at least 8 bubbles for valid questions)
-    col_clusters = [col for col in raw_col_clusters if len(col) >= 8]
     if not col_clusters:
-        col_clusters = raw_col_clusters
+        raw_col_clusters: list[list[tuple[int, int, int]]] = []
+        curr_col: list[tuple[int, int, int]] = [sorted_by_x[0]]
+        for b in sorted_by_x[1:]:
+            if b[0] - curr_col[-1][0] > gap_threshold:
+                raw_col_clusters.append(curr_col)
+                curr_col = [b]
+            else:
+                curr_col.append(b)
+        raw_col_clusters.append(curr_col)
+        col_clusters = [col for col in raw_col_clusters if len(col) >= 4]
+        if not col_clusters:
+            col_clusters = raw_col_clusters
 
     # Sort columns left-to-right based on median X coordinate
     col_clusters.sort(key=lambda col: float(np.median([b[0] for b in col])))
@@ -417,9 +459,10 @@ def find_bubble_grid(warped_gray: np.ndarray,
             row_avg_y = float(np.mean([item[1] for item in curr_row]))
             y_diff = abs(b[1] - row_avg_y)
             has_x_collision = any(abs(b[0] - item[0]) < 22 for item in curr_row)
-            is_row_full = len(curr_row) >= 4
+            is_row_full = len(curr_row) >= OPTIONS_PER_Q
 
-            if is_row_full or has_x_collision or y_diff > 12:
+            # Break row when full, colliding X, or vertical distance exceeds tolerance (median row gap is ~40-50px)
+            if is_row_full or has_x_collision or y_diff > 14:
                 raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
                 curr_row = [b]
             else:
@@ -633,7 +676,10 @@ def read_bubbles(warped_gray: np.ndarray,
         is_double_fill = (rem_median - i_runner_norm > DIFF_THRESHOLD) and (i_runner_norm - i_dark_norm < 10.0)
 
         if is_dark_enough and is_absolutely_dark and not is_double_fill:
-            answers.append(darkest_idx)
+            if 0 <= darkest_idx < OPTIONS_PER_Q:
+                answers.append(darkest_idx)
+            else:
+                answers.append(None)
         else:
             answers.append(None)
 
@@ -671,19 +717,24 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h_orig, w_orig = gray.shape
 
-    # Step 1: Automatic Document Paper Contour Detection & Perspective Warp
-    paper_corners = detect_document_contour(gray)
-    if paper_corners is not None:
-        warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
+    # Step 1: Prioritize high-accuracy 4-corner printed fiducials directly over generic paper contour
+    fiducial_corners = detect_fiducials(gray)
+    if fiducial_corners is not None and len(fiducial_corners) == 4:
+        logger.info(f"[OMR] 4 fiducials prioritized for perspective warp: {fiducial_corners.tolist()}")
+        warped = warp_to_grid(gray, fiducial_corners, target_w=1275, target_h=1650)
     else:
-        # Fallback if no distinct document boundary detected
-        corners = detect_fiducials(gray)
-        if corners is not None:
-            warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
-        elif (h_orig, w_orig) != (1650, 1275):
-            warped = cv2.resize(gray, (1275, 1650))
+        # Fallback to automatic document paper contour detection
+        paper_corners = detect_document_contour(gray)
+        if paper_corners is not None:
+            warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
         else:
-            warped = gray.copy()
+            corners = detect_fiducials(gray)
+            if corners is not None:
+                warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
+            elif (h_orig, w_orig) != (1650, 1275):
+                warped = cv2.resize(gray, (1275, 1650))
+            else:
+                warped = gray.copy()
 
     # Step 1.5: If fiducial marks exist on the warped sheet, refine warp for sub-pixel accuracy
     refined_corners = detect_fiducials(warped)
@@ -711,14 +762,15 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
     filled_count = 0
 
     for i, answer_idx in enumerate(raw_answers):
+        is_valid = answer_idx is not None and 0 <= answer_idx < len(OPTION_LABELS)
         entry = {
             "question": i + 1,
-            "answer_index": answer_idx,
-            "answer_label": OPTION_LABELS[answer_idx] if answer_idx is not None else None,
-            "filled": answer_idx is not None,
+            "answer_index": answer_idx if is_valid else None,
+            "answer_label": OPTION_LABELS[answer_idx] if is_valid else None,
+            "filled": is_valid,
         }
         results.append(entry)
-        if answer_idx is not None:
+        if is_valid:
             filled_count += 1
 
     # Quality warnings
