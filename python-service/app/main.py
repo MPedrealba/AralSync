@@ -11,6 +11,7 @@ Runs on port 8000 (configurable via PORT env var).
 
 import os
 import re
+import traceback
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -65,15 +66,21 @@ async def omr_detect(
     Accepts: PNG/JPEG image of a filled bubble sheet.
     Returns: Per-question detected answer (A/B/C/D) or blank.
     """
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "File must be an image (PNG, JPEG)")
+    try:
+        if not file.content_type or not file.content_type.startswith("image/"):
+            raise HTTPException(400, "File must be an image (PNG, JPEG)")
 
-    image_bytes = await file.read()
-    if len(image_bytes) > 10 * 1024 * 1024:  # 10MB limit
-        raise HTTPException(400, "Image too large (max 10MB)")
+        image_bytes = await file.read()
+        if len(image_bytes) > 10 * 1024 * 1024:  # 10MB limit
+            raise HTTPException(400, "Image too large (max 10MB)")
 
-    result = detect_omr_sheet(image_bytes, num_questions)
-    return result
+        result = detect_omr_sheet(image_bytes, num_questions)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=422, detail=f"OMR Detection Error: {str(e)}")
 
 
 @app.post("/omr/detect-pdf")

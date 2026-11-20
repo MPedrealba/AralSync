@@ -271,6 +271,8 @@ def find_bubble_grid(warped_gray: np.ndarray,
             merged.append(b)
 
         sorted_by_x = sorted(merged, key=lambda b: b[0])
+        if not sorted_by_x:
+            return []
         col_clusters: list[list[tuple[int, int, int]]] = []
         curr_col: list[tuple[int, int, int]] = [sorted_by_x[0]]
 
