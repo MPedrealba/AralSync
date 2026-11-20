@@ -8,7 +8,7 @@ import AnswerKey from '../../../../../../models/AnswerKey';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { extractKeyAnswers } from '../route';
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 /** Compute mastery level from a percentage score */
 function computeMasteryLevel(pct: number): string {
@@ -44,7 +44,7 @@ async function detectSingleSheetAnswers(
     res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
       method: 'POST',
       body: form,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(60000), // 60s timeout to allow cold start
     });
   } catch (e: unknown) {
     console.error('Python OMR detect connection error:', (e as Error).message);
@@ -56,12 +56,17 @@ async function detectSingleSheetAnswers(
   }
 
   if (!res.ok) {
+    const rawText = await res.text();
     let errMessage = 'OMR Vision Engine returned an error.';
-    try {
-      const errData = await res.json();
-      errMessage = errData.detail || errData.error || errMessage;
-    } catch {
-      // ignore
+    if (res.status === 502 || res.status === 504 || rawText.includes('Bad Gateway')) {
+      errMessage = 'The OMR Vision Engine is waking up on Render. Please wait 30 seconds and try again.';
+    } else {
+      try {
+        const json = JSON.parse(rawText);
+        errMessage = json.detail || json.error || rawText.slice(0, 150) || errMessage;
+      } catch {
+        errMessage = rawText.slice(0, 150) || errMessage;
+      }
     }
     throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
   }
@@ -107,12 +112,17 @@ async function detectPdfPages(
   }
 
   if (!res.ok) {
+    const rawText = await res.text();
     let errMessage = 'Python PDF OMR service error.';
-    try {
-      const errData = await res.json();
-      errMessage = errData.detail || errData.error || errMessage;
-    } catch {
-      // ignore
+    if (res.status === 502 || res.status === 504 || rawText.includes('Bad Gateway')) {
+      errMessage = 'The OMR Vision Engine is waking up on Render. Please wait 30 seconds and try again.';
+    } else {
+      try {
+        const json = JSON.parse(rawText);
+        errMessage = json.detail || json.error || rawText.slice(0, 150) || errMessage;
+      } catch {
+        errMessage = rawText.slice(0, 150) || errMessage;
+      }
     }
     throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
   }

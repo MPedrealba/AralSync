@@ -53,7 +53,7 @@ export class OMRServiceError extends Error {
   }
 }
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<(string | null)[]> {
   const blob = new Blob([imageBuffer], { type: 'image/png' });
@@ -66,7 +66,7 @@ async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20)
     res = await fetch(`${PYTHON_SERVICE_URL}/omr/detect`, {
       method: 'POST',
       body: form,
-      signal: AbortSignal.timeout(15000), // 15s timeout
+      signal: AbortSignal.timeout(60000), // 60s timeout to allow cold start
     });
   } catch (e: unknown) {
     console.error('Python OMR service connection error:', (e as Error).message);
@@ -78,12 +78,17 @@ async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20)
   }
 
   if (!res.ok) {
+    const rawText = await res.text();
     let errMessage = 'OMR vision engine returned an error.';
-    try {
-      const errData = await res.json();
-      errMessage = errData.detail || errData.error || errMessage;
-    } catch {
-      // ignore
+    if (res.status === 502 || res.status === 504 || rawText.includes('Bad Gateway')) {
+      errMessage = 'The OMR Vision Engine is waking up on Render. Please wait 30 seconds and try again.';
+    } else {
+      try {
+        const json = JSON.parse(rawText);
+        errMessage = json.detail || json.error || rawText.slice(0, 150) || errMessage;
+      } catch {
+        errMessage = rawText.slice(0, 150) || errMessage;
+      }
     }
     throw new OMRServiceError(errMessage, 'OMR_PROCESSING_FAILED', res.status >= 500 ? 503 : 422);
   }
