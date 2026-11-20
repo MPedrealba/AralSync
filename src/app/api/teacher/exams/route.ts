@@ -87,10 +87,13 @@ export async function POST(req: NextRequest) {
       if (typeof rawAns === "object" && rawAns !== null) {
         rawAns = rawAns.correctKey || rawAns.letter || "A";
       }
+      const rawPrompt = it.prompt || it.question || it.text || `Item ${i + 1}`;
       return {
         index: i,
-        prompt: String(it.prompt || ''),
-        choices: Array.isArray(it.choices) ? it.choices.slice(0, 4) : [],
+        prompt: String(rawPrompt || `Item ${i + 1}`).trim(),
+        choices: Array.isArray(it.choices && it.choices.length > 0 ? it.choices : it.options)
+          ? (it.choices || it.options).slice(0, 4)
+          : [],
         correctAnswer: it.mode === 'written' ? null : String(rawAns || 'A'),
         mode: (it.mode === 'written' ? 'written' : 'mc') as 'mc' | 'written',
       };

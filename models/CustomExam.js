@@ -39,5 +39,9 @@ const CustomExamSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Ensure hot reload in development always picks up updated enums
+if (process.env.NODE_ENV !== 'production' && mongoose.models.CustomExam) {
+  delete mongoose.models.CustomExam;
+}
 module.exports =
   mongoose.models.CustomExam || mongoose.model('CustomExam', CustomExamSchema);
