@@ -60,6 +60,10 @@ export default function StudentSidebar({ isOpen = false, onClose }: StudentSideb
   };
 
   const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aral_reading_stream");
+      sessionStorage.clear();
+    }
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {

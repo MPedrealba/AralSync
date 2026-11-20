@@ -24,6 +24,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found.' }, { status: 404 });
     }
 
+    // Self-healing check: automatically repair specialization for Math/Science teachers
+    if (
+      (profile.assignedSubject === 'Math' || profile.assignedSubject === 'Science') &&
+      profile.specialization !== 'all-subjects'
+    ) {
+      await User.updateOne({ _id: profile._id }, { $set: { specialization: 'all-subjects' } });
+      profile.specialization = 'all-subjects';
+    }
+
     return ok({
       id: String(profile._id),
       username: profile.username,

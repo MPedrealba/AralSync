@@ -134,6 +134,15 @@ export async function POST(req: Request) {
       );
     }
 
+    // Self-healing check: automatically repair specialization for Math/Science teachers
+    if (
+      (user.assignedSubject === 'Math' || user.assignedSubject === 'Science') &&
+      user.specialization !== 'all-subjects'
+    ) {
+      user.specialization = 'all-subjects';
+      await User.updateOne({ _id: user._id }, { $set: { specialization: 'all-subjects' } });
+    }
+
     // Create JWT payload
     const payload = {
       id: user._id.toString(),

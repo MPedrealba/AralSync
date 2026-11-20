@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [userName, setUserName] = useState<string>("");
+  const [assignedSubject, setAssignedSubject] = useState<string>("");
   const [greeting, setGreeting] = useState<string>("Good day");
 
   useEffect(() => {
@@ -73,6 +74,7 @@ export default function DashboardPage() {
       .then((json) => {
         if (json.success && json.data) {
           if (json.data.name) setUserName(json.data.name);
+          if (json.data.assignedSubject) setAssignedSubject(json.data.assignedSubject);
           if (json.data.assignedSubject === "Filipino") {
             router.replace("/dashboard/filipino-reading");
           }
@@ -138,6 +140,15 @@ export default function DashboardPage() {
       }>;
     };
   const recentScansTable = recentScans;
+  const teacherSubject = data?.teacherSubject || assignedSubject;
+  const pendingReviewsTitle =
+    teacherSubject === "Reading" || teacherSubject === "English" || teacherSubject === "Filipino"
+      ? "Pending Reading Reviews"
+      : teacherSubject === "Math"
+      ? "Pending Math Reviews"
+      : teacherSubject === "Science"
+      ? "Pending Science Reviews"
+      : "Pending Item Reviews";
 
   return (
     <>
@@ -179,7 +190,7 @@ export default function DashboardPage() {
             subtext="In the last 7 days"
           />
           <StatCard
-            title="Pending Reading Reviews"
+            title={pendingReviewsTitle}
             value={overview.pendingReviews.toString()}
             icon={Clock}
             color="amber"

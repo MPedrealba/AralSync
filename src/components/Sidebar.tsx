@@ -28,6 +28,7 @@ import { useMobileNav } from "@/components/MobileNavContext";
 const READING_ONLY_HREFS = new Set([
   "/dashboard/gst",
   "/dashboard/reading-fluency",
+  "/dashboard/reading-evaluation",
 ]);
 
 const allNavSections = [
@@ -137,23 +138,36 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
       .catch(() => /* ignore — default to all-subjects */ {});
   }, []);
 
+  const isDedicatedNonReading = assignedSubject === "Math" || assignedSubject === "Science";
+
   const isFilipinoTeacher = assignedSubject === "Filipino";
   const isEnglishTeacher = assignedSubject === "English";
 
+  // Stream in localStorage should NEVER be respected for dedicated non-reading teachers
+  const isReadingAllowedTeacher =
+    !isDedicatedNonReading &&
+    (assignedSubject === "Filipino" ||
+      assignedSubject === "Reading" ||
+      assignedSubject === "English & Filipino" ||
+      assignedSubject === "All" ||
+      specialization === "reading");
+
   const isFilipino =
-    isFilipinoTeacher ||
-    (!isEnglishTeacher && (
-      pathname?.includes("filipino-reading") ||
-      (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
-      (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino")
-    ));
+    !isDedicatedNonReading &&
+    (isFilipinoTeacher ||
+      (!isEnglishTeacher && isReadingAllowedTeacher && (
+        pathname?.includes("filipino-reading") ||
+        (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
+        (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino")
+      )));
 
   const isReading =
-    isFilipino ||
-    isEnglishTeacher ||
-    assignedSubject === "English & Filipino" ||
-    assignedSubject === "Reading" ||
-    specialization === "reading";
+    !isDedicatedNonReading &&
+    (isFilipino ||
+      isEnglishTeacher ||
+      assignedSubject === "English & Filipino" ||
+      assignedSubject === "Reading" ||
+      specialization === "reading");
 
   // Filter out reading-only items for non-reading teachers
   const navSections = isFilipino
@@ -164,12 +178,14 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
         .map((section) => ({
           ...section,
           items: section.items.filter(
-            (item) => !READING_ONLY_HREFS.has(item.href),
+            (item) => !READING_ONLY_HREFS.has(item.href) && !item.href.includes("reading-evaluation"),
           ),
         }))
         .filter((section) => section.items.length > 0);
 
-  const portalLabel = isFilipinoTeacher || (isFilipino && !isEnglishTeacher)
+  const portalLabel = isDedicatedNonReading
+    ? `${assignedSubject} Teacher`
+    : isFilipinoTeacher || (isFilipino && !isEnglishTeacher)
     ? "Filipino Reading Teacher"
     : isEnglishTeacher
     ? "English Reading Teacher"
@@ -182,6 +198,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps = {}
     : "Subject Teacher";
 
   const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aral_reading_stream");
+      sessionStorage.clear();
+    }
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {

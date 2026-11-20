@@ -116,18 +116,28 @@ export async function POST(req: NextRequest) {
 
     const initialPassword = (password && password.trim()) ? password.trim() : 'password123';
     const hashed = await bcrypt.hash(initialPassword, 10);
+
+    let finalAssignedSubject: string | undefined = undefined;
+    let finalSpecialization: string = 'all-subjects';
+    if (role === 'teacher') {
+      finalAssignedSubject = assignedSubject || 'All';
+      if (finalAssignedSubject === 'Math' || finalAssignedSubject === 'Science') {
+        finalSpecialization = 'all-subjects';
+      } else if (finalAssignedSubject && ['Reading', 'English', 'Filipino'].includes(finalAssignedSubject)) {
+        finalSpecialization = 'reading';
+      } else if (specialization === 'reading' || specialization === 'all-subjects') {
+        finalSpecialization = specialization;
+      }
+    }
+
     const user = await User.create({
       username: username.trim(),
       password: hashed,
       name: name.trim(),
       role,
       email: email ? email.trim() : undefined,
-      specialization:
-        role === 'teacher' && (specialization === 'reading' || specialization === 'all-subjects')
-          ? specialization
-          : 'all-subjects',
-      assignedSubject:
-        role === 'teacher' && assignedSubject ? assignedSubject : role === 'teacher' ? 'All' : undefined,
+      specialization: finalSpecialization,
+      assignedSubject: finalAssignedSubject,
       active: true,
       mustChangePassword: true,
     });
@@ -202,7 +212,11 @@ export async function PATCH(req: NextRequest) {
       if (specialization) user.specialization = specialization;
       if (assignedSubject) {
         user.assignedSubject = assignedSubject;
-        if (assignedSubject === 'Reading') user.specialization = 'reading';
+        if (assignedSubject === 'Math' || assignedSubject === 'Science') {
+          user.specialization = 'all-subjects';
+        } else if (['Reading', 'English', 'Filipino'].includes(assignedSubject)) {
+          user.specialization = 'reading';
+        }
       }
     }
     if (typeof active === 'boolean') user.active = active;

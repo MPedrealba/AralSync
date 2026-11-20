@@ -11,20 +11,36 @@ export type TeacherSubject = 'Reading' | 'Math' | 'Science' | 'English' | 'Filip
  * - If assignedSubject === "Science", strictly scope to "Science".
  * - If assignedSubject === "All" or "all-subjects", allow all subjects ("All").
  */
-export async function getTeacherSubject(authUser: { id: string; specialization?: string }): Promise<TeacherSubject> {
+export async function getTeacherSubject(authUser: { id: string; specialization?: string; assignedSubject?: string }): Promise<TeacherSubject> {
   try {
     const user = await User.findById(authUser.id).select('assignedSubject specialization').lean();
-    const assigned = (user as any)?.assignedSubject;
+    const assigned = (user as any)?.assignedSubject || authUser.assignedSubject;
     const spec = (user as any)?.specialization || authUser.specialization;
 
-    if (assigned === 'Reading' || spec === 'reading') return 'Reading';
-    if (assigned === 'English' || spec === 'english') return 'English';
-    if (assigned === 'Filipino' || spec === 'filipino') return 'Filipino';
+    // Strict first priority to assignedSubject
     if (assigned === 'Math') return 'Math';
     if (assigned === 'Science') return 'Science';
-    if (assigned === 'All' || spec === 'all-subjects') return 'All';
+    if (assigned === 'Filipino') return 'Filipino';
+    if (assigned === 'English') return 'English';
+    if (assigned === 'Reading') return 'Reading';
+    if (assigned === 'All') return 'All';
+
+    // Fallback when assignedSubject is empty or undefined
+    if (spec === 'reading') return 'Reading';
+    if (spec === 'english') return 'English';
+    if (spec === 'filipino') return 'Filipino';
+    if (spec === 'all-subjects') return 'All';
+
     return 'All';
   } catch {
+    const fallbackAssigned = (authUser as any)?.assignedSubject;
+    if (fallbackAssigned === 'Math') return 'Math';
+    if (fallbackAssigned === 'Science') return 'Science';
+    if (fallbackAssigned === 'Filipino') return 'Filipino';
+    if (fallbackAssigned === 'English') return 'English';
+    if (fallbackAssigned === 'Reading') return 'Reading';
+    if (fallbackAssigned === 'All') return 'All';
+
     if (authUser.specialization === 'reading') return 'Reading';
     return 'All';
   }

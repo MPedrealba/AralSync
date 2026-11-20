@@ -16,6 +16,21 @@ import {
 } from "lucide-react";
 import { useMobileNav } from "@/components/MobileNavContext";
 
+export const clearSessionAndLogout = async (router?: any) => {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("aral_reading_stream");
+    sessionStorage.clear();
+  }
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    /* ignore */
+  }
+  if (router) {
+    router.push("/login");
+  }
+};
+
 interface HeaderProps {
   title: string;
   onOpenMobileMenu?: () => void;
@@ -103,16 +118,24 @@ export default function Header({ title, onOpenMobileMenu }: HeaderProps) {
             ["principal", "coordinator", "admin"].includes(role);
           setHasReadingAccess(isReadingAllowed);
 
+          const isDualOrReadingTeacher =
+            assigned === "Filipino" ||
+            assigned === "Reading" ||
+            assigned === "English & Filipino" ||
+            (!["Math", "Science", "English"].includes(assigned) && (assigned === "All" || spec === "reading"));
+
           // Dedicated subject teachers lock strictly to their assigned portal
           if (assigned === "Filipino") {
             setActiveStream("filipino");
-          } else if (assigned === "English") {
+          } else if (assigned === "English" || assigned === "Math" || assigned === "Science") {
+            // Dedicated Math, Science, and English teachers never use Filipino stream from localStorage
             setActiveStream("english");
           } else {
             const isFil =
-              pathname?.includes("filipino-reading") ||
-              (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
-              (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino");
+              isDualOrReadingTeacher &&
+              (pathname?.includes("filipino-reading") ||
+                (typeof window !== "undefined" && window.location.search.includes("stream=filipino")) ||
+                (typeof window !== "undefined" && localStorage.getItem("aral_reading_stream") === "filipino"));
             setActiveStream(isFil ? "filipino" : "english");
           }
         }
