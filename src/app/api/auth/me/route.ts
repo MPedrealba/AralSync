@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const { name, username, email, specialization, currentPassword, newPassword } = body;
+    const { name, username, email, currentPassword, newPassword } = body;
 
     const user = await User.findById(authUser.id);
     if (!user) {
@@ -151,22 +151,12 @@ export async function PATCH(req: NextRequest) {
       fieldsUpdated.push('email');
     }
 
-    // 5. Specialization (only applies to teachers)
-    if (specialization !== undefined && user.role === 'teacher') {
-      if (specialization === 'reading' || specialization === 'all-subjects') {
-        if (user.specialization !== specialization) {
-          user.specialization = specialization;
-          fieldsUpdated.push('specialization');
-        }
-      }
-    }
-
     if (fieldsUpdated.length > 0) {
       await user.save();
     }
 
     // Re-sign token if identity fields changed
-    const identityChanged = fieldsUpdated.some((f) => ['name', 'username', 'specialization'].includes(f));
+    const identityChanged = fieldsUpdated.some((f) => ['name', 'username'].includes(f));
     let token: string | null = null;
     if (identityChanged) {
       const secret = new TextEncoder().encode(JWT_SECRET);
@@ -197,6 +187,7 @@ export async function PATCH(req: NextRequest) {
       name: user.name,
       role: user.role,
       specialization: user.specialization || 'all-subjects',
+      assignedSubject: user.assignedSubject || (user.specialization === 'reading' ? 'Reading' : 'All'),
       email: user.email || null,
       active: user.active ?? true,
       createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,

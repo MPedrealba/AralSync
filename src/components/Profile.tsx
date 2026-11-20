@@ -33,11 +33,6 @@ interface ProfileData {
   createdAt: string | null;
 }
 
-const specializationLabel: Record<string, string> = {
-  reading: "Reading Teacher",
-  "all-subjects": "Subject Teacher",
-};
-
 const roleLabel: Record<string, string> = {
   teacher: "Teacher",
   principal: "School Principal",
@@ -59,7 +54,6 @@ export default function Profile() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [specialization, setSpecialization] = useState("all-subjects");
 
   // Password fields
   const [currentPassword, setCurrentPassword] = useState("");
@@ -78,7 +72,6 @@ export default function Profile() {
     setName(profile.name || "");
     setUsername(profile.username || "");
     setEmail(profile.email || "");
-    setSpecialization(profile.specialization || "all-subjects");
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
@@ -162,10 +155,6 @@ export default function Profile() {
         username: trimmedUsername,
         email: trimmedEmail,
       };
-
-      if (data?.role === "teacher") {
-        payload.specialization = specialization;
-      }
 
       if (newPassword) {
         payload.currentPassword = currentPassword;
@@ -274,11 +263,9 @@ export default function Profile() {
             {data.role === "teacher" && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
                 <BookOpen className="h-3.5 w-3.5" />
-                {data.assignedSubject === "Math" || data.assignedSubject === "Science"
+                {data.assignedSubject && data.assignedSubject !== "All"
                   ? `${data.assignedSubject} Teacher`
-                  : specializationLabel[
-                      isEditing ? specialization : data.specialization
-                    ] ?? "Subject Teacher"}
+                  : "Subject Teacher"}
               </span>
             )}
           </div>
@@ -342,12 +329,17 @@ export default function Profile() {
               <div className="flex items-center justify-between px-6 py-3.5">
                 <dt className="flex items-center gap-2 text-sm text-gray-500">
                   <BookOpen className="h-4 w-4 text-gray-400" />
-                  Teaching Focus
+                  Assigned Subject
                 </dt>
-                <dd className="text-sm font-medium text-gray-800">
-                  {data.assignedSubject === "Math" || data.assignedSubject === "Science"
-                    ? `${data.assignedSubject} Teacher`
-                    : specializationLabel[data.specialization] ?? "Subject Teacher"}
+                <dd className="text-right">
+                  <span className="text-sm font-medium text-gray-800">
+                    {data.assignedSubject && data.assignedSubject !== "All"
+                      ? `${data.assignedSubject} Teacher`
+                      : "Subject Teacher"}
+                  </span>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    (Managed by ARAL Coordinator)
+                  </p>
                 </dd>
               </div>
             )}
@@ -470,65 +462,6 @@ export default function Profile() {
                       className="mt-1 block w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
-
-                  {data.role === "teacher" && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                        Teaching Specialization
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label
-                          className={`flex cursor-pointer flex-col rounded-lg border p-3 text-left transition-colors ${
-                            specialization === "all-subjects"
-                              ? "border-blue-500 bg-blue-50/50"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="specialization"
-                              value="all-subjects"
-                              checked={specialization === "all-subjects"}
-                              onChange={() => setSpecialization("all-subjects")}
-                              className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-xs font-semibold text-gray-800">
-                              Subject Teacher
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-gray-500 pl-5">
-                            Standard ARAL subject instructor.
-                          </p>
-                        </label>
-
-                        <label
-                          className={`flex cursor-pointer flex-col rounded-lg border p-3 text-left transition-colors ${
-                            specialization === "reading"
-                              ? "border-blue-500 bg-blue-50/50"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="specialization"
-                              value="reading"
-                              checked={specialization === "reading"}
-                              onChange={() => setSpecialization("reading")}
-                              className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-xs font-semibold text-gray-800">
-                              Reading Teacher
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-gray-500 pl-5">
-                            Phil-IRI fluency &amp; comprehension specialist.
-                          </p>
-                        </label>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 /* Security & Password Tab */
