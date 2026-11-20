@@ -20,6 +20,17 @@ export async function GET(req: NextRequest) {
     await requireAuth(req, ['coordinator', 'principal']);
     await connectDB();
 
+    // Migration repair check: Any LearnerRecord with gradeLevel: 10 that has a legacy Grade 7/8/9 section name
+    // (Ilang-Ilang, Sampaguita, Rosal) should be updated to Molave or Acacia.
+    await LearnerRecord.updateMany(
+      { gradeLevel: 10, section: { $regex: /^ilang[- ]?ilang$/i } },
+      { $set: { section: 'Molave' } }
+    );
+    await LearnerRecord.updateMany(
+      { gradeLevel: 10, section: { $regex: /^(sampaguita|rosal)$/i } },
+      { $set: { section: 'Acacia' } }
+    );
+
 
 
 
@@ -138,6 +149,10 @@ export async function GET(req: NextRequest) {
 
     // Build distinct grades, sections, and grade-to-sections mapping
     const gradeSectionsMap: Record<string, string[]> = {};
+    const standardGrades = ['7', '8', '9', '10'];
+    standardGrades.forEach((g) => {
+      if (!gradeSectionsMap[g]) gradeSectionsMap[g] = [];
+    });
     const allSectionsSet = new Set<string>();
     const allGradesSet = new Set<number>([7, 8, 9, 10]);
 

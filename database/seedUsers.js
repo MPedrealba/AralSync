@@ -92,8 +92,8 @@ const seedDB = async () => {
       { username: 'student6', name: 'Jose Ramos', grade: 8, section: 'Sampaguita', risk: 'Low Risk', mastery: 'Approaching', ability: 0.78, lrn: '102943' },
       { username: 'student7', name: 'Maria Lopez', grade: 9, section: 'Ilang-Ilang', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.66, lrn: '102944' },
       { username: 'student8', name: 'Pedro Santos', grade: 9, section: 'Ilang-Ilang', risk: 'Low Risk', mastery: 'Approaching', ability: 0.76, lrn: '102945' },
-      { username: 'student9', name: 'Rosa Garcia', grade: 10, section: 'Ilang-Ilang', risk: 'Low Risk', mastery: 'Proficient', ability: 0.85, lrn: '102946' },
-      { username: 'student10', name: 'Luis Cruz', grade: 10, section: 'Sampaguita', risk: 'Moderate Risk', mastery: 'Approaching', ability: 0.7, lrn: '102947' },
+      { username: 'student9', name: 'Rosa Garcia', grade: 10, section: 'Molave', risk: 'Low Risk', mastery: 'Proficient', ability: 0.85, lrn: '102946' },
+      { username: 'student10', name: 'Luis Cruz', grade: 10, section: 'Acacia', risk: 'Moderate Risk', mastery: 'Approaching', ability: 0.7, lrn: '102947' },
     ];
 
     const guardians = [
