@@ -1990,147 +1990,66 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
     Boolean(doc.title && /reading|phil-iri|gst|screening|diagnostic/i.test(doc.title));
 
   return (
-    <div className="bg-white p-8 text-black font-sans max-w-4xl mx-auto print:p-0 print:m-0 print:max-w-none">
+    <div className="questionnaire-print-container bg-white p-8 text-black font-sans max-w-4xl mx-auto print:p-[6mm_14mm] print:m-0 print:max-w-none">
       {/* ── PAGE 1: OFFICIAL COVER & GENERAL INSTRUCTIONS ── */}
       <div
         className={isMultiSection ? "print-cover-page min-h-[85vh] print:min-h-0 flex flex-col justify-between mb-8 print:mb-0" : "mb-6"}
         style={isMultiSection ? { breakAfter: "page", pageBreakAfter: "always" } : undefined}
       >
         <div>
-          {/* Official DepEd School Header with Top Middle Logo and School Name */}
-          <div className="mb-6 border-b-2 border-black pb-4 text-center relative">
-            {isReadingDoc && (
-              <div className="absolute top-0 right-0 border border-black rounded px-3 py-0.5 text-xs font-bold tracking-wider">
-                Phil-IRI
-              </div>
-            )}
-            <img
-              src="/aral-logo.png"
-              alt="School Logo"
-              className="h-16 w-16 object-contain mx-auto mb-2 print:block"
-            />
-            {isReadingDoc ? (
-              <>
-                <h1 className="text-sm font-extrabold uppercase tracking-wide text-black mt-1">
-                  {doc.title.includes("Grade") || doc.title.includes("Baitang")
-                    ? doc.title
-                    : `${doc.title}, ${isFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
-                </h1>
-                <p className="text-[11px] text-gray-700 italic mt-0.5">
-                  GEN. EMILIO AGUINALDO INTEGRATED SCHOOL{"  "}{isFilipino ? "Filipino Reading" : "English Reading"}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-                  {isFilipino ? "Republika ng Pilipinas" : "Republic of the Philippines"}
-                </p>
-                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-                  {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
-                </p>
-                <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-700">
-                  {isFilipino ? "Pambansang Punong Rehiyon — Sangay ng mga Paaralang Lungsod" : "National Capital Region — Division of City Schools"}
-                </p>
-                <h1 className="text-base font-extrabold uppercase tracking-wider text-black mt-1">
-                  GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
-                </h1>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-black mt-1">
-                  {doc.title}
-                </h2>
-                <p className="text-xs text-gray-700 mt-0.5">
-                  {isFilipino ? "Asignatura: Filipino" : `Subject: ${doc.subject === "Math" ? "Mathematics" : doc.subject}`} • {isFilipino ? `Baitang ${doc.gradeLevel || 7}` : `Grade ${doc.gradeLevel || 7}`} • {doc.itemCount} {isFilipino ? "Aytem" : "Items"}
-                  {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
-                </p>
-              </>
-            )}
+          {/* DepEd Authority: Republika ng Pilipinas - Kagawaran ng Edukasyon | PANGKALAHATANG PANUTO */}
+          {/* ─── Standard Default Institutional Header ─── */}
+          <div className="text-center mb-3">
+            <p className="text-[11px] font-bold tracking-wider uppercase text-slate-700">
+              {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
+            </p>
+            <h2 className="text-xs font-extrabold uppercase tracking-wide text-black">
+              GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+            </h2>
+            <h1 className="text-sm font-black uppercase tracking-wide text-black mt-1">
+              {doc.title.includes("Grade") || doc.title.includes("Baitang")
+                ? doc.title
+                : `${doc.title}, ${isFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
+            </h1>
+            <p className="text-[10.5px] italic text-gray-700">
+              {doc.subject === "Math"
+                ? "Mathematics"
+                : doc.subject === "Science"
+                ? "Science"
+                : doc.subject === "Filipino" || isFilipino
+                ? "Filipino Reading"
+                : doc.subject === "Reading" || doc.subject === "English"
+                ? "English Reading"
+                : (doc.subject || (isFilipino ? "Filipino" : "English"))}
+            </p>
           </div>
 
-          {/* Student Info Fields */}
-          {isReadingDoc ? (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold">{isFilipino ? "Pangalan:" : "Name:"}</span>
-                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold">{isFilipino ? "Pangkat:" : "Section:"}</span>
-                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold">{isFilipino ? "Petsa:" : "Date:"}</span>
-                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold">{isFilipino ? "Guro:" : "Teacher:"}</span>
-                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-              </div>
+          {/* ─── Standard Student Information Fields (NAME: LRN: SECTION: DATE: SCORE:) ─── */}
+          <div className="my-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold">{isFilipino ? "Pangalan:" : "Name:"}</span>
+              <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
             </div>
-          ) : (
-            <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-3 text-xs font-semibold border-b border-black pb-4 text-black">
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-wider">{isFilipino ? "PANGALAN:" : "NAME:"}</span>
-                <span className="flex-1 border-b border-black" />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-wider">LRN:</span>
-                <span className="flex-1 border-b border-black" />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-wider">{isFilipino ? "SEKSIYON:" : "SECTION:"}</span>
-                <span className="flex-1 border-b border-black" />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-wider">{isFilipino ? "PETSA:" : "DATE:"}</span>
-                <span className="flex-1 border-b border-black" />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-wider">{isFilipino ? "MARKA:" : "SCORE:"}</span>
-                <span className="flex-1 border-b border-black" />
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold">{isFilipino ? "Pangkat:" : "Section:"}</span>
+              <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
             </div>
-          )}
-
-          {/* General Directions */}
-          <div className="mb-6 rounded border border-gray-400 p-4 text-xs leading-relaxed text-black">
-            <h3 className="font-bold uppercase tracking-wider text-black mb-2">
-              {isFilipino ? "PANGKALAHATANG PANUTO" : "General Direction"}
-            </h3>
-            {isReadingDoc ? (
-              <p className="text-[11px] text-black leading-snug">
-                {isFilipino
-                  ? "Basahin ang bawat seleksyon. Pagkatapos, basahin ang mga tanong at isulat ang titik ng tamang sagot sa sagutang papel (o itiman ang bilog sa opisyal na OMR Sagutang Papel):"
-                  : "Read each selection. Then read the questions that follow and write the letter of the correct answer in the answer sheet:"}
-              </p>
-            ) : (
-              <ol className="list-decimal pl-5 space-y-2 text-gray-900 text-[11.5px] leading-relaxed">
-                {isFilipino ? (
-                  <>
-                    <li>Basahing mabuti ang bawat tanong bago piliin ang iyong sagot.</li>
-                    <li>HUWAG susulatan o mamarkahan ang assessment booklet na ito.</li>
-                    <li>Itiman nang buo at malinaw ang bilog na tumutugma sa iyong napiling titik (A, B, C, o D) sa iyong opisyal na 50-Item OMR Sagutang Papel.</li>
-                    <li>Gumamit lamang ng itim o asul na bolpen o lapis (No. 2). Iwasan ang bura o labis na marka.</li>
-                    {isMultiSection && (
-                      <li>
-                        Ang booklet na ito ay naglalaman ng <strong>{sections.length} Bahagi</strong>. Bawat bahagi ay nagsisimula sa sarili nitong pahina kasama ang kaugnay na seleksiyon, kuwento, tula, o infographic.
-                      </li>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <li>Read each question carefully before choosing your answer.</li>
-                    <li>Do NOT write, mark, or shade your answers on this questionnaire booklet.</li>
-                    <li>Shade the circle corresponding to your chosen letter (A, B, C, or D) cleanly and completely on your official 50-Item OMR Bubble Sheet.</li>
-                    <li>Use only a black or dark blue pen / pencil (No. 2) to shade the bubbles. Avoid erasures or stray marks.</li>
-                    {isMultiSection && (
-                      <li>
-                        This assessment booklet contains <strong>{sections.length} Parts</strong>. Each part begins on its own page with its required reference reading material, poem, advisory, or infographic.
-                      </li>
-                    )}
-                  </>
-                )}
-              </ol>
-            )}
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold">{isFilipino ? "Petsa:" : "Date:"}</span>
+              <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold">{isFilipino ? "Guro:" : "Teacher:"}</span>
+              <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+            </div>
           </div>
+
+          {/* ─── Standard Directions ─── */}
+          <p className="text-[10.5px] text-black leading-snug mb-3">
+            {isFilipino
+              ? "Panuto: Basahin ang bawat aytem. Piliin at itiman ang titik ng tamang sagot sa official OMR Answer Sheet. Huwag susulatan ang booklet na ito."
+              : "Directions: Read each question carefully. Select and shade the letter of the correct answer clearly on your official OMR Answer Sheet. Do not write on this booklet."}
+          </p>
 
           {/* Multi-Section Reference Material Index on Cover Page */}
           {isMultiSection && (
@@ -2507,8 +2426,8 @@ function ExamViewerModal({
     documentTitle: currentKey ? `AralSync_${currentKey.title.replace(/\s+/g, "_")}` : "Questionnaire",
     pageStyle: `
       @page {
-        size: A4 portrait; /* size: portrait; margin: 0.6cm; */
-        margin: 8mm;
+        size: A4 portrait;
+        margin: 10mm 16mm;
       }
       @media print {
         html, body {
@@ -2516,6 +2435,10 @@ function ExamViewerModal({
           padding: 0 !important;
           background: white !important;
           color: black !important;
+        }
+        .questionnaire-print-container, .print-booklet-page {
+          box-sizing: border-box !important;
+          padding: 6mm 14mm !important;
         }
         * {
           -webkit-print-color-adjust: exact !important;
@@ -2970,12 +2893,13 @@ function ExamViewerModal({
             @media print {
               body * { visibility: hidden; }
               .print-exam-modal-overlay, .print-exam-modal-overlay * { visibility: visible; }
-              .print-exam-modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
-              @page { size: portrait; margin: 0.6cm; /* margin: 0.5cm */ }
+              .print-exam-modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; margin: 0 !important; padding: 6mm 14mm !important; box-sizing: border-box !important; overflow: visible !important; }
+              @page { size: A4 portrait; margin: 10mm 16mm; }
               html, body { height: 100% !important; font-size: 10pt !important; }
+              .questionnaire-print-container, .print-booklet-page { box-sizing: border-box !important; padding: 6mm 14mm !important; }
               .print-cover-page { page-break-after: always !important; break-after: page !important; }
               .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
-              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 0.4cm !important; border: none !important; box-shadow: none !important; }
+              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 6mm 14mm !important; border: none !important; box-shadow: none !important; }
               .print-booklet-page:last-child { page-break-after: auto !important; break-after: auto !important; }
               .print-page-break { page-break-after: always !important; break-after: page !important; }
               .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -3463,8 +3387,8 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     documentTitle: doc ? `AralSync_Questionnaire_${doc.title.replace(/\s+/g, "_")}_Grade${doc.gradeLevel || 7}` : "Questionnaire",
     pageStyle: `
       @page {
-        size: A4 portrait; /* size: portrait; margin: 0.6cm; */
-        margin: 8mm;
+        size: A4 portrait;
+        margin: 10mm 16mm;
       }
       @media print {
         html, body {
@@ -3472,6 +3396,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
           padding: 0 !important;
           background: white !important;
           color: black !important;
+        }
+        .questionnaire-print-container, .print-booklet-page {
+          box-sizing: border-box !important;
+          padding: 6mm 14mm !important;
         }
         * {
           -webkit-print-color-adjust: exact !important;
@@ -4867,111 +4795,60 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   return (
                     <div
                       ref={omrPreviewSheetRef}
-                      className="bg-white shadow-xl border border-slate-300 rounded-sm p-6 sm:p-12 max-w-4xl mx-auto text-slate-900 font-sans transition-all"
+                      className="questionnaire-print-container bg-white shadow-xl border border-slate-300 rounded-sm p-6 sm:p-12 max-w-4xl mx-auto text-slate-900 font-sans transition-all print:p-[6mm_14mm] print:border-none print:shadow-none print:max-w-none"
                     >
-                      {/* Official DepEd School Header with Top Middle Logo and School Name */}
-                      {isDeskReading ? (
-                          <div className="relative mb-3">
-                            {/* Top Right Phil-IRI Boxed Badge */}
-                            <div className="absolute top-0 right-0 border border-black rounded px-3 py-0.5 text-xs font-bold tracking-wider">
-                              Phil-IRI
-                            </div>
+                      {/* ─── Standard Default Institutional Header ─── */}
+                      <div className="text-center mb-3">
+                        <p className="text-[11px] font-bold tracking-wider uppercase text-slate-700">
+                          {isDeskFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
+                        </p>
+                        <h2 className="text-xs font-extrabold uppercase tracking-wide text-black">
+                          GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+                        </h2>
+                        <h1 className="text-sm font-black uppercase tracking-wide text-black mt-1">
+                          {doc.title.includes("Grade") || doc.title.includes("Baitang")
+                            ? doc.title
+                            : `${doc.title}, ${isDeskFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
+                        </h1>
+                        <p className="text-[10.5px] italic text-gray-700">
+                          {doc.subject === "Math"
+                            ? "Mathematics"
+                            : doc.subject === "Science"
+                            ? "Science"
+                            : doc.subject === "Filipino" || isDeskFilipino
+                            ? "Filipino Reading"
+                            : doc.subject === "Reading" || doc.subject === "English"
+                            ? "English Reading"
+                            : (doc.subject || (isDeskFilipino ? "Filipino" : "English"))}
+                        </p>
+                      </div>
 
-                            {/* Center Title */}
-                            <div className="text-center mb-2">
-                              <h1 className="text-sm font-extrabold uppercase tracking-wide text-black">
-                                {doc.title.includes("Grade") || doc.title.includes("Baitang")
-                                  ? doc.title
-                                  : `${doc.title}, ${isDeskFilipino ? "Baitang" : "Grade"} ${doc.gradeLevel || 7}`}
-                              </h1>
-                              <p className="text-[11px] text-gray-700 italic">
-                                GEN. EMILIO AGUINALDO INTEGRATED SCHOOL{"  "}{isDeskFilipino ? "Filipino Reading" : "English Reading"}
-                              </p>
-                            </div>
+                      {/* ─── Standard Student Information Fields (NAME: LRN: SECTION: DATE: SCORE:) ─── */}
+                      <div className="my-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">{isDeskFilipino ? "Pangalan:" : "Name:"}</span>
+                          <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">{isDeskFilipino ? "Pangkat:" : "Section:"}</span>
+                          <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">{isDeskFilipino ? "Petsa:" : "Date:"}</span>
+                          <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">{isDeskFilipino ? "Guro:" : "Teacher:"}</span>
+                          <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
+                        </div>
+                      </div>
 
-                            {/* Student Credentials: Name, Section, Date, Teacher */}
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold">{isDeskFilipino ? "Pangalan:" : "Name:"}</span>
-                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold">{isDeskFilipino ? "Pangkat:" : "Section:"}</span>
-                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold">{isDeskFilipino ? "Petsa:" : "Date:"}</span>
-                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold">{isDeskFilipino ? "Guro:" : "Teacher:"}</span>
-                                <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
-                              </div>
-                            </div>
-
-                            {/* General Direction */}
-                            <p className="text-[11px] text-black leading-snug mb-3">
-                              {isDeskFilipino
-                                ? "Basahin ang bawat seleksyon. Pagkatapos, basahin ang mga tanong at isulat ang titik ng tamang sagot sa sagutang papel (o itiman ang bilog sa opisyal na OMR Sagutang Papel):"
-                                : "Read each selection. Then read the questions that follow and write the letter of the correct answer in the answer sheet:"}
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="text-center flex flex-col items-center justify-center border-b-2 border-slate-900 pb-4 relative">
-                              <img
-                                src="/aral-logo.png"
-                                alt="School Logo"
-                                className="h-16 w-16 object-contain mb-2 drop-shadow-xs"
-                              />
-                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                                Republic of the Philippines
-                              </p>
-                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                                Department of Education
-                              </p>
-                              <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                                National Capital Region — Division of City Schools
-                              </p>
-                              <h2 className="text-base sm:text-lg font-extrabold tracking-wider uppercase text-slate-900 mt-1">
-                                GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
-                              </h2>
-                              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 mt-1">
-                                {doc.title}
-                              </h3>
-                              <p className="text-xs text-slate-600 mt-0.5">
-                                Subject: {doc.subject === "Math" ? "Mathematics" : doc.subject} • Grade {doc.gradeLevel || 7} • {doc.itemCount} Items
-                                {doc.writtenCount > 0 ? ` (${doc.itemCount - doc.writtenCount} Multiple Choice, ${doc.writtenCount} Written)` : ""}
-                              </p>
-                            </div>
-
-                            {/* Student Information Grid */}
-                            <div className="my-5 grid grid-cols-2 gap-x-8 gap-y-3.5 text-xs font-semibold text-slate-900 border-b border-slate-900 pb-4">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold tracking-wider">NAME:</span>
-                                <span className="flex-1 border-b border-slate-500 border-dashed" />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold tracking-wider">SECTION:</span>
-                                <span className="flex-1 border-b border-slate-500 border-dashed" />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold tracking-wider">DATE:</span>
-                                <span className="flex-1 border-b border-slate-500 border-dashed" />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold tracking-wider">SCORE:</span>
-                                <span className="flex-1 border-b border-slate-500 border-dashed" />
-                              </div>
-                            </div>
-
-                            {/* General Directions */}
-                            <div className="mb-5 text-xs text-slate-800 italic bg-slate-50/70 p-2.5 rounded border border-slate-200">
-                              <span className="font-bold not-italic text-slate-900">General Direction:</span>{" "}
-                              Read each question carefully. Choose the letter of the correct answer and shade the corresponding circle on your official OMR Answer Sheet. Do not write anything on this questionnaire.
-                            </div>
-                          </>
-                        )}
+                      {/* ─── Standard Directions ─── */}
+                      <p className="text-[10.5px] text-black leading-snug mb-3">
+                        {isDeskFilipino
+                          ? "Panuto: Basahin ang bawat aytem. Piliin at itiman ang titik ng tamang sagot sa official OMR Answer Sheet. Huwag susulatan ang booklet na ito."
+                          : "Directions: Read each question carefully. Select and shade the letter of the correct answer clearly on your official OMR Answer Sheet. Do not write on this booklet."}
+                      </p>
 
                   {/* Reading Selection if present */}
                   {doc.passageText && (!doc.sections || doc.sections.every((s: any) => !s.passageText)) && (
@@ -5286,12 +5163,13 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             @media print {
               body * { visibility: hidden; }
               .print-overlay, .print-overlay * { visibility: visible; }
-              .print-overlay { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important; width: 100%; height: auto !important; overflow: visible !important; }
-              @page { size: portrait; margin: 0.6cm; /* margin: 0.5cm */ }
+              .print-overlay { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important; width: 100%; height: auto !important; padding: 6mm 14mm !important; box-sizing: border-box !important; overflow: visible !important; }
+              @page { size: A4 portrait; margin: 10mm 16mm; }
               html, body { height: 100% !important; font-size: 10pt !important; }
+              .questionnaire-print-container, .print-booklet-page { box-sizing: border-box !important; padding: 6mm 14mm !important; }
               .print-cover-page { page-break-after: always !important; break-after: page !important; }
               .section-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
-              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 0.4cm !important; border: none !important; box-shadow: none !important; }
+              .print-booklet-page { height: 27cm !important; max-height: 27cm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; box-sizing: border-box !important; padding: 6mm 14mm !important; border: none !important; box-shadow: none !important; }
               .print-booklet-page:last-child { page-break-after: auto !important; break-after: auto !important; }
               .print-page-break { page-break-after: always !important; break-after: page !important; }
               .question-item, .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }

@@ -10,7 +10,6 @@ import {
   MoreHorizontal,
   Eye,
   Pencil,
-  Trash2,
   ChevronDown,
   Info,
   Users,
@@ -56,11 +55,9 @@ const statusConfig: Record<string, { bg: string; text: string; border: string }>
 function ActionDropdown({
   learnerId,
   onEdit,
-  onDelete,
 }: {
   learnerId: string;
   onEdit: () => void;
-  onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -101,17 +98,6 @@ function ActionDropdown({
           >
             <Pencil className="h-3.5 w-3.5 text-slate-500" />
             Edit Details
-          </button>
-          <hr className="my-1 border-slate-100" />
-          <button
-            onClick={() => {
-              onDelete();
-              setOpen(false);
-            }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-            Delete
           </button>
         </div>
       )}
@@ -422,7 +408,6 @@ export default function LearnersPage() {
                           onEdit={() =>
                             setEditModal({ open: true, learner })
                           }
-                          onDelete={() => {}}
                         />
                       </td>
                     </tr>

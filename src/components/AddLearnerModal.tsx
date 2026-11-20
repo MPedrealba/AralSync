@@ -419,22 +419,6 @@ export default function AddLearnerModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Risk Level
-            </label>
-            <select
-              value={riskLevel}
-              onChange={(e) => setRiskLevel(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 bg-white"
-            >
-              <option value="Pending Assessment">Pending Assessment (New Enrollee)</option>
-              <option value="Low Risk">Low Risk</option>
-              <option value="Moderate Risk">Moderate Risk</option>
-              <option value="High Risk">High Risk</option>
-            </select>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">

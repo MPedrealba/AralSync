@@ -258,13 +258,26 @@ function GstWorkstationContent() {
     documentTitle: `Phil-IRI_Stage1_GST_Grade${currentBooklet.gradeLevel}_${currentBooklet.stream.toUpperCase()}`,
     pageStyle: `
       @page {
-        size: A4 portrait; /* size: portrait; margin: 0.8cm; */
-        margin: 8mm;
+        size: A4 portrait;
+        margin: 10mm 16mm;
       }
       @media print {
         html, body {
           margin: 0 !important;
           padding: 0 !important;
+          background: white !important;
+          color: black !important;
+        }
+        .print-booklet-page {
+          height: 27cm !important;
+          max-height: 27cm !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+          padding: 6mm 14mm !important;
+          page-break-after: always !important;
+          break-after: page !important;
+          border: none !important;
+          box-shadow: none !important;
           background: white !important;
           color: black !important;
         }
@@ -300,13 +313,26 @@ function GstWorkstationContent() {
     documentTitle: `Phil-IRI_Form1A_Grade${selectedGrade}_${stream.toUpperCase()}`,
     pageStyle: `
       @page {
-        size: A4 portrait; /* size: portrait; margin: 0.8cm; */
-        margin: 8mm;
+        size: A4 portrait;
+        margin: 10mm 16mm;
       }
       @media print {
         html, body {
           margin: 0 !important;
           padding: 0 !important;
+          background: white !important;
+          color: black !important;
+        }
+        .print-booklet-page {
+          height: 27cm !important;
+          max-height: 27cm !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+          padding: 6mm 14mm !important;
+          page-break-after: always !important;
+          break-after: page !important;
+          border: none !important;
+          box-shadow: none !important;
           background: white !important;
           color: black !important;
         }
@@ -1087,10 +1113,10 @@ function GstWorkstationContent() {
                       overflow: visible !important;
                     }
 
-                    /* 4. Strict portrait paper margins */
+                    /* 4. Strict portrait paper margins (size: portrait; margin: 0.8cm;) */
                     @page {
-                      size: A4 portrait; /* size: portrait; margin: 0.8cm; */
-                      margin: 8mm;
+                      size: A4 portrait;
+                      margin: 10mm 16mm;
                     }
 
                     * {
@@ -1121,7 +1147,7 @@ function GstWorkstationContent() {
                       page-break-after: always !important;
                       break-after: page !important;
                       box-sizing: border-box !important;
-                      padding: 0.4cm !important;
+                      padding: 6mm 14mm !important;
                       border: none !important;
                       box-shadow: none !important;
                       background: white !important;
@@ -1199,28 +1225,29 @@ function GstWorkstationContent() {
                               }}
                             >
                               <div>
-                                {/* PAGE 1 ONLY: Compact 3-Line DepEd Header & Student Meta */}
+                                {/* PAGE 1 ONLY: Standard Default Institutional Header & Student Meta */}
                                 {isFirstPage && (
                                   <div className="relative mb-3">
-                                    {/* Top Right Phil-IRI Boxed Badge */}
-                                    <div className="absolute top-0 right-0 border border-black rounded px-3 py-0.5 text-xs font-bold tracking-wider">
-                                      Phil-IRI
-                                    </div>
-
-                                    {/* Center Title */}
-                                    <div className="text-center mb-2">
-                                      <h1 className="text-sm font-extrabold uppercase tracking-wide text-black">
+                                    {/* ─── Standard Default Institutional Header ─── */}
+                                    <div className="text-center mb-3">
+                                      <p className="text-[11px] font-bold tracking-wider uppercase text-slate-700">
+                                        {isFilipino ? "Kagawaran ng Edukasyon" : "Department of Education"}
+                                      </p>
+                                      <h2 className="text-xs font-extrabold uppercase tracking-wide text-black">
+                                        GEN. EMILIO AGUINALDO INTEGRATED SCHOOL
+                                      </h2>
+                                      <h1 className="text-sm font-black uppercase tracking-wide text-black mt-1">
                                         {isFilipino
                                           ? `Screening Test, Baitang ${currentBooklet.gradeLevel}`
                                           : `Screening Test, Grade ${currentBooklet.gradeLevel}`}
                                       </h1>
-                                      <p className="text-[11px] text-gray-700 italic">
-                                        GEN. EMILIO AGUINALDO INTEGRATED SCHOOL{"  "}{isFilipino ? "Filipino Reading" : "English Reading"}
+                                      <p className="text-[10.5px] italic text-gray-700">
+                                        {isFilipino ? "Filipino Reading" : "English Reading"}
                                       </p>
                                     </div>
 
-                                    {/* Student Credentials: Name, Section, Date, Teacher */}
-                                    <div className="my-2.5 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
+                                    {/* ─── Standard Student Information Fields ─── */}
+                                    <div className="my-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
                                       <div className="flex items-center gap-1.5">
                                         <span className="font-bold">{isFilipino ? "Pangalan:" : "Name:"}</span>
                                         <span className="flex-1 border-b border-black border-dashed min-h-[14px]" />
@@ -1239,11 +1266,11 @@ function GstWorkstationContent() {
                                       </div>
                                     </div>
 
-                                    {/* General Direction */}
-                                    <p className="text-[11px] text-black leading-snug mb-2">
+                                    {/* ─── Standard Directions (Shade your answers cleanly on your official 40-Item OMR Answer Sheet) ─── */}
+                                    <p className="text-[10.5px] text-black leading-snug mb-2">
                                       {isFilipino
-                                        ? "Basahin ang bawat seleksyon. Pagkatapos, basahin ang mga tanong at isulat ang titik ng tamang sagot sa sagutang papel: Shade your answers cleanly on your official 40-Item OMR Answer Sheet. Huwag susulatan ang booklet na ito."
-                                        : "Read each selection. Then read the questions that follow and write the letter of the correct answer in the answer sheet: Shade your answers cleanly on your official 40-Item OMR Answer Sheet. Do not write on this booklet."}
+                                        ? "Panuto: Basahin ang bawat aytem. Piliin at itiman ang titik ng tamang sagot sa official OMR Answer Sheet. Huwag susulatan ang booklet na ito."
+                                        : "Directions: Read each question carefully. Select and shade the letter of the correct answer clearly on your official OMR Answer Sheet. Do not write on this booklet."}
                                     </p>
                                   </div>
                                 )}
