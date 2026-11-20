@@ -108,10 +108,38 @@ def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
     cnts3, _ = cv2.findContours(otsu_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     candidate_contours.extend(cnts3)
 
+    # 4. Multi-level search: look for the printed outer black rectangle frame first
+    # Using RETR_LIST captures internal contours (such as the printed frame inside the paper sheet)
+    cnts_frame_edge, _ = cv2.findContours(closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    cnts_frame_thresh, _ = cv2.findContours(thresh_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    frame_candidates = list(cnts_frame_edge) + list(cnts_frame_thresh)
+    frame_candidates.sort(key=cv2.contourArea, reverse=True)
+
+    # Step A: Look for the printed outer black rectangle frame first
+    for cnt in frame_candidates:
+        area = cv2.contourArea(cnt)
+        if area < 0.20 * resized_area or area > 0.98 * resized_area:
+            continue
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            pts = approx.reshape((4, 2))
+            ordered = order_corners(pts)
+            w_top = np.linalg.norm(ordered[1] - ordered[0])
+            w_bot = np.linalg.norm(ordered[3] - ordered[2])
+            h_left = np.linalg.norm(ordered[2] - ordered[0])
+            h_right = np.linalg.norm(ordered[3] - ordered[1])
+            avg_w = max(float((w_top + w_bot) / 2.0), 1.0)
+            avg_h = max(float((h_left + h_right) / 2.0), 1.0)
+            aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
+            if 1.05 <= aspect <= 1.65:
+                orig_pts = ordered / scale if scale < 1.0 else ordered
+                return order_corners(orig_pts)
+
     if not candidate_contours:
         return None
 
-    # Sort contours by area descending
+    # Step B: Fallback to largest convex paper boundary contour (> 20% area)
     candidate_contours.sort(key=cv2.contourArea, reverse=True)
 
     for cnt in candidate_contours:

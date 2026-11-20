@@ -123,9 +123,20 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // F. Stamp 4 solid black corner registration marks (22x22 pt, 18pt margin from edges)
-    const regSize = 22;
-    const regMargin = 18;
+    // F. Stamp Alignment Frame & 4 Solid Black Corner Anchor Marks
+    // a. Outer Framing Border around the margins (x: 20, y: 20, width: width - 40, height: height - 40)
+    firstPage.drawRectangle({
+      x: 20,
+      y: 20,
+      width: width - 40,
+      height: height - 40,
+      borderWidth: 2,
+      borderColor: rgb(0, 0, 0),
+    });
+
+    // b. 4 Solid Black Corner Anchor Marks (24x24 pt) directly anchored at the 4 corners of the outer frame
+    const regSize = 24;
+    const regMargin = 20;
     const cornerPositions = [
       { x: regMargin, y: regMargin }, // Bottom-Left
       { x: width - regMargin - regSize, y: regMargin }, // Bottom-Right
