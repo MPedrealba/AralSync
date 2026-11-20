@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X, UserPlus, AlertCircle, Loader2, KeyRound } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
@@ -31,7 +31,13 @@ export default function AddLearnerModal({
   const [lrn, setLrn] = useState("");
   const [name, setName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("7");
-  const [section, setSection] = useState("Rosal");
+  const [section, setSection] = useState(() => {
+    if (gradeSectionsMap) {
+      const s = gradeSectionsMap["7"] || [];
+      return s[0] || "";
+    }
+    return "";
+  });
   const [isCustomSection, setIsCustomSection] = useState(false);
   const [customSectionText, setCustomSectionText] = useState("");
   const [readingTeacherId, setReadingTeacherId] = useState("");
@@ -50,8 +56,19 @@ export default function AddLearnerModal({
     if (gradeSectionsMap) {
       return gradeSectionsMap[gradeLevel] || gradeSectionsMap[gKey] || [];
     }
-    return availableSections;
-  }, [gradeSectionsMap, gradeLevel, availableSections]);
+    return [];
+  }, [gradeSectionsMap, gradeLevel]);
+
+  // Synchronize default section when switching grade levels or when sections load
+  useEffect(() => {
+    if (!isCustomSection) {
+      if (sectionsForGrade.length > 0 && (!section || !sectionsForGrade.includes(section))) {
+        setSection(sectionsForGrade[0]);
+      } else if (sectionsForGrade.length === 0) {
+        setSection("");
+      }
+    }
+  }, [sectionsForGrade, section, isCustomSection]);
 
   // Reading: Teachers assigned to 'Reading', 'All', or with 'reading' specialization
   const readingTeachers = useMemo(() => {
@@ -82,7 +99,7 @@ export default function AddLearnerModal({
   const handleGradeChange = (newGrade: string) => {
     setGradeLevel(newGrade);
     const gKey = newGrade.replace(/\D/g, "");
-    const secs = (gradeSectionsMap ? (gradeSectionsMap[newGrade] || gradeSectionsMap[gKey]) : null) || availableSections;
+    const secs = gradeSectionsMap ? (gradeSectionsMap[newGrade] || gradeSectionsMap[gKey] || []) : [];
     if (secs.length > 0 && !isCustomSection) {
       setSection(secs[0]);
     } else if (secs.length === 0 && !isCustomSection) {

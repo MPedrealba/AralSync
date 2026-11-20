@@ -194,7 +194,26 @@ export async function GET(req: NextRequest) {
 
     const teacherSubject = await getTeacherSubject(authUser);
 
+    const teacherIdObj = mongoose.Types.ObjectId.isValid(authUser.id)
+      ? new mongoose.Types.ObjectId(authUser.id)
+      : authUser.id;
+
     // Strictly scope learners to this teacher's direct or subject-specific assignments
+    const teacherMatchConditions: any[] = [
+      { assignedTeacherId: authUser.id },
+      { assignedTeacherId: teacherIdObj },
+      { 'assignedTeachers.reading': authUser.id },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': authUser.id },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': authUser.id },
+      { 'assignedTeachers.filipino': teacherIdObj },
+      { 'assignedTeachers.math': authUser.id },
+      { 'assignedTeachers.math': teacherIdObj },
+      { 'assignedTeachers.science': authUser.id },
+      { 'assignedTeachers.science': teacherIdObj },
+    ];
+
     const learnerScopeQuery = getTeacherLearnerFilter(authUser.id, teacherSubject);
     const assignedRecords = await LearnerRecord.find(learnerScopeQuery).select('studentId').lean();
     const assignedStudentIds = assignedRecords.map((r: any) => r.studentId).filter(Boolean);

@@ -30,17 +30,37 @@ const CustomTooltip = ({
   active,
   payload,
   label,
+  teacherSubject,
 }: {
   active?: boolean;
-  payload?: Array<{ color: string; name: string; value: number }>;
+  payload?: Array<{ color: string; name: string; value: number; dataKey?: string }>;
   label?: string;
+  teacherSubject?: string;
 }) => {
   if (active && payload && payload.length) {
+    const isSingleSubject = teacherSubject && teacherSubject !== "All";
+    const filteredPayload = payload.filter((entry) => {
+      const key = entry.dataKey || entry.name;
+      if (!isSingleSubject) return true;
+      if (teacherSubject === "Reading" || teacherSubject === "English" || teacherSubject === "Filipino") {
+        return key === "Reading";
+      }
+      if (teacherSubject === "Math") {
+        return key === "Numeracy";
+      }
+      if (teacherSubject === "Science") {
+        return key === "Science";
+      }
+      return true;
+    });
+
+    if (filteredPayload.length === 0) return null;
+
     return (
       <div className="rounded-xl border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur-sm text-xs">
         <p className="mb-1.5 font-bold text-slate-800">{label}</p>
         <div className="space-y-1">
-          {payload.map((entry, i) => (
+          {filteredPayload.map((entry, i) => (
             <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
               <span
                 className="h-2.5 w-2.5 rounded-full shrink-0"
@@ -141,12 +161,25 @@ export default function DashboardPage() {
     };
   const recentScansTable = recentScans;
   const teacherSubject = data?.teacherSubject || assignedSubject;
+  const isReadingTeacher = teacherSubject === "Reading" || teacherSubject === "English" || teacherSubject === "Filipino";
+  const isMathTeacher = teacherSubject === "Math";
+  const isScienceTeacher = teacherSubject === "Science";
+  const isAllSubjects = !teacherSubject || teacherSubject === "All";
+
+  const chartTitle = isReadingTeacher
+    ? "Weekly Reading Mastery Progress"
+    : isMathTeacher
+    ? "Weekly Numeracy Mastery Progress"
+    : isScienceTeacher
+    ? "Weekly Science Mastery Progress"
+    : "Mastery Progress by Subject";
+
   const pendingReviewsTitle =
-    teacherSubject === "Reading" || teacherSubject === "English" || teacherSubject === "Filipino"
+    isReadingTeacher
       ? "Pending Reading Reviews"
-      : teacherSubject === "Math"
+      : isMathTeacher
       ? "Pending Math Reviews"
-      : teacherSubject === "Science"
+      : isScienceTeacher
       ? "Pending Science Reviews"
       : "Pending Item Reviews";
 
@@ -205,7 +238,7 @@ export default function DashboardPage() {
             <div className="mb-6 flex items-start justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Mastery Progress by Subject
+                  {chartTitle}
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-500">
                   Live weekly class averages computed from real assessment data
@@ -241,32 +274,40 @@ export default function DashboardPage() {
                     tickFormatter={(v: number) => `${v}%`}
                   />
                   <Tooltip
-                    content={<CustomTooltip />}
+                    content={<CustomTooltip teacherSubject={teacherSubject} />}
                     cursor={{ fill: "#f8fafc" }}
                   />
-                  <Legend
-                    iconType="circle"
-                    iconSize={8}
-                    wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
-                  />
-                  <Bar
-                    dataKey="Numeracy"
-                    fill="#991b1b"
-                    radius={[6, 6, 0, 0]}
-                    maxBarSize={32}
-                  />
-                  <Bar
-                    dataKey="Reading"
-                    fill="#2563eb"
-                    radius={[6, 6, 0, 0]}
-                    maxBarSize={32}
-                  />
-                  <Bar
-                    dataKey="Science"
-                    fill="#d97706"
-                    radius={[6, 6, 0, 0]}
-                    maxBarSize={32}
-                  />
+                  {isAllSubjects && (
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
+                    />
+                  )}
+                  {(isMathTeacher || isAllSubjects) && (
+                    <Bar
+                      dataKey="Numeracy"
+                      fill="#991b1b"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={32}
+                    />
+                  )}
+                  {(isReadingTeacher || isAllSubjects) && (
+                    <Bar
+                      dataKey="Reading"
+                      fill="#2563eb"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={32}
+                    />
+                  )}
+                  {(isScienceTeacher || isAllSubjects) && (
+                    <Bar
+                      dataKey="Science"
+                      fill="#d97706"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={32}
+                    />
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </div>

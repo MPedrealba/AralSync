@@ -5,7 +5,7 @@ import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
-import { getTeacherSubject, getInterventionSubjectFilter } from '@/lib/teacherScope';
+import { getTeacherSubject, getInterventionSubjectFilter, getTeacherLearnerFilter } from '@/lib/teacherScope';
 
 const TYPE_LABEL: Record<string, string> = {
   OMR: 'OMR Assessment',
@@ -31,11 +31,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const learnerId = searchParams.get('learner');
 
+    const learnerScopeQuery = getTeacherLearnerFilter(authUser.id, teacherSubject);
+
     // ── OVERALL VIEW (no learner selected) ──
-    // Aggregate intervention progress across every learner: overall totals,
+    // Aggregate intervention progress across teacher's assigned learners: overall totals,
     // per-material rollout, and a per-learner breakdown.
     if (!learnerId) {
-      const records = await LearnerRecord.find().populate('studentId', 'name');
+      const records = await LearnerRecord.find(learnerScopeQuery).populate('studentId', 'name');
 
       // Filter options come from the full record set, so the grade/section
       // dropdowns stay stable while a filter is active.
@@ -156,10 +158,14 @@ export async function GET(req: NextRequest) {
           byLearner,
         },
         filters: { grades: availableGrades, sections: availableSections, sectionsByGrade },
+        teacherSubject,
       });
     }
 
-    const record = await LearnerRecord.findOne({ studentId: learnerId }).populate(
+    const record = await LearnerRecord.findOne({
+      studentId: learnerId,
+      ...learnerScopeQuery,
+    }).populate(
       'studentId',
       'name'
     );
@@ -167,7 +173,11 @@ export async function GET(req: NextRequest) {
     const singleAssessQuery: Record<string, any> = { studentId: learnerId };
     const singleIntQuery: Record<string, any> = { studentId: learnerId };
     if (teacherSubject !== 'All') {
-      singleAssessQuery.subject = teacherSubject;
+      if (teacherSubject === 'Reading') {
+        singleAssessQuery.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+      } else {
+        singleAssessQuery.subject = teacherSubject;
+      }
       const subFilter = getInterventionSubjectFilter(teacherSubject);
       Object.assign(singleIntQuery, subFilter);
     }
@@ -276,6 +286,7 @@ export async function GET(req: NextRequest) {
       materials,
       timeline,
       improvementPct,
+      teacherSubject,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

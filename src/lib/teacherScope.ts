@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../../models/User';
 
 export type TeacherSubject = 'Reading' | 'Math' | 'Science' | 'English' | 'Filipino' | 'All';
@@ -117,4 +118,71 @@ export function getInterventionSubjectFilter(teacherSubject: TeacherSubject, req
     };
   }
   return {};
+}
+
+/**
+ * Returns a MongoDB query filter for LearnerRecord to scope strictly to learners
+ * assigned to the teacher, either as primary teacher (assignedTeacherId) or via
+ * subject-specific assignments (assignedTeachers[subject]).
+ */
+export function getTeacherLearnerFilter(teacherId: string | mongoose.Types.ObjectId, teacherSubject?: TeacherSubject): Record<string, any> {
+  const teacherIdStr = teacherId.toString();
+  const teacherIdObj = mongoose.Types.ObjectId.isValid(teacherIdStr)
+    ? new mongoose.Types.ObjectId(teacherIdStr)
+    : teacherId;
+
+  const conditions: any[] = [
+    { assignedTeacherId: teacherIdStr },
+    { assignedTeacherId: teacherIdObj },
+  ];
+
+  if (!teacherSubject || teacherSubject === 'All') {
+    conditions.push(
+      { 'assignedTeachers.reading': teacherIdStr },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': teacherIdStr },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': teacherIdStr },
+      { 'assignedTeachers.filipino': teacherIdObj },
+      { 'assignedTeachers.math': teacherIdStr },
+      { 'assignedTeachers.math': teacherIdObj },
+      { 'assignedTeachers.science': teacherIdStr },
+      { 'assignedTeachers.science': teacherIdObj },
+    );
+  } else if (teacherSubject === 'Reading') {
+    conditions.push(
+      { 'assignedTeachers.reading': teacherIdStr },
+      { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': teacherIdStr },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': teacherIdStr },
+      { 'assignedTeachers.filipino': teacherIdObj },
+    );
+  } else if (teacherSubject === 'English') {
+    conditions.push(
+      { 'assignedTeachers.english': teacherIdStr },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.reading': teacherIdStr },
+      { 'assignedTeachers.reading': teacherIdObj },
+    );
+  } else if (teacherSubject === 'Filipino') {
+    conditions.push(
+      { 'assignedTeachers.filipino': teacherIdStr },
+      { 'assignedTeachers.filipino': teacherIdObj },
+      { 'assignedTeachers.reading': teacherIdStr },
+      { 'assignedTeachers.reading': teacherIdObj },
+    );
+  } else if (teacherSubject === 'Math') {
+    conditions.push(
+      { 'assignedTeachers.math': teacherIdStr },
+      { 'assignedTeachers.math': teacherIdObj },
+    );
+  } else if (teacherSubject === 'Science') {
+    conditions.push(
+      { 'assignedTeachers.science': teacherIdStr },
+      { 'assignedTeachers.science': teacherIdObj },
+    );
+  }
+
+  return { $or: conditions };
 }

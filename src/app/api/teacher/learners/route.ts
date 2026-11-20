@@ -28,34 +28,21 @@ export async function GET(req: NextRequest) {
       ? new mongoose.Types.ObjectId(teacher.id)
       : teacher.id;
 
-    // Discover any sections taught by or assigned to this teacher
-    const teacherSections = await LearnerRecord.distinct('section', {
-      $or: [
-        { assignedTeacherId: teacher.id },
-        { assignedTeacherId: teacherIdObj },
-        { 'assignedTeachers.reading': teacher.id },
-        { 'assignedTeachers.reading': teacherIdObj },
-        { 'assignedTeachers.math': teacher.id },
-        { 'assignedTeachers.math': teacherIdObj },
-        { 'assignedTeachers.science': teacher.id },
-        { 'assignedTeachers.science': teacherIdObj },
-      ],
-      section: { $ne: null, $exists: true },
-    });
-
+    // Strictly scope learners to this teacher's direct or subject-specific assignments
     const teacherMatchConditions: any[] = [
       { assignedTeacherId: teacher.id },
       { assignedTeacherId: teacherIdObj },
       { 'assignedTeachers.reading': teacher.id },
       { 'assignedTeachers.reading': teacherIdObj },
+      { 'assignedTeachers.english': teacher.id },
+      { 'assignedTeachers.english': teacherIdObj },
+      { 'assignedTeachers.filipino': teacher.id },
+      { 'assignedTeachers.filipino': teacherIdObj },
       { 'assignedTeachers.math': teacher.id },
       { 'assignedTeachers.math': teacherIdObj },
       { 'assignedTeachers.science': teacher.id },
       { 'assignedTeachers.science': teacherIdObj },
     ];
-    if (teacherSections.length > 0) {
-      teacherMatchConditions.push({ section: { $in: teacherSections } });
-    }
 
     const filter: Record<string, unknown> = {
       $or: teacherMatchConditions,

@@ -3596,16 +3596,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
     setSaveNotification(null);
 
     try {
-      const mappedItems = doc.questions.map((q, idx) => {
+      const mappedItems = doc.questions.map((q: any, idx: number) => {
         const rawAns = doc.answers?.[idx] ?? q.correctAnswer;
         const normalizedAns =
           typeof rawAns === "object" && rawAns !== null
             ? (rawAns as any).correctKey || (rawAns as any).letter || "A"
             : String(rawAns || "A");
+        const rawPrompt = q.prompt || q.question || q.text || `Item ${idx + 1}`;
         return {
           index: idx,
-          prompt: q.prompt,
-          choices: q.choices || [],
+          prompt: String(rawPrompt).trim(),
+          choices: Array.isArray(q.choices && q.choices.length > 0 ? q.choices : q.options)
+            ? (q.choices || q.options).slice(0, 4)
+            : [],
           correctAnswer: normalizedAns,
           mode: q.mode || "mc",
         };

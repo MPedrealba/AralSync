@@ -121,7 +121,7 @@ export default function LearnersPage() {
   const availableSections = useMemo(() => {
     const set = new Set<string>();
     learners.forEach((l) => {
-      const lGradeDigits = (l.gradeLevel || "").replace(/\D/g, "");
+      const lGradeDigits = String(l.gradeLevel || "").replace(/\D/g, "");
       const filterGradeDigits = gradeFilter.replace(/\D/g, "");
       const matchGrade = !gradeFilter || lGradeDigits === filterGradeDigits;
       if (matchGrade && l.section && l.section.trim()) {
@@ -136,7 +136,7 @@ export default function LearnersPage() {
     if (sectionFilter && newGrade) {
       const newGradeDigits = newGrade.replace(/\D/g, "");
       const validSections = learners
-        .filter((l) => (l.gradeLevel || "").replace(/\D/g, "") === newGradeDigits)
+        .filter((l) => String(l.gradeLevel || "").replace(/\D/g, "") === newGradeDigits)
         .map((l) => l.section?.trim())
         .filter(Boolean);
       if (!validSections.includes(sectionFilter)) {
@@ -216,7 +216,9 @@ export default function LearnersPage() {
       l.name.toLowerCase().includes(search.toLowerCase()) ||
       (l.lrn || "").toLowerCase().includes(search.toLowerCase()) ||
       (l.guardian || "").toLowerCase().includes(search.toLowerCase());
-    const matchGrade = gradeFilter ? l.gradeLevel === gradeFilter : true;
+    const matchGrade = gradeFilter
+      ? String(l.gradeLevel || "").replace(/\D/g, "") === gradeFilter.replace(/\D/g, "")
+      : true;
     const matchSection = sectionFilter ? l.section === sectionFilter : true;
     const matchRisk = riskFilter
       ? (riskDisplay[l.riskLevel] ?? l.riskLevel) === riskFilter
@@ -278,6 +280,7 @@ export default function LearnersPage() {
                 value={sectionFilter}
                 onChange={setSectionFilter}
                 options={availableSections}
+                emptyOption={gradeFilter ? "No sections enrolled" : undefined}
               />
               <div className="col-span-2 sm:col-span-1">
                 <FilterSelect
@@ -437,11 +440,13 @@ function FilterSelect({
   value,
   onChange,
   options,
+  emptyOption,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  emptyOption?: string;
 }) {
   return (
     <div className="relative">
@@ -451,11 +456,17 @@ function FilterSelect({
         className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 text-xs font-medium text-slate-700 outline-none transition-colors focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
       >
         <option value="">{label}</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+        {options.length === 0 && emptyOption ? (
+          <option value="" disabled>
+            {emptyOption}
           </option>
-        ))}
+        ) : (
+          options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))
+        )}
       </select>
       <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
     </div>

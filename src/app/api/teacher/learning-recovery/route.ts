@@ -5,7 +5,7 @@ import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
 import Intervention from '../../../../../models/Intervention';
-import { getTeacherSubject, getInterventionSubjectFilter } from '@/lib/teacherScope';
+import { getTeacherSubject, getInterventionSubjectFilter, getTeacherLearnerFilter } from '@/lib/teacherScope';
 
 /**
  * GET /api/teacher/learning-recovery
@@ -25,7 +25,9 @@ export async function GET(req: NextRequest) {
     const grade = searchParams.get('grade');
     const section = searchParams.get('section');
 
-    const recordFilter: Record<string, unknown> = {};
+    const learnerScopeQuery = getTeacherLearnerFilter(authUser.id, teacherSubject);
+
+    const recordFilter: Record<string, any> = { ...learnerScopeQuery };
     if (grade) {
       const g = Number(grade.replace(/\D/g, ''));
       if (!Number.isNaN(g)) recordFilter.gradeLevel = g;
@@ -38,7 +40,11 @@ export async function GET(req: NextRequest) {
     const assessmentQuery: Record<string, any> = { studentId: { $in: studentIds } };
     const interventionQuery: Record<string, any> = { studentId: { $in: studentIds } };
     if (teacherSubject !== 'All') {
-      assessmentQuery.subject = teacherSubject;
+      if (teacherSubject === 'Reading') {
+        assessmentQuery.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+      } else {
+        assessmentQuery.subject = teacherSubject;
+      }
       const subFilter = getInterventionSubjectFilter(teacherSubject);
       Object.assign(interventionQuery, subFilter);
     }
@@ -48,12 +54,18 @@ export async function GET(req: NextRequest) {
       Intervention.find(interventionQuery),
     ]);
 
+    const isReadingScope = teacherSubject === 'Reading' || teacherSubject === 'English' || teacherSubject === 'Filipino';
+    const isMathScope = teacherSubject === 'Math';
+    const isScienceScope = teacherSubject === 'Science';
+
     let readingFrustration = 0;
     let lowOmr = 0;
 
     assessments.forEach((a: any) => {
-      if (a.type === 'READING_FLUENCY' && a.score != null && a.score < 60) readingFrustration += 1;
-      if (a.type === 'OMR' && a.score != null && a.score < 60) lowOmr += 1;
+      if (isReadingScope || teacherSubject === 'All') {
+        if (a.type === 'READING_FLUENCY' && a.score != null && a.score < 60) readingFrustration += 1;
+      }
+      if (a.score != null && a.score < 60) lowOmr += 1;
     });
 
     const skillByName: Record<string, string[]> = {};
@@ -80,42 +92,152 @@ export async function GET(req: NextRequest) {
       const studentAssessments = assessments.filter(
         (a: any) => a.studentId?.toString() === sid
       );
-      const omrScores = studentAssessments
-        .filter((a: any) => a.type === 'OMR')
-        .map((a: any) => a.score);
-      const lowOmrCount = omrScores.filter((s: number) => s != null && s < 60).length;
-      const latestReading = studentAssessments.find((a: any) => a.type === 'READING_FLUENCY');
+
+      const lowScores = studentAssessments
+        .map((a: any) => a.score)
+        .filter((s: number) => s != null && s < 60);
+      const lowScoreCount = lowScores.length;
 
       const isHighRisk = record.riskLevel === 'High Risk';
-      const underPerformer = lowOmrCount >= 2;
 
-      if (!isHighRisk && !underPerformer) continue;
+      if (isReadingScope) {
+        const latestReading = studentAssessments.find((a: any) => a.type === 'READING_FLUENCY');
+        const hasPhilIriFrustration =
+          record.readingLevel === 'Frustration' ||
+          record.readingLevel === 'Non-Reader' ||
+          record.philIriEnglish?.readingLevel === 'Frustration' ||
+          record.philIriEnglish?.readingLevel === 'Non-Reader' ||
+          record.philIriFilipino?.readingLevel === 'Pagkabigo' ||
+          record.philIriFilipino?.readingLevel === 'Hindi Makabasa';
+        const hasLowReadingScore = latestReading && latestReading.score != null && latestReading.score < 60;
+        const underPerformer = lowScoreCount >= 2;
 
-      const reasons: string[] = [];
-      if (isHighRisk) reasons.push('High risk classification');
-      if (latestReading && latestReading.score < 60)
-        reasons.push('Frustration level in reading');
-      if (lowOmrCount >= 2)
-        reasons.push(`OMR below 60% in ${lowOmrCount} assessments`);
+        if (!isHighRisk && !underPerformer && !hasPhilIriFrustration && !hasLowReadingScore) continue;
 
-      const suggested = interventionsByStudent[sid]?.find(
-        (i: any) => i.status !== 'Completed'
-      );
-      flagged.push({
-        name,
-        risk: isHighRisk ? 'High' : 'At Risk',
-        grade: `Grade ${record.gradeLevel} — ${record.section}`,
-        lrn: record.lrn,
-        reasons,
-        deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'See assessment scores',
-        intervention: suggested
-          ? `${suggested.title} (${suggested.type})`
-          : record.gradeLevel >= 7
-          ? 'Suggested: ARAL Reading Plus / Basic (Key Stage 3)'
-          : record.gradeLevel >= 4
-          ? 'Suggested: ARAL Reading Basic / Plus (Key Stage 2)'
-          : 'Suggested: ARAL English / Filipino (Key Stage 1)',
-      });
+        const reasons: string[] = [];
+        if (isHighRisk) reasons.push('High risk classification');
+        if (hasLowReadingScore) {
+          reasons.push('Frustration level in oral reading');
+        } else if (hasPhilIriFrustration) {
+          reasons.push(`Phil-IRI: ${record.readingLevel || 'Frustration'} reading level`);
+        }
+        if (lowScoreCount >= 2) {
+          reasons.push(`Reading assessments below 60% in ${lowScoreCount} evaluations`);
+        } else if (lowScoreCount === 1 && reasons.length === 0) {
+          reasons.push('Reading assessment score below 60%');
+        }
+
+        const suggested = interventionsByStudent[sid]?.find(
+          (i: any) => i.status !== 'Completed'
+        );
+        flagged.push({
+          name,
+          risk: isHighRisk || hasPhilIriFrustration ? 'High' : 'At Risk',
+          grade: `Grade ${record.gradeLevel} — ${record.section}`,
+          lrn: record.lrn,
+          reasons: reasons.length > 0 ? reasons : ['Reading performance below proficiency'],
+          deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Reading comprehension & fluency deficiencies',
+          intervention: suggested
+            ? `${suggested.title} (${suggested.type})`
+            : record.gradeLevel >= 7
+            ? 'Suggested: ARAL Reading Plus / Basic (Key Stage 3)'
+            : record.gradeLevel >= 4
+            ? 'Suggested: ARAL Reading Basic / Plus (Key Stage 2)'
+            : 'Suggested: ARAL English / Filipino (Key Stage 1)',
+        });
+      } else if (isMathScope) {
+        const underPerformer = lowScoreCount >= 2;
+        if (!isHighRisk && !underPerformer && lowScoreCount === 0) continue;
+
+        const reasons: string[] = [];
+        if (isHighRisk) reasons.push('High risk in numeracy');
+        if (lowScoreCount >= 2) {
+          reasons.push(`Math assessments below 60% in ${lowScoreCount} evaluations`);
+        } else if (lowScoreCount === 1) {
+          reasons.push('Math assessment below 60% in 1 evaluation');
+        }
+
+        const suggested = interventionsByStudent[sid]?.find(
+          (i: any) => i.status !== 'Completed'
+        );
+        flagged.push({
+          name,
+          risk: isHighRisk ? 'High' : 'At Risk',
+          grade: `Grade ${record.gradeLevel} — ${record.section}`,
+          lrn: record.lrn,
+          reasons: reasons.length > 0 ? reasons : ['Numeracy performance below proficiency'],
+          deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Numeracy deficiencies',
+          intervention: suggested
+            ? `${suggested.title} (${suggested.type})`
+            : record.gradeLevel >= 7
+            ? 'Suggested: ARAL Numeracy Recovery (Key Stage 3)'
+            : record.gradeLevel >= 4
+            ? 'Suggested: ARAL Mathematics Intervention (Key Stage 2)'
+            : 'Suggested: ARAL Early Numeracy (Key Stage 1)',
+        });
+      } else if (isScienceScope) {
+        const underPerformer = lowScoreCount >= 2;
+        if (!isHighRisk && !underPerformer && lowScoreCount === 0) continue;
+
+        const reasons: string[] = [];
+        if (isHighRisk) reasons.push('High risk in science');
+        if (lowScoreCount >= 2) {
+          reasons.push(`Science assessments below 60% in ${lowScoreCount} evaluations`);
+        } else if (lowScoreCount === 1) {
+          reasons.push('Science assessment below 60% in 1 evaluation');
+        }
+
+        const suggested = interventionsByStudent[sid]?.find(
+          (i: any) => i.status !== 'Completed'
+        );
+        flagged.push({
+          name,
+          risk: isHighRisk ? 'High' : 'At Risk',
+          grade: `Grade ${record.gradeLevel} — ${record.section}`,
+          lrn: record.lrn,
+          reasons: reasons.length > 0 ? reasons : ['Science performance below proficiency'],
+          deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Science competency deficiencies',
+          intervention: suggested
+            ? `${suggested.title} (${suggested.type})`
+            : record.gradeLevel >= 7
+            ? 'Suggested: ARAL Science Mastery Module (Key Stage 3)'
+            : record.gradeLevel >= 4
+            ? 'Suggested: ARAL General Science Intervention (Key Stage 2)'
+            : 'Suggested: ARAL Science Exploration (Key Stage 1)',
+        });
+      } else {
+        // All subjects scope
+        const latestReading = studentAssessments.find((a: any) => a.type === 'READING_FLUENCY');
+        const underPerformer = lowScoreCount >= 2;
+
+        if (!isHighRisk && !underPerformer) continue;
+
+        const reasons: string[] = [];
+        if (isHighRisk) reasons.push('High risk classification');
+        if (latestReading && latestReading.score != null && latestReading.score < 60)
+          reasons.push('Frustration level in reading');
+        if (lowScoreCount >= 2)
+          reasons.push(`Assessments below 60% in ${lowScoreCount} evaluations`);
+
+        const suggested = interventionsByStudent[sid]?.find(
+          (i: any) => i.status !== 'Completed'
+        );
+        flagged.push({
+          name,
+          risk: isHighRisk ? 'High' : 'At Risk',
+          grade: `Grade ${record.gradeLevel} — ${record.section}`,
+          lrn: record.lrn,
+          reasons: reasons.length > 0 ? reasons : ['Performance below proficiency'],
+          deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'See assessment scores',
+          intervention: suggested
+            ? `${suggested.title} (${suggested.type})`
+            : record.gradeLevel >= 7
+            ? 'Suggested: ARAL Reading Plus / Basic (Key Stage 3)'
+            : record.gradeLevel >= 4
+            ? 'Suggested: ARAL Reading Basic / Plus (Key Stage 2)'
+            : 'Suggested: ARAL English / Filipino (Key Stage 1)',
+        });
+      }
     }
 
     return ok({
@@ -125,6 +247,7 @@ export async function GET(req: NextRequest) {
         lowOmr,
       },
       flaggedStudents: flagged,
+      teacherSubject,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

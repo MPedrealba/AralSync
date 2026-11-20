@@ -69,6 +69,7 @@ export default function LearningRecoveryPage() {
   const [data, setData] = useState<{
     stats: { flagged: number; readingFrustration: number; lowOmr: number };
     flaggedStudents: Flagged[];
+    teacherSubject?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,6 +94,50 @@ export default function LearningRecoveryPage() {
 
   const stats = data?.stats ?? { flagged: 0, readingFrustration: 0, lowOmr: 0 };
   const flaggedStudents = data?.flaggedStudents ?? [];
+  const teacherSubject = data?.teacherSubject;
+  const isReading = !teacherSubject || teacherSubject === "Reading" || teacherSubject === "English" || teacherSubject === "Filipino";
+  const isMath = teacherSubject === "Math";
+  const isScience = teacherSubject === "Science";
+
+  const subtitle = isMath
+    ? "Learners flagged as high-risk in numeracy or scoring below 60% in math assessments."
+    : isScience
+    ? "Learners flagged as high-risk in science or scoring below 60% in science assessments."
+    : isReading && teacherSubject !== "All"
+    ? "Learners flagged as high-risk in reading or scoring below 60% in reading assessments."
+    : "Learners flagged as high-risk in reading or scoring below 60% in 2+ OMR assessments.";
+
+  const card2Title = isMath
+    ? "Critical Numeracy Level"
+    : isScience
+    ? "Critical Science Level"
+    : "Reading Frustration Level";
+
+  const card2Subtext = isMath
+    ? "Math competency mastery < 60%"
+    : isScience
+    ? "Science competency mastery < 60%"
+    : "Phil-IRI oral reading accuracy < 90%";
+
+  const card2Value = isMath || isScience
+    ? stats.lowOmr
+    : stats.readingFrustration;
+
+  const card3Title = isMath
+    ? "Low Numeracy Assessments (<60%)"
+    : isScience
+    ? "Low Science Assessments (<60%)"
+    : isReading && teacherSubject !== "All"
+    ? "Low Reading Assessments (<60%)"
+    : "Low Assessment Scores (<60%)";
+
+  const card3Subtext = isMath
+    ? "Math grading deficiencies"
+    : isScience
+    ? "Science grading deficiencies"
+    : isReading && teacherSubject !== "All"
+    ? "Reading assessment deficiencies"
+    : "Multiple OMR grading deficiencies";
 
   return (
     <>
@@ -105,7 +150,7 @@ export default function LearningRecoveryPage() {
               Learning Recovery Priority Roster
             </h1>
             <p className="mt-1 text-xs text-slate-500 md:text-sm">
-              Learners flagged as high-risk in reading or scoring below 60% in 2+ OMR assessments.
+              {subtitle}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -171,12 +216,12 @@ export default function LearningRecoveryPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Reading Frustration Level
+                  {card2Title}
                 </p>
                 <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">
-                  {stats.readingFrustration}
+                  {card2Value}
                 </p>
-                <p className="mt-1 text-xs text-amber-600 font-medium">Phil-IRI oral reading accuracy &lt; 90%</p>
+                <p className="mt-1 text-xs text-amber-600 font-medium">{card2Subtext}</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                 <BookOpen className="h-5 w-5" />
@@ -188,12 +233,12 @@ export default function LearningRecoveryPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Low Assessment Scores (&lt;60%)
+                  {card3Title}
                 </p>
                 <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">
                   {stats.lowOmr}
                 </p>
-                <p className="mt-1 text-xs text-slate-500 font-medium">Multiple OMR grading deficiencies</p>
+                <p className="mt-1 text-xs text-slate-500 font-medium">{card3Subtext}</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                 <FileText className="h-5 w-5" />

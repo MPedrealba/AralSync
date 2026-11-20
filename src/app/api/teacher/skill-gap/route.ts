@@ -5,13 +5,17 @@ import connectDB from '../../../../../database/db';
 import Assessment from '../../../../../models/Assessment';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import mongoose from 'mongoose';
-import { getTeacherSubject } from '@/lib/teacherScope';
+import { getTeacherSubject, getTeacherLearnerFilter } from '@/lib/teacherScope';
 
 const SUBJECT_ORDER = ['Numeracy', 'Science', 'Reading'];
 const SUBJECT_MAP: Record<string, string> = {
   Math: 'Numeracy',
   Science: 'Science',
   Reading: 'Reading',
+  English: 'Reading',
+  Filipino: 'Reading',
+  'Reading - English': 'Reading',
+  'Reading - Filipino': 'Reading',
 };
 
 interface LearnerRecordItem {
@@ -52,10 +56,16 @@ export async function GET(req: NextRequest) {
     const grade = searchParams.get('grade');
     const section = searchParams.get('section');
 
-    // Gather all available grades and sections from records for stable, dynamic filter dropdowns
-    const allRecords: LearnerRecordItem[] = await LearnerRecord.find({})
+    const learnerScopeQuery = getTeacherLearnerFilter(authUser.id, teacherSubject);
+
+    // Gather all available grades and sections from teacher's assigned records for stable, dynamic filter dropdowns
+    const allRecords: LearnerRecordItem[] = await LearnerRecord.find(learnerScopeQuery)
       .select('gradeLevel section studentId')
       .lean();
+
+    const assignedStudentIds = allRecords
+      .map((r) => r.studentId)
+      .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
 
     const availableGrades = [
       ...new Set(allRecords.map((r) => (r.gradeLevel != null ? String(r.gradeLevel) : null)).filter(Boolean)),
@@ -91,17 +101,17 @@ export async function GET(req: NextRequest) {
 
     const relevantOrder =
       teacherSubject !== 'All'
-        ? [teacherSubject === 'Math' ? 'Numeracy' : teacherSubject]
+        ? [teacherSubject === 'Math' ? 'Numeracy' : (teacherSubject === 'Reading' || teacherSubject === 'English' || teacherSubject === 'Filipino' ? 'Reading' : teacherSubject)]
         : SUBJECT_ORDER;
 
-    // Resolve the cohort of student ids when filters are present.
+    // Resolve the cohort of student ids: defaults to teacher's assigned student ids when no filter
     const hasGradeFilter = Boolean(grade && grade !== 'all' && grade !== 'All Grades' && grade.replace(/\D/g, ''));
     const hasSectionFilter = Boolean(section && section !== 'all' && section !== 'All Sections' && section.trim());
     const hasFilter = hasGradeFilter || hasSectionFilter;
-    let studentIds: mongoose.Types.ObjectId[] | null = null;
+    let studentIds: mongoose.Types.ObjectId[] = assignedStudentIds;
 
     if (hasFilter) {
-      const recordFilter: Record<string, unknown> = {};
+      const recordFilter: Record<string, unknown> = { ...learnerScopeQuery };
       if (hasGradeFilter && grade) {
         const g = Number(grade.replace(/\D/g, ''));
         if (!Number.isNaN(g)) recordFilter.gradeLevel = g;
@@ -130,12 +140,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const match: Record<string, unknown> = { score: { $exists: true, $ne: null } };
-    if (studentIds) {
-      match.studentId = { $in: studentIds };
+    if (studentIds.length === 0) {
+      return ok({
+        competencyData: relevantOrder.map((name) => ({
+          name,
+          below60: 0,
+          between60_75: 0,
+          above75: 0,
+        })),
+        skillGaps: [],
+        filters: filterMetadata,
+      });
     }
+
+    const match: Record<string, unknown> = {
+      score: { $exists: true, $ne: null },
+      studentId: { $in: studentIds },
+    };
     if (teacherSubject !== 'All') {
-      match.subject = teacherSubject;
+      if (teacherSubject === 'Reading') {
+        match.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+      } else {
+        match.subject = teacherSubject;
+      }
     }
 
     // Bucket counts per subject → percentage bars.
@@ -232,6 +259,7 @@ export async function GET(req: NextRequest) {
       competencyData,
       skillGaps,
       filters: filterMetadata,
+      teacherSubject,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
