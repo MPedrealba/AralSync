@@ -34,15 +34,123 @@ MIN_BUBBLE_AREA = 45    # minimum contour area to consider as a bubble
 FIDUCIAL_SIZE_RATIO = 0.02  # fiducial mark diameter as fraction of image width
 
 
+# ── Document Paper Boundary & Corner Detection ───────────────────────────────
+
+def order_corners(pts: np.ndarray) -> np.ndarray:
+    """
+    Sort the 4 detected corners in order: [top-left, top-right, bottom-left, bottom-right].
+    pts shape: (4, 2)
+    """
+    pts = np.array(pts, dtype=np.float32).reshape((4, 2))
+    rect = np.zeros((4, 2), dtype=np.float32)
+
+    # Top-left has smallest sum (x + y), bottom-right has largest sum (x + y)
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]   # top-left
+    rect[3] = pts[np.argmax(s)]   # bottom-right
+
+    # Top-right has smallest diff (y - x), bottom-left has largest diff (y - x)
+    diff = pts[:, 1] - pts[:, 0]
+    rect[1] = pts[np.argmin(diff)]  # top-right
+    rect[2] = pts[np.argmax(diff)]  # bottom-left
+
+    return rect
+
+
+def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Automatic Document Paper Contour Detection.
+    - Downscales for speed, applies Gaussian blur and edge detection / adaptive thresholding.
+    - Finds the largest 4-sided contour (cv2.approxPolyDP with 4 vertices, or cv2.minAreaRect)
+      that covers > 20% of the image area.
+    - Sorts the 4 detected corners in order: [top-left, top-right, bottom-left, bottom-right].
+    - Returns None if no clear document boundary covering > 20% is found.
+    """
+    h, w = img_gray.shape
+
+    # Downscale for speed (target max dimension ~800px)
+    max_dim = max(h, w)
+    scale = 800.0 / max_dim if max_dim > 800 else 1.0
+    if scale < 1.0:
+        target_w = int(w * scale)
+        target_h = int(h * scale)
+        resized = cv2.resize(img_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    else:
+        resized = img_gray.copy()
+
+    resized_h, resized_w = resized.shape
+    resized_area = float(resized_h * resized_w)
+
+    blurred = cv2.GaussianBlur(resized, (5, 5), 0)
+
+    # Multi-method contour candidate extraction
+    candidate_contours = []
+
+    # 1. Canny edges + morphological close
+    edged = cv2.Canny(blurred, 30, 150)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    closed = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel, iterations=2)
+    cnts1, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidate_contours.extend(cnts1)
+
+    # 2. Adaptive thresholding for varied/shadowed lighting
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+    )
+    thresh_inv = cv2.bitwise_not(thresh)
+    thresh_closed = cv2.morphologyEx(thresh_inv, cv2.MORPH_CLOSE, kernel, iterations=2)
+    cnts2, _ = cv2.findContours(thresh_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidate_contours.extend(cnts2)
+
+    # 3. Otsu thresholding
+    _, otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    otsu_closed = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, kernel, iterations=2)
+    cnts3, _ = cv2.findContours(otsu_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidate_contours.extend(cnts3)
+
+    if not candidate_contours:
+        return None
+
+    # Sort contours by area descending
+    candidate_contours.sort(key=cv2.contourArea, reverse=True)
+
+    for cnt in candidate_contours:
+        area = cv2.contourArea(cnt)
+        # Must cover > 20% of image area
+        if area < 0.20 * resized_area:
+            continue
+
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+
+        pts = None
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            pts = approx.reshape((4, 2))
+        else:
+            # Fallback to minAreaRect for 4 vertices
+            rect = cv2.minAreaRect(cnt)
+            box = cv2.boxPoints(rect)
+            box_area = cv2.contourArea(box)
+            if box_area >= 0.20 * resized_area:
+                pts = box
+
+        if pts is not None:
+            # Rescale points to original resolution
+            orig_pts = pts / scale if scale < 1.0 else pts
+            return order_corners(orig_pts)
+
+    return None
+
+
 # ── Fiducial Mark Detection ────────────────────────────────────────────────────
 
 def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
     """
     Detect the corner registration marks (solid black squares/circles).
     Only returns corners if actual registration fiducials are found:
-    - Bounding area between 800 and 20000 px
+    - Bounding area between 300 and 25000 px
     - Aspect ratio between 0.65 and 1.5
-    - Strictly within outer < 7% corner margins of the image width and height
+    - Strictly within outer < 9% corner margins of the image width and height
     If not found, returns None so unwarped pages are not falsely distorted.
     """
     h, w = img_gray.shape
@@ -57,19 +165,19 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < 800 or area > 20000:
+            if area < 300 or area > 25000:
                 continue
             x, y, bw, bh = cv2.boundingRect(cnt)
             if not (0.65 <= bw / max(bh, 1) <= 1.5):
                 continue
             cx = x + bw // 2
             cy = y + bh // 2
-            # Extreme outer corner margins (< 7% of width/height)
+            # Extreme outer corner margins (< 9% of width/height)
             is_extreme = (
-                (cx < 0.07 * w and cy < 0.07 * h) or
-                (cx > 0.93 * w and cy < 0.07 * h) or
-                (cx < 0.07 * w and cy > 0.93 * h) or
-                (cx > 0.93 * w and cy > 0.93 * h)
+                (cx < 0.09 * w and cy < 0.09 * h) or
+                (cx > 0.91 * w and cy < 0.09 * h) or
+                (cx < 0.09 * w and cy > 0.91 * h) or
+                (cx > 0.91 * w and cy > 0.91 * h)
             )
             if is_extreme:
                 candidates.append((cx, cy, area))
@@ -83,22 +191,22 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
     min_d_tl = min_d_tr = min_d_bl = min_d_br = float('inf')
 
     for cx, cy, _ in candidates:
-        if cx < 0.07 * w and cy < 0.07 * h:
+        if cx < 0.09 * w and cy < 0.09 * h:
             d = cx**2 + cy**2
             if d < min_d_tl:
                 min_d_tl = d
                 tl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.93 * w and cy < 0.07 * h:
+        elif cx > 0.91 * w and cy < 0.09 * h:
             d = (w - cx)**2 + cy**2
             if d < min_d_tr:
                 min_d_tr = d
                 tr = np.array([cx, cy], dtype=np.float32)
-        elif cx < 0.07 * w and cy > 0.93 * h:
+        elif cx < 0.09 * w and cy > 0.91 * h:
             d = cx**2 + (h - cy)**2
             if d < min_d_bl:
                 min_d_bl = d
                 bl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.93 * w and cy > 0.93 * h:
+        elif cx > 0.91 * w and cy > 0.91 * h:
             d = (w - cx)**2 + (h - cy)**2
             if d < min_d_br:
                 min_d_br = d
@@ -133,7 +241,7 @@ def warp_to_grid(img: np.ndarray, corners: np.ndarray,
         [target_w - 1, target_h - 1]
     ], dtype=np.float32)
 
-    M = cv2.getPerspectiveTransform(corners, dst)
+    M = cv2.getPerspectiveTransform(corners.astype(np.float32), dst)
     return cv2.warpPerspective(img, M, (target_w, target_h))
 
 
@@ -142,12 +250,9 @@ def warp_to_grid(img: np.ndarray, corners: np.ndarray,
 def find_bubble_grid(warped_gray: np.ndarray,
                       num_questions: int = 50) -> list[list[tuple[int, int, int, int]]]:
     """
-    Locate the bubble grid in the sheet image with column-first ordering.
-    In DepEd ARAL standardized 50-item sheets:
-      - Column 1: Questions 1 to 17 (approx X in [180, 360])
-      - Column 2: Questions 18 to 34 (approx X in [540, 720])
-      - Column 3: Questions 35 to 50 (approx X in [880, 1080])
-    Returns a list of questions, each having 4 (cx, cy, radius, question_index) tuples.
+    Locate the bubble grid dynamically using relative X column clustering and Y row spacing.
+    Eliminates rigid hardcoded pixel boundaries so minor print scaling, perspective shifts,
+    or photo warps do not break question indexing.
     """
     h, w = warped_gray.shape
 
@@ -162,7 +267,7 @@ def find_bubble_grid(warped_gray: np.ndarray,
     if hc is not None:
         for pt in hc[0]:
             cx, cy, r = int(pt[0]), int(pt[1]), int(pt[2])
-            if cy > 480:  # Below header
+            if cy > 450:  # Below header
                 all_bubbles.append((cx, cy, r))
 
     # 2. Combined with contour detection to capture shaded/faint bubbles
@@ -184,151 +289,115 @@ def find_bubble_grid(warped_gray: np.ndarray,
         cx = int(M["m10"] / M["m00"])
         cy = int(M["m01"] / M["m00"])
         r = int(np.sqrt(area / np.pi))
-        if cy > 480:
+        if cy > 450:
             if not any(abs(cx - b[0]) <= 10 and abs(cy - b[1]) <= 10 for b in all_bubbles):
                 all_bubbles.append((cx, cy, r))
 
     if not all_bubbles:
         return []
 
-    # Check if standard DepEd ARAL 3-column layout matches (Col 1 in [180, 360])
-    c1_candidates = [b for b in all_bubbles if 180 <= b[0] <= 360]
+    # 3. Filter bubbles inside content boundaries
+    filtered = [b for b in all_bubbles if 0.25 * h < b[1] < 0.98 * h and 0.04 * w < b[0] < 0.96 * w]
+    if not filtered:
+        filtered = all_bubbles
 
-    grid = []
+    # 4. Deduplicate coincident bubbles within 6px
+    merged: list[tuple[int, int, int]] = []
+    for b in sorted(filtered, key=lambda b: (b[1], b[0], b[2])):
+        if merged:
+            cx0, cy0, _ = merged[-1]
+            if abs(b[0] - cx0) <= 6 and abs(b[1] - cy0) <= 6:
+                if b[2] > merged[-1][2]:
+                    merged[-1] = b
+                continue
+        merged.append(b)
+
+    sorted_by_x = sorted(merged, key=lambda b: b[0])
+    if not sorted_by_x:
+        return []
+
+    # 5. Dynamic Column Clustering by Relative X gaps (> 65px)
+    gap_threshold = max(65, int(0.05 * w))
+    raw_col_clusters: list[list[tuple[int, int, int]]] = []
+    curr_col: list[tuple[int, int, int]] = [sorted_by_x[0]]
+
+    for b in sorted_by_x[1:]:
+        if b[0] - curr_col[-1][0] > gap_threshold:
+            raw_col_clusters.append(curr_col)
+            curr_col = [b]
+        else:
+            curr_col.append(b)
+    raw_col_clusters.append(curr_col)
+
+    # Retain columns that contain sufficient bubbles (at least 8 bubbles for valid questions)
+    col_clusters = [col for col in raw_col_clusters if len(col) >= 8]
+    if not col_clusters:
+        col_clusters = raw_col_clusters
+
+    # Sort columns left-to-right based on median X coordinate
+    col_clusters.sort(key=lambda col: float(np.median([b[0] for b in col])))
+
+    grid: list[list[tuple[int, int, int, int]]] = []
     q_idx = 0
 
-    if len(c1_candidates) >= 12:
-        # Standard DepEd ARAL 3-column layout
-        col_ranges = [
-            (180, 360, 17),
-            (540, 720, 17),
-            (880, 1080, 16),
-        ]
-        for x_min, x_max, max_q_in_col in col_ranges:
-            col_b = [b for b in all_bubbles if x_min <= b[0] <= x_max]
-            if not col_b:
-                continue
+    # Determine maximum questions per column:
+    # In standard DepEd ARAL 3-column sheets, questions are distributed as [17, 17, 16] for 50 items.
+    col_capacities = [17, 17, 16] if len(col_clusters) == 3 else [25, 25] if len(col_clusters) == 2 else [50]
 
-            col_b.sort(key=lambda b: (b[1], b[0]))
-            raw_rows: list[list[tuple[int, int, int]]] = []
-            curr_row: list[tuple[int, int, int]] = [col_b[0]]
+    row_gap_threshold = max(18, int(0.012 * h))
 
-            for b in col_b[1:]:
-                if abs(b[1] - curr_row[-1][1]) > 25:
-                    raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
-                    curr_row = [b]
-                else:
-                    curr_row.append(b)
-            raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
+    for col_idx, col_bubbles in enumerate(col_clusters):
+        if q_idx >= num_questions:
+            break
 
-            valid_rows = [r for r in raw_rows if len(r) >= 3][:max_q_in_col]
-            four_rows = [r for r in valid_rows if len(r) == OPTIONS_PER_Q]
-            ref_x = [int(np.median([r[i][0] for r in four_rows])) for i in range(OPTIONS_PER_Q)] if four_rows else None
-            delta_x = int(np.median([r[1][0] - r[0][0] for r in four_rows])) if four_rows else 42
+        max_in_col = col_capacities[col_idx] if col_idx < len(col_capacities) else 20
 
-            for r in valid_rows:
-                if q_idx >= num_questions:
-                    break
+        # Sort bubbles in this column top-to-bottom by Y
+        col_bubbles.sort(key=lambda b: (b[1], b[0]))
+        raw_rows: list[list[tuple[int, int, int]]] = []
+        curr_row: list[tuple[int, int, int]] = [col_bubbles[0]]
 
-                if len(r) == OPTIONS_PER_Q:
-                    q_bubbles = r
-                elif len(r) == 3:
-                    avg_y = int(np.mean([b[1] for b in r]))
-                    avg_r = int(np.mean([b[2] for b in r]))
-                    if ref_x:
-                        matched = {min(range(OPTIONS_PER_Q), key=lambda i: abs(b[0] - ref_x[i])) for b in r}
-                        missing_slot = list(set(range(OPTIONS_PER_Q)) - matched)
-                        slot = missing_slot[0] if missing_slot else 3
-                        missing_x = ref_x[slot]
-                    else:
-                        missing_x = r[2][0] + delta_x
-                    q_bubbles = sorted(r + [(missing_x, avg_y, avg_r)], key=lambda b: b[0])
-                else:
-                    if ref_x:
-                        best_4 = sorted(list({min(r, key=lambda b: abs(b[0] - xt)) for xt in ref_x}), key=lambda b: b[0])
-                        q_bubbles = best_4 if len(best_4) == OPTIONS_PER_Q else r[:OPTIONS_PER_Q]
-                    else:
-                        q_bubbles = r[:OPTIONS_PER_Q]
-
-                grid.append([(b[0], b[1], b[2], q_idx) for b in q_bubbles])
-                q_idx += 1
-
-    else:
-        # Fallback dynamic column clustering by X gaps (> 60px) for non-standard sheets
-        filtered = [b for b in all_bubbles if 0.05 * h < b[1] < 0.95 * h and 0.04 * w < b[0] < 0.96 * w]
-        if not filtered:
-            filtered = all_bubbles
-
-        # Deduplicate coincident bubbles within 6px
-        merged: list[tuple[int, int, int]] = []
-        for b in sorted(filtered, key=lambda b: (b[1], b[0], b[2])):
-            if merged:
-                cx0, cy0, _ = merged[-1]
-                if abs(b[0] - cx0) <= 6 and abs(b[1] - cy0) <= 6:
-                    if b[2] > merged[-1][2]:
-                        merged[-1] = b
-                    continue
-            merged.append(b)
-
-        sorted_by_x = sorted(merged, key=lambda b: b[0])
-        if not sorted_by_x:
-            return []
-        col_clusters: list[list[tuple[int, int, int]]] = []
-        curr_col: list[tuple[int, int, int]] = [sorted_by_x[0]]
-
-        for b in sorted_by_x[1:]:
-            if b[0] - curr_col[-1][0] > 60:
-                col_clusters.append(curr_col)
-                curr_col = [b]
+        for b in col_bubbles[1:]:
+            if abs(b[1] - curr_row[-1][1]) > row_gap_threshold:
+                raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
+                curr_row = [b]
             else:
-                curr_col.append(b)
-        col_clusters.append(curr_col)
+                curr_row.append(b)
+        raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
 
-        for col_bubbles in col_clusters:
-            col_bubbles.sort(key=lambda b: (b[1], b[0]))
-            raw_rows = []
-            curr_row = [col_bubbles[0]]
+        # Filter rows with at least 3 candidate bubbles
+        valid_rows = [r for r in raw_rows if len(r) >= 3][:max_in_col]
+        four_rows = [r for r in valid_rows if len(r) == OPTIONS_PER_Q]
 
-            for b in col_bubbles[1:]:
-                if abs(b[1] - curr_row[-1][1]) > 20:
-                    raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
-                    curr_row = [b]
+        ref_x = [int(np.median([r[i][0] for r in four_rows])) for i in range(OPTIONS_PER_Q)] if four_rows else None
+        delta_x = int(np.median([r[1][0] - r[0][0] for r in four_rows])) if len(four_rows) > 0 and len(four_rows[0]) >= 2 else 42
+
+        for r in valid_rows:
+            if q_idx >= num_questions:
+                break
+
+            if len(r) == OPTIONS_PER_Q:
+                q_bubbles = r
+            elif len(r) == 3:
+                avg_y = int(np.mean([b[1] for b in r]))
+                avg_r = int(np.mean([b[2] for b in r]))
+                if ref_x:
+                    matched = {min(range(OPTIONS_PER_Q), key=lambda i: abs(b[0] - ref_x[i])) for b in r}
+                    missing_slot = list(set(range(OPTIONS_PER_Q)) - matched)
+                    slot = missing_slot[0] if missing_slot else 3
+                    missing_x = ref_x[slot]
                 else:
-                    curr_row.append(b)
-            raw_rows.append(sorted(curr_row, key=lambda x: x[0]))
+                    missing_x = r[2][0] + delta_x
+                q_bubbles = sorted(r + [(missing_x, avg_y, avg_r)], key=lambda b: b[0])
+            else:
+                if ref_x:
+                    best_4 = sorted(list({min(r, key=lambda b: abs(b[0] - xt)) for xt in ref_x}), key=lambda b: b[0])
+                    q_bubbles = best_4 if len(best_4) == OPTIONS_PER_Q else r[:OPTIONS_PER_Q]
+                else:
+                    q_bubbles = r[:OPTIONS_PER_Q]
 
-            four_rows = [r for r in raw_rows if len(r) == OPTIONS_PER_Q]
-            ref_x = [int(np.median([r[i][0] for r in four_rows])) for i in range(OPTIONS_PER_Q)] if four_rows else None
-            delta_x = int(np.median([r[1][0] - r[0][0] for r in four_rows])) if four_rows else 45
-
-            for r in raw_rows:
-                if q_idx >= num_questions:
-                    break
-
-                if len(r) == OPTIONS_PER_Q:
-                    grid.append([(b[0], b[1], b[2], q_idx) for b in r])
-                    q_idx += 1
-                elif len(r) == 3:
-                    avg_y = int(np.mean([b[1] for b in r]))
-                    avg_r = int(np.mean([b[2] for b in r]))
-                    if ref_x:
-                        matched = {min(range(OPTIONS_PER_Q), key=lambda i: abs(b[0] - ref_x[i])) for b in r}
-                        missing_slot = list(set(range(OPTIONS_PER_Q)) - matched)
-                        slot = missing_slot[0] if missing_slot else 3
-                        missing_x = ref_x[slot]
-                    else:
-                        missing_x = r[2][0] + delta_x
-                    r_est = sorted(r + [(missing_x, avg_y, avg_r)], key=lambda b: b[0])
-                    grid.append([(b[0], b[1], b[2], q_idx) for b in r_est])
-                    q_idx += 1
-                elif len(r) > OPTIONS_PER_Q:
-                    if ref_x:
-                        best_4 = sorted(list({min(r, key=lambda b: abs(b[0] - xt)) for xt in ref_x}), key=lambda b: b[0])
-                        q_bubbles = best_4 if len(best_4) == OPTIONS_PER_Q else r[:OPTIONS_PER_Q]
-                    else:
-                        q_bubbles = r[:OPTIONS_PER_Q]
-                    grid.append([(b[0], b[1], b[2], q_idx) for b in q_bubbles])
-                    q_idx += 1
+            grid.append([(b[0], b[1], b[2], q_idx) for b in q_bubbles])
+            q_idx += 1
 
     return grid
 
@@ -440,17 +509,24 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h_orig, w_orig = gray.shape
 
-    # Step 1: Find registration marks
-    corners = detect_fiducials(gray)
-    if corners is None:
-        # Normalize resolution to standard (1275, 1650) to keep coordinate scales consistent
-        if (h_orig, w_orig) != (1650, 1275):
+    # Step 1: Automatic Document Paper Contour Detection & Perspective Warp
+    paper_corners = detect_document_contour(gray)
+    if paper_corners is not None:
+        warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
+    else:
+        # Fallback if no distinct document boundary detected
+        corners = detect_fiducials(gray)
+        if corners is not None:
+            warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
+        elif (h_orig, w_orig) != (1650, 1275):
             warped = cv2.resize(gray, (1275, 1650))
         else:
             warped = gray.copy()
-    else:
-        # Step 2: Warp to standard rectangular grid
-        warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
+
+    # Step 1.5: If fiducial marks exist on the warped sheet, refine warp for sub-pixel accuracy
+    refined_corners = detect_fiducials(warped)
+    if refined_corners is not None:
+        warped = warp_to_grid(warped, refined_corners, target_w=1275, target_h=1650)
 
     # Step 2.5: Extract Name & Section Header Crop
     name_crop_base64 = extract_name_crop(warped)

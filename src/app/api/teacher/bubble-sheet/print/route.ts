@@ -123,6 +123,26 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // F. Stamp 4 solid black corner registration marks (22x22 pt, 18pt margin from edges)
+    const regSize = 22;
+    const regMargin = 18;
+    const cornerPositions = [
+      { x: regMargin, y: regMargin }, // Bottom-Left
+      { x: width - regMargin - regSize, y: regMargin }, // Bottom-Right
+      { x: regMargin, y: height - regMargin - regSize }, // Top-Left
+      { x: width - regMargin - regSize, y: height - regMargin - regSize }, // Top-Right
+    ];
+
+    for (const pos of cornerPositions) {
+      firstPage.drawRectangle({
+        x: pos.x,
+        y: pos.y,
+        width: regSize,
+        height: regSize,
+        color: rgb(0, 0, 0),
+      });
+    }
+
     // 4. Serialize and return response
     const modifiedPdfBytes = await pdfDoc.save();
     const safeFilename = `AralSync-${sheetInfo.subject}-${items}Items-BubbleSheet.pdf`;
