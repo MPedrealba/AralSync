@@ -5,33 +5,64 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
-import { getTeacherSubject, TeacherSubject } from '@/lib/teacherScope';
+import { getTeacherSubject, getTeacherLearnerFilter, TeacherSubject } from '@/lib/teacherScope';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Maps project subject codes to the chart's series keys. */
 const CHART_KEY: Record<string, string> = {
   Math: 'Numeracy',
+  Numeracy: 'Numeracy',
   Reading: 'Reading',
+  English: 'Reading',
+  Filipino: 'Reading',
+  'Reading - English': 'Reading',
+  'Reading - Filipino': 'Reading',
   Science: 'Science',
 };
 
 /**
  * Builds a 4-point weekly mastery series from real assessment data,
- * scoped to the teacher's assigned subject.
+ * scoped strictly to the teacher's assigned subject and learners.
  */
-async function buildChartData(teacherSubject: TeacherSubject): Promise<any[]> {
+async function buildChartData(teacherSubject: TeacherSubject, assignedStudentIds: any[]): Promise<any[]> {
+  const activeKey =
+    teacherSubject === 'Math'
+      ? 'Numeracy'
+      : teacherSubject === 'Science'
+      ? 'Science'
+      : 'Reading';
+
+  const weeks = 4;
+  if (!assignedStudentIds || assignedStudentIds.length === 0) {
+    return Array.from({ length: weeks }, (_, i) => {
+      if (teacherSubject !== 'All') {
+        return { name: `Week ${i + 1}`, [activeKey]: 0 };
+      }
+      return {
+        name: `Week ${i + 1}`,
+        Numeracy: 0,
+        Reading: 0,
+        Science: 0,
+      };
+    });
+  }
+
   const query: Record<string, any> = {
     score: { $exists: true, $ne: null },
     date: { $exists: true },
+    studentId: { $in: assignedStudentIds },
   };
   if (teacherSubject !== 'All') {
-    query.subject = teacherSubject;
+    if (teacherSubject === 'Reading') {
+      query.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+    } else {
+      query.subject = teacherSubject;
+    }
   }
 
   const assessments = await Assessment.find(query, 'subject score date');
 
-  const weeks = 4;
   type Series = { sums: Record<string, number>; counts: Record<string, number> };
   const buckets: Series[] = Array.from({ length: weeks }, () => ({
     sums: { Numeracy: 0, Reading: 0, Science: 0 },
@@ -39,12 +70,17 @@ async function buildChartData(teacherSubject: TeacherSubject): Promise<any[]> {
   }));
 
   if (assessments.length === 0) {
-    return Array.from({ length: weeks }, (_, i) => ({
-      name: `Week ${i + 1}`,
-      Numeracy: 0,
-      Reading: 0,
-      Science: 0,
-    }));
+    return Array.from({ length: weeks }, (_, i) => {
+      if (teacherSubject !== 'All') {
+        return { name: `Week ${i + 1}`, [activeKey]: 0 };
+      }
+      return {
+        name: `Week ${i + 1}`,
+        Numeracy: 0,
+        Reading: 0,
+        Science: 0,
+      };
+    });
   }
 
   const times = assessments
@@ -66,19 +102,36 @@ async function buildChartData(teacherSubject: TeacherSubject): Promise<any[]> {
     buckets[idx].counts[key] += 1;
   }
 
-  return buckets.map((b, i) => ({
-    name: `Week ${i + 1}`,
-    Numeracy: b.counts.Numeracy ? Math.round(b.sums.Numeracy / b.counts.Numeracy) : 0,
-    Reading: b.counts.Reading ? Math.round(b.sums.Reading / b.counts.Reading) : 0,
-    Science: b.counts.Science ? Math.round(b.sums.Science / b.counts.Science) : 0,
-  }));
+  return buckets.map((b, i) => {
+    if (teacherSubject !== 'All') {
+      return {
+        name: `Week ${i + 1}`,
+        [activeKey]: b.counts[activeKey] ? Math.round(b.sums[activeKey] / b.counts[activeKey]) : 0,
+      };
+    }
+    return {
+      name: `Week ${i + 1}`,
+      Numeracy: b.counts.Numeracy ? Math.round(b.sums.Numeracy / b.counts.Numeracy) : 0,
+      Reading: b.counts.Reading ? Math.round(b.sums.Reading / b.counts.Reading) : 0,
+      Science: b.counts.Science ? Math.round(b.sums.Science / b.counts.Science) : 0,
+    };
+  });
 }
 
-/** Latest OMR scans scoped to teacher's subject. */
-async function buildRecentScans(teacherSubject: TeacherSubject): Promise<any[]> {
-  const query: Record<string, any> = { type: 'OMR' };
+/** Latest OMR scans scoped to teacher's subject and assigned students. */
+async function buildRecentScans(teacherSubject: TeacherSubject, assignedStudentIds: any[]): Promise<any[]> {
+  if (!assignedStudentIds || assignedStudentIds.length === 0) return [];
+
+  const query: Record<string, any> = {
+    type: 'OMR',
+    studentId: { $in: assignedStudentIds },
+  };
   if (teacherSubject !== 'All') {
-    query.subject = teacherSubject;
+    if (teacherSubject === 'Reading') {
+      query.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+    } else {
+      query.subject = teacherSubject;
+    }
   }
 
   const scans = await Assessment.find(query)
@@ -99,7 +152,10 @@ async function buildRecentScans(teacherSubject: TeacherSubject): Promise<any[]> 
     {
       $match: {
         title: { $in: titles },
-        subject: teacherSubject !== 'All' ? teacherSubject : { $in: ['Math', 'Reading', 'Science'] },
+        studentId: { $in: assignedStudentIds },
+        subject: teacherSubject !== 'All'
+          ? (teacherSubject === 'Reading' ? { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] } : teacherSubject)
+          : { $in: ['Math', 'Reading', 'Science'] },
         score: { $exists: true, $ne: null },
       },
     },
@@ -138,34 +194,20 @@ export async function GET(req: NextRequest) {
 
     const teacherSubject = await getTeacherSubject(authUser);
 
-    const teacherIdObj = mongoose.Types.ObjectId.isValid(authUser.id)
-      ? new mongoose.Types.ObjectId(authUser.id)
-      : authUser.id;
-
     // Strictly scope learners to this teacher's direct or subject-specific assignments
-    const teacherMatchConditions: any[] = [
-      { assignedTeacherId: authUser.id },
-      { assignedTeacherId: teacherIdObj },
-      { 'assignedTeachers.reading': authUser.id },
-      { 'assignedTeachers.reading': teacherIdObj },
-      { 'assignedTeachers.english': authUser.id },
-      { 'assignedTeachers.english': teacherIdObj },
-      { 'assignedTeachers.filipino': authUser.id },
-      { 'assignedTeachers.filipino': teacherIdObj },
-      { 'assignedTeachers.math': authUser.id },
-      { 'assignedTeachers.math': teacherIdObj },
-      { 'assignedTeachers.science': authUser.id },
-      { 'assignedTeachers.science': teacherIdObj },
-    ];
-
-    const learnerScopeQuery = { $or: teacherMatchConditions };
+    const learnerScopeQuery = getTeacherLearnerFilter(authUser.id, teacherSubject);
+    const assignedRecords = await LearnerRecord.find(learnerScopeQuery).select('studentId').lean();
+    const assignedStudentIds = assignedRecords.map((r: any) => r.studentId).filter(Boolean);
 
     const isFilipinoStream =
       req.nextUrl.searchParams.get('subject') === 'Filipino' ||
       req.nextUrl.searchParams.get('stream') === 'filipino';
 
     if (isFilipinoStream) {
-      const filipinoSubjectQuery = { subject: { $in: ['Filipino', 'Reading - Filipino'] } };
+      const filipinoSubjectQuery = {
+        subject: { $in: ['Filipino', 'Reading - Filipino'] },
+        studentId: { $in: assignedStudentIds },
+      };
       const filipinoAssessments = await Assessment.find({
         ...filipinoSubjectQuery,
         score: { $exists: true, $ne: null },
@@ -306,37 +348,53 @@ export async function GET(req: NextRequest) {
       action: "Review Profile",
     }));
 
-    // 3. Recent Scans (last 7 days) scoped to teacher's subject
+    // 3. Recent Scans (last 7 days) scoped to teacher's subject and assigned learners
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const scanCountQuery: Record<string, any> = {
       type: 'OMR',
       date: { $gte: sevenDaysAgo },
+      studentId: { $in: assignedStudentIds },
     };
     if (teacherSubject !== 'All') {
-      scanCountQuery.subject = teacherSubject;
+      if (teacherSubject === 'Reading') {
+        scanCountQuery.subject = { $in: ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'] };
+      } else {
+        scanCountQuery.subject = teacherSubject;
+      }
     }
 
     const recentScans = await Assessment.countDocuments(scanCountQuery);
 
-    // 4. Pending Reviews (only pending/partial items needing teacher action)
+    // 4. Pending Reviews scoped strictly to teacher's subject and assigned students
     let pendingReviews = 0;
-    if (teacherSubject === 'Reading' || teacherSubject === 'All') {
+    if (teacherSubject === 'Reading' || teacherSubject === 'English' || teacherSubject === 'Filipino') {
       pendingReviews = await Assessment.countDocuments({
         type: 'READING_FLUENCY',
         status: 'pending',
+        studentId: { $in: assignedStudentIds },
+      });
+    } else if (teacherSubject === 'All') {
+      pendingReviews = await Assessment.countDocuments({
+        $or: [
+          { type: 'READING_FLUENCY', status: 'pending' },
+          { status: 'pending' },
+          { gradingStatus: 'partial' },
+        ],
+        studentId: { $in: assignedStudentIds },
       });
     } else {
       pendingReviews = await Assessment.countDocuments({
         subject: teacherSubject,
-        $or: [{ gradingStatus: 'partial' }, { status: 'pending' }],
+        status: 'pending',
+        studentId: { $in: assignedStudentIds },
       });
     }
 
     const [chartData, recentScansTable] = await Promise.all([
-      buildChartData(teacherSubject),
-      buildRecentScans(teacherSubject),
+      buildChartData(teacherSubject, assignedStudentIds),
+      buildRecentScans(teacherSubject, assignedStudentIds),
     ]);
 
     return ok({
