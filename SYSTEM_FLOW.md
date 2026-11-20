@@ -101,12 +101,14 @@ flowchart TB
 
 ## 3. Role-Based Access Control (RBAC) Matrix
 
-| Role              | Access Scope                   | Primary Landing                   | Responsibilities                                                                                                                                           |
-| :---------------- | :----------------------------- | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`teacher`**     | Assigned Subject & Sections    | `/dashboard`                      | Generate & print OMR questionnaires, scan bubble sheets, grade written items, administer Phil-IRI reading fluency, track skill gaps, assign interventions. |
-| **`student`**     | Self Record & Assigned Quizzes | `/student`                        | Complete assigned quizzes, record oral reading passages, take reading comprehension tests, complete learning recovery tasks.                               |
-| **`principal`**   | School-Wide (DepEd GAIIS)      | `/principal`                      | School-wide mastery analytics, at-risk student monitoring, Phil-IRI reading distribution donuts, K-Means subject clusters, user management, audit trails.  |
-| **`coordinator`** | Curriculum & School Operations | `/coordinator/learning-materials` | Upload official DepEd ARAL workbooks, configure session page directories, oversee teacher/student accounts, monitor curriculum alignment.                  |
+| Role | Access Scope | Primary Landing | Responsibilities |
+| :--- | :----------- | :-------------- | :--------------- |
+
+------------------------------------------------------------------------------------------------------ |
+| **`teacher`** | Assigned Subject & Sections | `/dashboard` | Generate & print OMR questionnaires, scan bubble sheets, grade written items, administer Phil-IRI reading fluency, track skill gaps, assign interventions. |
+| **`student`** | Self Record & Assigned Quizzes | `/student` | Complete assigned quizzes, record oral reading passages, take reading comprehension tests, complete learning recovery tasks. |
+| **`principal`** | School-Wide (DepEd GAIIS) | `/principal` | School-wide mastery analytics, at-risk student monitoring, Phil-IRI reading distribution donuts, K-Means subject clusters, user management, audit trails. |
+| **`coordinator`** | Curriculum & School Operations | `/coordinator/learning-materials` | Upload official DepEd ARAL workbooks, configure session page directories, oversee teacher/student accounts, monitor curriculum alignment. |
 
 ---
 

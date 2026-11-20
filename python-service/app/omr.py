@@ -284,42 +284,52 @@ def find_bubble_grid(warped_gray: np.ndarray,
     """
     h, w = warped_gray.shape
 
-    # 1. Primary bubble detection via Hough Circle Transform
+    # 0. Pre-process: CLAHE normalize to handle uneven lighting for detection
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    equalized = clahe.apply(warped_gray)
+
+    # 1. Primary bubble detection via Hough Circle Transform (on both raw and CLAHE)
     blurred = cv2.GaussianBlur(warped_gray, (5, 5), 0)
-    hc = cv2.HoughCircles(
-        blurred, cv2.HOUGH_GRADIENT,
-        dp=1, minDist=18, param1=50, param2=18, minRadius=10, maxRadius=32
-    )
+    blurred_eq = cv2.GaussianBlur(equalized, (5, 5), 0)
 
     all_bubbles: list[tuple[int, int, int]] = []
-    if hc is not None:
-        for pt in hc[0]:
-            cx, cy, r = int(pt[0]), int(pt[1]), int(pt[2])
-            if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
-                all_bubbles.append((cx, cy, r))
+
+    for src in [blurred, blurred_eq]:
+        hc = cv2.HoughCircles(
+            src, cv2.HOUGH_GRADIENT,
+            dp=1, minDist=18, param1=50, param2=18, minRadius=10, maxRadius=32
+        )
+        if hc is not None:
+            for pt in hc[0]:
+                cx, cy, r = int(pt[0]), int(pt[1]), int(pt[2])
+                if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
+                    if not any(abs(cx - b[0]) <= 8 and abs(cy - b[1]) <= 8 for b in all_bubbles):
+                        all_bubbles.append((cx, cy, r))
 
     # 2. Combined with contour detection to capture shaded/faint bubbles
-    _, binary = cv2.threshold(warped_gray, 140, 255, cv2.THRESH_BINARY_INV)
-    contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < 150 or area > 1400:
-            continue
-        p = cv2.arcLength(cnt, True)
-        if p == 0:
-            continue
-        circ = 4 * np.pi * area / (p * p)
-        if circ < 0.35:
-            continue
-        M = cv2.moments(cnt)
-        if M["m00"] == 0:
-            continue
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        r = int(np.sqrt(area / np.pi))
-        if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
-            if not any(abs(cx - b[0]) <= 10 and abs(cy - b[1]) <= 10 for b in all_bubbles):
-                all_bubbles.append((cx, cy, r))
+    # Use multiple threshold levels to catch both light pencil and dark pen marks
+    for thresh_val in [140, 160, 120]:
+        _, binary = cv2.threshold(warped_gray, thresh_val, 255, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < 150 or area > 1400:
+                continue
+            p = cv2.arcLength(cnt, True)
+            if p == 0:
+                continue
+            circ = 4 * np.pi * area / (p * p)
+            if circ < 0.35:
+                continue
+            M = cv2.moments(cnt)
+            if M["m00"] == 0:
+                continue
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            r = int(np.sqrt(area / np.pi))
+            if 0.08 * h < cy < 0.98 * h and 0.04 * w < cx < 0.96 * w:
+                if not any(abs(cx - b[0]) <= 8 and abs(cy - b[1]) <= 8 for b in all_bubbles):
+                    all_bubbles.append((cx, cy, r))
 
     if not all_bubbles:
         return []
@@ -466,73 +476,163 @@ def find_bubble_grid(warped_gray: np.ndarray,
 
 # ── Bubble Reading ──────────────────────────────────────────────────────────────
 
+def _snap_bubble_center(warped_gray: np.ndarray, cx: int, cy: int,
+                         radius: int, search_px: int = 8) -> tuple[int, int]:
+    """
+    Sub-pixel center snapping: search a ±search_px window around the nominal
+    center and snap to the pixel with the highest local dark-mass concentration.
+    This corrects for 5-15 px drift caused by perspective warp inaccuracies.
+    """
+    h, w = warped_gray.shape
+    r = max(int(radius * 0.6), 4)
+    best_cx, best_cy = cx, cy
+    best_score = float('inf')
+
+    for dy in range(-search_px, search_px + 1, 2):
+        for dx in range(-search_px, search_px + 1, 2):
+            nx, ny = cx + dx, cy + dy
+            y1 = max(0, ny - r)
+            y2 = min(h, ny + r)
+            x1 = max(0, nx - r)
+            x2 = min(w, nx + r)
+            roi = warped_gray[y1:y2, x1:x2]
+            if roi.size == 0:
+                continue
+            score = float(np.mean(roi))  # lower = darker = better centered on a filled mark
+            if score < best_score:
+                best_score = score
+                best_cx, best_cy = nx, ny
+
+    return best_cx, best_cy
+
+
+def _clahe_normalize(warped_gray: np.ndarray) -> np.ndarray:
+    """
+    Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to normalize
+    uneven lighting across the sheet — handles phone camera shadows, glare,
+    and variable column illumination.
+    """
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(warped_gray)
+
+
 def read_bubbles(warped_gray: np.ndarray,
                   grid: list[list[tuple[int, int, int, int]]]) -> list[Optional[int]]:
     """
     For each question in the grid, determine which bubble(s) are filled.
     Returns a list of answers: index of filled option (0=A, 1=B, 2=C, 3=D) or None.
 
-    Calculates the mean grayscale pixel intensity (0-255) of the inner circular disk
-    for each bubble and uses relative darkness (darkest vs median of others) to detect answers.
+    Uses adaptive local contrast comparison with sub-pixel center snapping and
+    CLAHE-normalized intensity to handle pen/pencil marks, variable lighting,
+    shadows, and slight perspective misalignment.
     """
     h, w = warped_gray.shape
+
+    # Pre-process: normalize lighting across the entire sheet
+    normalized = _clahe_normalize(warped_gray)
+
     answers = []
-    DIFF_THRESHOLD = 25.0   # Grayscale intensity difference threshold (0-255)
-    RATIO_THRESHOLD = 1.25  # Darker ratio compared to median of other bubbles
+
+    # Adaptive thresholds — deliberately lenient for pen/pencil marks
+    DIFF_THRESHOLD = 15.0    # Grayscale intensity difference (lowered from 25)
+    RATIO_THRESHOLD = 1.12   # Darker ratio vs median of others (lowered from 1.25)
+    # Absolute darkness gate: a filled bubble must have mean intensity < this
+    # on the CLAHE-normalized image (prevents false positives on uniformly dark areas)
+    ABS_DARK_CEILING = 210.0
 
     for question_bubbles in grid:
-        intensities = []
-        for cx, cy, radius, _ in question_bubbles:
-            # Sample the inner disk of the bubble (75% radius to avoid outer border ring)
-            r = max(int(radius * 0.75), 5)
-            y1 = max(0, cy - r)
-            y2 = min(h, cy + r)
-            x1 = max(0, cx - r)
-            x2 = min(w, cx + r)
+        intensities_raw = []
+        intensities_norm = []
+        snapped_centers = []
 
-            roi = warped_gray[y1:y2, x1:x2]
-            if roi.size == 0:
-                intensities.append(255.0)
+        for cx, cy, radius, _ in question_bubbles:
+            # 1. Snap center to actual darkest local region (corrects warp drift)
+            snapped_cx, snapped_cy = _snap_bubble_center(normalized, cx, cy, radius, search_px=8)
+            snapped_centers.append((snapped_cx, snapped_cy))
+
+            # 2. Sample the inner disk (70% radius to avoid outer border ring)
+            r = max(int(radius * 0.70), 5)
+            y1 = max(0, snapped_cy - r)
+            y2 = min(h, snapped_cy + r)
+            x1 = max(0, snapped_cx - r)
+            x2 = min(w, snapped_cx + r)
+
+            # Measure on BOTH raw and CLAHE-normalized images
+            roi_raw = warped_gray[y1:y2, x1:x2]
+            roi_norm = normalized[y1:y2, x1:x2]
+
+            if roi_raw.size == 0:
+                intensities_raw.append(255.0)
+                intensities_norm.append(255.0)
                 continue
 
             # Circular mask: only measure pixels inside the inner bubble disk
-            yy, xx = np.ogrid[:roi.shape[0], :roi.shape[1]]
-            mask = (xx - (cx - x1)) ** 2 + (yy - (cy - y1)) ** 2 <= r * r
-            disk = roi[mask]
-            if disk.size == 0:
-                intensities.append(255.0)
+            yy, xx = np.ogrid[:roi_raw.shape[0], :roi_raw.shape[1]]
+            mask = (xx - (snapped_cx - x1)) ** 2 + (yy - (snapped_cy - y1)) ** 2 <= r * r
+            disk_raw = roi_raw[mask]
+            disk_norm = roi_norm[mask]
+
+            if disk_raw.size == 0:
+                intensities_raw.append(255.0)
+                intensities_norm.append(255.0)
                 continue
 
-            # Mean grayscale intensity (0 = black/shaded, 255 = white/unshaded)
-            mean_intensity = float(np.mean(disk))
-            intensities.append(mean_intensity)
+            # Use the lower 60th percentile of pixel values (ignores specular highlights
+            # and partial un-filled areas — focuses on the darkest ink region)
+            sorted_raw = np.sort(disk_raw)
+            sorted_norm = np.sort(disk_norm)
+            cutoff = max(1, int(len(sorted_raw) * 0.6))
+            mean_raw = float(np.mean(sorted_raw[:cutoff]))
+            mean_norm = float(np.mean(sorted_norm[:cutoff]))
 
-        if len(intensities) < OPTIONS_PER_Q:
+            intensities_raw.append(mean_raw)
+            intensities_norm.append(mean_norm)
+
+        if len(intensities_norm) < OPTIONS_PER_Q:
             answers.append(None)
             continue
 
-        sorted_indices = np.argsort(intensities)
+        # --- Decision logic using BOTH raw and normalized intensities ---
+
+        # Primary: use normalized intensities (handles lighting variation)
+        sorted_indices = np.argsort(intensities_norm)
         darkest_idx = int(sorted_indices[0])
         runner_up_idx = int(sorted_indices[1])
 
-        i_dark = intensities[darkest_idx]
-        i_runner = intensities[runner_up_idx]
+        i_dark_norm = intensities_norm[darkest_idx]
+        i_runner_norm = intensities_norm[runner_up_idx]
 
-        other_3 = [intensities[i] for i in range(OPTIONS_PER_Q) if i != darkest_idx]
-        other_median = float(np.median(other_3))
+        other_3_norm = [intensities_norm[i] for i in range(OPTIONS_PER_Q) if i != darkest_idx]
+        other_median_norm = float(np.median(other_3_norm))
 
-        diff = other_median - i_dark
-        ratio = other_median / max(i_dark, 1.0)
+        diff_norm = other_median_norm - i_dark_norm
+        ratio_norm = other_median_norm / max(i_dark_norm, 1.0)
 
-        # The selected answer must be significantly darker than the median of the other 3 bubbles
-        is_dark_enough = (diff > DIFF_THRESHOLD) or (ratio >= RATIO_THRESHOLD)
+        # Secondary: cross-check on raw intensities
+        i_dark_raw = intensities_raw[darkest_idx]
+        other_3_raw = [intensities_raw[i] for i in range(OPTIONS_PER_Q) if i != darkest_idx]
+        other_median_raw = float(np.median(other_3_raw))
+        diff_raw = other_median_raw - i_dark_raw
+        ratio_raw = other_median_raw / max(i_dark_raw, 1.0)
 
-        # Ambiguous multi-fill check: if the runner-up is also significantly darker than the rest
-        remaining_2 = [intensities[i] for i in range(OPTIONS_PER_Q) if i not in (darkest_idx, runner_up_idx)]
+        # Accept if EITHER normalized OR raw channel shows clear separation
+        is_dark_enough = (
+            (diff_norm > DIFF_THRESHOLD) or
+            (ratio_norm >= RATIO_THRESHOLD) or
+            (diff_raw > DIFF_THRESHOLD) or
+            (ratio_raw >= RATIO_THRESHOLD)
+        )
+
+        # Absolute darkness gate: the darkest bubble must actually be reasonably dark
+        # (prevents selecting a bubble when ALL bubbles are blank/white)
+        is_absolutely_dark = i_dark_norm < ABS_DARK_CEILING
+
+        # Ambiguous multi-fill check: if the runner-up is also significantly darker
+        remaining_2 = [intensities_norm[i] for i in range(OPTIONS_PER_Q) if i not in (darkest_idx, runner_up_idx)]
         rem_median = float(np.median(remaining_2)) if remaining_2 else 255.0
-        is_double_fill = (rem_median - i_runner > DIFF_THRESHOLD) and (i_runner - i_dark < 15.0)
+        is_double_fill = (rem_median - i_runner_norm > DIFF_THRESHOLD) and (i_runner_norm - i_dark_norm < 10.0)
 
-        if is_dark_enough and not is_double_fill:
+        if is_dark_enough and is_absolutely_dark and not is_double_fill:
             answers.append(darkest_idx)
         else:
             answers.append(None)

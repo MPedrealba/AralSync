@@ -2371,8 +2371,29 @@ function OMRWorkstationContent() {
 
             <div className="relative aspect-4/3 w-full bg-black overflow-hidden flex items-center justify-center">
               <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
-              {/* Corner guide overlay */}
-              <div className="pointer-events-none absolute inset-8 rounded-xl border-2 border-dashed border-white/40" />
+
+              {/* Floating Helper Badge */}
+              <div className="pointer-events-none absolute top-3 z-10 flex items-center gap-1.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11px] font-semibold text-emerald-300 backdrop-blur-md shadow-lg border border-emerald-500/30">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Align the 4 sheet corners inside the green brackets</span>
+              </div>
+
+              {/* Aspect-Ratio-Locked (Letter/A4 1:1.3) Viewfinder Guide Box */}
+              <div className="pointer-events-none absolute inset-y-4 w-auto aspect-[1/1.3] max-w-[85%] flex items-center justify-center">
+                <div className="relative h-full w-full">
+                  {/* Top-Left Bracket ⌜ */}
+                  <div className="absolute top-0 left-0 h-8 w-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  {/* Top-Right Bracket ⌝ */}
+                  <div className="absolute top-0 right-0 h-8 w-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  {/* Bottom-Left Bracket ⌞ */}
+                  <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  {/* Bottom-Right Bracket ⌟ */}
+                  <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-emerald-400 rounded-br-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+
+                  {/* Subtle inner framing line */}
+                  <div className="absolute inset-0 border border-emerald-400/20 rounded-md" />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between bg-slate-900 px-5 py-4">
