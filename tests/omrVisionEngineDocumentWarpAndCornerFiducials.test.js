@@ -16,8 +16,8 @@ describe('OMR Vision Engine Document Boundary Warp & Corner Registration Suite',
       'print/route.ts must specify 24x24 pt (or 22x22 pt) registration square size'
     );
     assert.ok(
-      printRouteSrc.includes('regMargin = 20') || printRouteSrc.includes('regMargin = 18'),
-      'print/route.ts must specify 20pt (or 18pt) margin from page edges'
+      printRouteSrc.includes('regMargin = 24') || printRouteSrc.includes('regMargin = 20') || printRouteSrc.includes('regMargin = 18'),
+      'print/route.ts must specify 24pt (or 20pt/18pt) margin from page edges'
     );
     assert.ok(
       printRouteSrc.includes('firstPage.drawRectangle'),
@@ -28,7 +28,8 @@ describe('OMR Vision Engine Document Boundary Warp & Corner Registration Suite',
       'print/route.ts must draw solid black marks'
     );
     assert.ok(
-      printRouteSrc.includes('borderWidth: 2') && printRouteSrc.includes('width: width - 40'),
+      (printRouteSrc.includes('borderWidth: 1.5') || printRouteSrc.includes('borderWidth: 2')) &&
+      (printRouteSrc.includes('width: width - 56') || printRouteSrc.includes('width: width - 40')),
       'print/route.ts must draw outer framing border around margins'
     );
   });

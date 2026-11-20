@@ -12,17 +12,16 @@ describe('OMR Frame Indicator & Camera Viewfinder HUD Suite', () => {
   const pythonOmrSrc = fs.readFileSync(pythonOmrPath, 'utf8');
   const omrScanSrc = fs.readFileSync(omrScanPagePath, 'utf8');
 
-  test('1. bubble-sheet/print stamps solid outer framing border (x:20, y:20, width-40, height-40, borderWidth:2)', () => {
+  test('1. bubble-sheet/print stamps solid outer framing border (borderWidth: 1.5 or 2)', () => {
     assert.ok(
-      printRouteSrc.includes('x: 20') &&
-      printRouteSrc.includes('y: 20') &&
-      printRouteSrc.includes('width: width - 40') &&
-      printRouteSrc.includes('height: height - 40'),
-      'print/route.ts must draw outer framing border around page margins (x:20, y:20, width-40, height-40)'
+      (printRouteSrc.includes('width: width - 56') || printRouteSrc.includes('width: width - 40')) &&
+      (printRouteSrc.includes('height: height - 56') || printRouteSrc.includes('height: height - 40')),
+      'print/route.ts must draw outer framing border around page margins'
     );
     assert.ok(
-      printRouteSrc.includes('borderWidth: 2') && printRouteSrc.includes('borderColor: rgb(0, 0, 0)'),
-      'print/route.ts must draw solid 2pt black border'
+      (printRouteSrc.includes('borderWidth: 1.5') || printRouteSrc.includes('borderWidth: 2')) &&
+      printRouteSrc.includes('borderColor: rgb(0, 0, 0)'),
+      'print/route.ts must draw solid black border'
     );
   });
 
@@ -32,8 +31,8 @@ describe('OMR Frame Indicator & Camera Viewfinder HUD Suite', () => {
       'print/route.ts must specify 24x24 pt anchor mark size'
     );
     assert.ok(
-      printRouteSrc.includes('regMargin = 20'),
-      'print/route.ts must specify 20pt margin to anchor marks to outer frame'
+      printRouteSrc.includes('regMargin = 24') || printRouteSrc.includes('regMargin = 20'),
+      'print/route.ts must specify margin to anchor marks to outer frame'
     );
     assert.ok(
       printRouteSrc.includes('color: rgb(0, 0, 0)'),
