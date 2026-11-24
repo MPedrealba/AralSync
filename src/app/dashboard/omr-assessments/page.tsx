@@ -3115,9 +3115,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   // Strictly filter learning materials so only materials matching the selected grade appear
   const availableMaterials = useMemo(() => {
     return learningMaterials.filter((m) => {
-      const matchSubj = subject === "All" || m.subject === subject || m.subject === "General";
+      const isReadingQuery = ["Reading", "English", "Filipino", "English & Filipino"].includes(subject);
+      const isReadingMaterial = ["Reading", "English", "Filipino", "English & Filipino", "General", "All"].includes(m.subject);
+      const matchSubj =
+        subject === "All" ||
+        m.subject === "General" ||
+        m.subject === "All" ||
+        (isReadingQuery && isReadingMaterial) ||
+        m.subject === subject;
+
       let matchGrade = false;
-      if (Array.isArray(m.gradeLevels) && m.gradeLevels.length > 0) {
+      if (!m.gradeLevels || (Array.isArray(m.gradeLevels) && m.gradeLevels.length === 0)) {
+        matchGrade = true;
+      } else if (Array.isArray(m.gradeLevels) && m.gradeLevels.length > 0) {
         const titleMatch = m.title?.match(/Grade[s]?\s*(\d+)(?:\s*(?:to|&|-)\s*(\d+))?/i);
         if (titleMatch) {
           const start = Number(titleMatch[1]);

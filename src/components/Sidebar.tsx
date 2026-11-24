@@ -59,6 +59,7 @@ const allNavSections = [
   {
     label: "INTERVENTIONS & GRADES",
     items: [
+      { name: "Learning Materials", href: "/dashboard/learning-materials", icon: BookOpen },
       { name: "Interventions & Tasks", href: "/dashboard/interventions", icon: BookMarked },
       { name: "e-Class Record Matrix", href: "/dashboard/interventions?tab=matrix", icon: FileSpreadsheet },
     ],
@@ -99,6 +100,7 @@ const filipinoNavSections = [
   {
     label: "INTERBENSYON AT MARKA",
     items: [
+      { name: "Mga Kagamitan sa Pagkatuto", href: "/dashboard/learning-materials?stream=filipino", icon: BookOpen },
       { name: "Interbensyon", href: "/dashboard/interventions?stream=filipino", icon: BookMarked },
       { name: "e-Class Record Matrix", href: "/dashboard/interventions?tab=matrix&stream=filipino", icon: FileSpreadsheet },
     ],

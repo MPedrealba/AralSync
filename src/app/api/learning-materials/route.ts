@@ -5,6 +5,32 @@ import connectDB from '../../../../database/db';
 import LearningMaterial from '../../../../models/LearningMaterial';
 import { ensureDefaultLearningMaterials } from '@/lib/learningMaterialsSeed';
 
+function expandSubject(subject: string): string[] | null {
+  const s = subject.trim();
+  if (!s || s === 'All') return null;
+  const sLower = s.toLowerCase();
+  if (['reading', 'english', 'filipino', 'english & filipino'].includes(sLower)) {
+    return [
+      'Reading',
+      'English',
+      'Filipino',
+      'English & Filipino',
+      'Reading - English',
+      'Reading - Filipino',
+      'Literacy',
+      'All',
+      'General',
+    ];
+  }
+  if (['math', 'mathematics'].includes(sLower)) {
+    return ['Math', 'Mathematics', 'Numeracy', 'All', 'General'];
+  }
+  if (sLower === 'science') {
+    return ['Science', 'All', 'General'];
+  }
+  return [s, 'All', 'General'];
+}
+
 /**
  * GET /api/learning-materials
  * Returns learning materials matching filters for teacher dropdowns, OMR tools, and student viewing.
@@ -33,56 +59,62 @@ export async function GET(req: NextRequest) {
     const editionParam = searchParams.get('edition');
     const searchParam = (searchParams.get('search') || '').trim();
 
-    const query: Record<string, any> = {};
+    const andConditions: any[] = [];
 
     // Active status filter
     if (activeParam === 'false') {
-      query.isActive = false;
+      andConditions.push({ isActive: false });
     } else if (activeParam === 'all') {
       // no active filter
     } else {
-      query.isActive = true;
+      andConditions.push({ isActive: true });
     }
 
-    // Subject filter
+    // Subject Normalization & Bridging
     if (subjectParam && subjectParam !== 'All') {
-      query.$or = [
-        { subject: subjectParam },
-        { subject: 'All' },
-        { subject: 'General' },
-      ];
+      const subjectList = expandSubject(subjectParam);
+      if (subjectList && subjectList.length > 0) {
+        andConditions.push({ subject: { $in: subjectList } });
+      }
     }
 
-    // Key Stage filter (High School KS3 / General only, exclude legacy elementary)
-    if (keyStageParam && keyStageParam !== 'All' && keyStageParam !== 'General') {
-      query.keyStage = { $in: [keyStageParam, 'General'] };
-    } else {
-      query.keyStage = { $nin: ['KS1', 'KS2'] };
+    // Relaxed Key Stage filter: only filter if explicitly requested
+    if (keyStageParam && keyStageParam !== 'All') {
+      if (keyStageParam === 'General') {
+        andConditions.push({ keyStage: 'General' });
+      } else {
+        andConditions.push({ keyStage: { $in: [keyStageParam, 'General'] } });
+      }
     }
 
-    // Grade level filter
+    // Flexible Grade level filter (matches specified grade OR empty/null/general)
     if (gradeParam) {
       const gNum = Number(gradeParam);
       if (!Number.isNaN(gNum)) {
-        query.$or = query.$or || [];
-        query.gradeLevels = { $in: [gNum] };
+        andConditions.push({
+          $or: [
+            { gradeLevels: { $in: [gNum] } },
+            { gradeLevels: { $size: 0 } },
+            { gradeLevels: { $exists: false } },
+            { keyStage: 'General' },
+          ],
+        });
       }
     }
 
     // Type filter
     if (typeParam && typeParam !== 'All') {
-      query.type = typeParam;
+      andConditions.push({ type: typeParam });
     }
 
     // Edition filter
     if (editionParam && editionParam !== 'All') {
-      query.edition = editionParam;
+      andConditions.push({ edition: editionParam });
     }
 
     // Keyword search
     if (searchParam) {
-      query.$and = query.$and || [];
-      query.$and.push({
+      andConditions.push({
         $or: [
           { title: { $regex: searchParam, $options: 'i' } },
           { edition: { $regex: searchParam, $options: 'i' } },
@@ -91,6 +123,8 @@ export async function GET(req: NextRequest) {
         ],
       });
     }
+
+    const query = andConditions.length > 0 ? { $and: andConditions } : {};
 
     const materials = await LearningMaterial.find(query)
       .sort({ keyStage: 1, type: 1, title: 1 })

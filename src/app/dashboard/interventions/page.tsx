@@ -263,7 +263,9 @@ export default function InterventionsPage() {
 
   const loadMaterialsForSubject = useCallback(async (subj: string) => {
     try {
-      const querySubj = subj !== "All" ? `&subject=${encodeURIComponent(subj)}` : "";
+      const isReadingSubj = ["Reading", "English", "Filipino", "English & Filipino"].includes(subj);
+      const normalizedSubj = isReadingSubj ? "Reading" : subj;
+      const querySubj = normalizedSubj !== "All" ? `&subject=${encodeURIComponent(normalizedSubj)}` : "";
       const res = await fetch(`/api/learning-materials?active=true${querySubj}`);
       const json = await parseJsonResponse(res);
       if (json.success && Array.isArray(json.data)) {
@@ -450,6 +452,22 @@ export default function InterventionsPage() {
       loadSubmissions(qAssignmentId);
     }
   }, [searchParams, loadSubmissions]);
+
+  // Support ?attachMaterial=<id> to auto-open Create Assignment modal with that material selected
+  useEffect(() => {
+    const qAttachMaterial = searchParams.get("attachMaterial");
+    if (qAttachMaterial) {
+      setIsCreateOpen(true);
+      setSelectedMaterialId(qAttachMaterial);
+      const found = learningMaterials.find((m) => m._id === qAttachMaterial);
+      if (found) {
+        setCreateWorkbookUrl(found.fileUrl);
+        if (found.subject && ["Reading", "Math", "Science"].includes(found.subject)) {
+          setCreateSubject(found.subject as "Reading" | "Math" | "Science");
+        }
+      }
+    }
+  }, [searchParams, learningMaterials]);
 
   // Switch to View B for an assignment
   const openAssignment = (assignment: AssignmentGroup) => {
