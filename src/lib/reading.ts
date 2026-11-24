@@ -1072,8 +1072,32 @@ export interface CompQuestion {
 }
 
 /**
+ * Automatically cleans passage text to strip web scrapings, URLs, and trailing citation lines.
+ */
+export function cleanPassageText(text: string): string {
+  if (!text) return '';
+  return text
+    // Strip "source https://..." or "source http://..."
+    .replace(/source\s+https?:\/\/\S+/gi, '')
+    // Strip standard URLs
+    .replace(/https?:\/\/\S+/gi, '')
+    // Strip www. links
+    .replace(/\b(?:www\.)\S+/gi, '')
+    // Clean out trailing citation strings like "source https www public domain poetry com madison julius cawein..."
+    .replace(/\bsource\s+(?:https?|www)\s+[a-z0-9\s.-]+$/gi, '')
+    .replace(/\bsource\s+https?\s+www[\s\S]*$/gi, '')
+    .replace(/\b(?:source|adapted from|retrieved from)\s+https?[\s\S]*$/gi, '')
+    .replace(/\b(?:source|citation|adapted from|retrieved from)\s*[:\s]+(?:https?:\/\/|www\.)\S+/gi, '')
+    .replace(/\n\s*(?:source|citation|adapted from|retrieved from):?.*$/gim, '')
+    .trim();
+}
+
+/**
  * Loads or compiles the official 5–8 Phil-IRI comprehension questions for an oral reading passage.
- * Automatically distributes questions across Literal, Inferential, and Critical domains.
+ * Automatically guarantees an even distribution:
+ * - Questions 1 & 2: Literal (Direct facts from passage)
+ * - Questions 3 & 4: Inferential (Cause & effect, vocabulary, feelings)
+ * - Questions 5 & 6: Critical (Theme, main lesson, author's perspective)
  */
 export function compilePassageComprehensionQuestions(
   passageQuestions: Array<{ question: string; options?: string[]; answer?: string; category?: string }> | undefined,
@@ -1081,8 +1105,9 @@ export function compilePassageComprehensionQuestions(
   passageTitle: string = 'Reading Selection',
   targetCount: number = 6
 ): CompQuestion[] {
+  const cleanedText = cleanPassageText(passageText);
   const cleanTitle = (passageTitle || 'the selection').replace(/\s+/g, ' ').trim();
-  const sentences = passageText
+  const sentences = cleanedText
     .split(/(?<=[.?!])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 15);
@@ -1091,12 +1116,13 @@ export function compilePassageComprehensionQuestions(
   const middleSentence = sentences[Math.floor(sentences.length / 2)] || 'The events develop through interconnected stages.';
   const lastSentence = sentences[sentences.length - 1] || 'The selection concludes with an important reflection.';
 
-  const results: CompQuestion[] = [];
-  const count = Math.max(5, Math.min(8, targetCount));
+  const literalPool: CompQuestion[] = [];
+  const inferentialPool: CompQuestion[] = [];
+  const criticalPool: CompQuestion[] = [];
 
   // 1. Ingest existing passage questions if available
   if (Array.isArray(passageQuestions) && passageQuestions.length > 0) {
-    for (let i = 0; i < passageQuestions.length && results.length < count; i++) {
+    for (let i = 0; i < passageQuestions.length; i++) {
       const pq = passageQuestions[i];
       if (!pq?.question) continue;
       const qText = pq.question.trim();
@@ -1111,7 +1137,8 @@ export function compilePassageComprehensionQuestions(
         qLower.includes('opinion') ||
         qLower.includes('purpose') ||
         qLower.includes('apply') ||
-        qLower.includes('author')
+        qLower.includes('author') ||
+        qLower.includes('pananaw')
       ) {
         cat = 'Critical';
       } else if (
@@ -1121,6 +1148,8 @@ export function compilePassageComprehensionQuestions(
         qLower.includes('cause') ||
         qLower.includes('imply') ||
         qLower.includes('conclude') ||
+        qLower.includes('feeling') ||
+        qLower.includes('feel') ||
         qLower.includes('bunga') ||
         qLower.includes('dahilan')
       ) {
@@ -1129,74 +1158,106 @@ export function compilePassageComprehensionQuestions(
         cat = 'Literal';
       }
 
-      results.push({
-        id: results.length + 1,
+      const qItem: CompQuestion = {
+        id: 0,
         question: qText,
         options: Array.isArray(pq.options) && pq.options.length ? pq.options : undefined,
         answer: pq.answer || (Array.isArray(pq.options) && pq.options[0]) || firstSentence,
         category: cat,
-      });
+      };
+
+      if (cat === 'Literal') literalPool.push(qItem);
+      else if (cat === 'Inferential') inferentialPool.push(qItem);
+      else criticalPool.push(qItem);
     }
   }
 
-  // 2. Synthesize additional high-quality benchmark questions across Literal, Inferential, and Critical if needed
-  const benchmarkTemplates: Array<{ q: string; a: string; cat: 'Literal' | 'Inferential' | 'Critical' }> = [
+  // 2. Synthesize benchmark templates for each category
+  // Literal (Direct facts from passage)
+  const literalTemplates: Array<{ q: string; a: string }> = [
     {
       q: `Based directly on the passage "${cleanTitle}", what is the primary subject or central event described?`,
       a: firstSentence,
-      cat: 'Literal',
     },
+    {
+      q: `What key fact or condition is explicitly highlighted regarding how the events unfold?`,
+      a: middleSentence,
+    },
+    {
+      q: `According to the text, what specific detail or action takes place in "${cleanTitle}"?`,
+      a: sentences[1] || firstSentence,
+    },
+  ];
+
+  // Inferential (Cause & effect, vocabulary, feelings)
+  const inferentialTemplates: Array<{ q: string; a: string }> = [
     {
       q: `What logical cause or motive drives the actions and outcomes described in "${cleanTitle}"?`,
       a: 'The sequence of interactions and necessary conditions required to sustain the described process.',
-      cat: 'Inferential',
     },
     {
-      q: `What is the most enduring theme, lesson, or real-world insight conveyed by the author in "${cleanTitle}"?`,
-      a: lastSentence,
-      cat: 'Critical',
+      q: `What feelings, reactions, or consequences can be inferred from the situation described in the passage?`,
+      a: 'The characters or subjects exhibit heightened awareness and adaptation to their circumstances.',
     },
     {
-      q: `What key fact or condition is highlighted regarding how the events unfold?`,
-      a: middleSentence,
-      cat: 'Literal',
-    },
-    {
-      q: `What would most likely happen if the key factors or resources described in the selection were removed?`,
+      q: `What would most likely happen if the key factors or conditions described in "${cleanTitle}" were altered?`,
       a: 'The progression would break down, producing deficiency or failure in the dependent system.',
-      cat: 'Inferential',
+    },
+  ];
+
+  // Critical (Theme, main lesson, author's perspective)
+  const criticalTemplates: Array<{ q: string; a: string }> = [
+    {
+      q: `What is the most enduring theme, main lesson, or real-world insight conveyed by the author in "${cleanTitle}"?`,
+      a: lastSentence,
     },
     {
-      q: `How can a student apply the ideas in this selection to practical responsibilities in school or community?`,
+      q: `From the author's perspective, how can a reader apply the central values or insights of "${cleanTitle}" to real life?`,
       a: 'By making informed, thoughtful decisions that maintain balance, safety, and cooperation.',
-      cat: 'Critical',
     },
     {
-      q: `How does the author support the credibility and factual clarity of the ideas in "${cleanTitle}"?`,
+      q: `How does the author's viewpoint and presentation support the overall significance of "${cleanTitle}"?`,
       a: 'By presenting concrete descriptive details, orderly progression, and verifiable observations.',
-      cat: 'Critical',
     },
   ];
 
-  // Ensure missing categories are prioritized so all 3 DepEd domains (Literal, Inferential, Critical) are represented
-  const existingCats = new Set(results.map((r) => r.category));
-  const prioritizedTemplates = [
-    ...benchmarkTemplates.filter((t) => !existingCats.has(t.cat)),
-    ...benchmarkTemplates.filter((t) => existingCats.has(t.cat)),
-  ];
-
-  for (const t of prioritizedTemplates) {
-    if (results.length >= count) break;
-    if (!results.some((r) => r.question.toLowerCase() === t.q.toLowerCase())) {
-      results.push({
-        id: results.length + 1,
-        question: t.q,
-        answer: t.a,
-        category: t.cat,
-      });
-      existingCats.add(t.cat);
+  for (const t of literalTemplates) {
+    if (!literalPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
+      literalPool.push({ id: 0, question: t.q, answer: t.a, category: 'Literal' });
     }
   }
 
-  return results;
+  for (const t of inferentialTemplates) {
+    if (!inferentialPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
+      inferentialPool.push({ id: 0, question: t.q, answer: t.a, category: 'Inferential' });
+    }
+  }
+
+  for (const t of criticalTemplates) {
+    if (!criticalPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
+      criticalPool.push({ id: 0, question: t.q, answer: t.a, category: 'Critical' });
+    }
+  }
+
+  // 3. Assemble with strict Phil-IRI even distribution:
+  // Questions 1 & 2: Literal (Direct facts from passage)
+  // Questions 3 & 4: Inferential (Cause & effect, vocabulary, feelings)
+  // Questions 5 & 6: Critical (Theme, main lesson, author's perspective)
+  const results: CompQuestion[] = [];
+  results.push({ ...literalPool[0], id: 1, category: 'Literal' });
+  results.push({ ...literalPool[1], id: 2, category: 'Literal' });
+  results.push({ ...inferentialPool[0], id: 3, category: 'Inferential' });
+  results.push({ ...inferentialPool[1], id: 4, category: 'Inferential' });
+  results.push({ ...criticalPool[0], id: 5, category: 'Critical' });
+  results.push({ ...criticalPool[1], id: 6, category: 'Critical' });
+
+  // If targetCount is 7 or 8, fill from remaining templates
+  if (targetCount >= 7 && literalPool[2]) {
+    results.push({ ...literalPool[2], id: 7, category: 'Literal' });
+  }
+  if (targetCount >= 8 && inferentialPool[2]) {
+    results.push({ ...inferentialPool[2], id: 8, category: 'Inferential' });
+  }
+
+  return results.slice(0, Math.max(5, Math.min(8, targetCount)));
 }

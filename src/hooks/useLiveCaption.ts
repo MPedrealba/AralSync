@@ -10,8 +10,30 @@ function normalizeWord(w: string): string {
 }
 
 /**
- * Quick fuzzy similarity for speech recognition deviations.
- * Handles minor plurals, prefixes, or 1-character typo differences.
+ * Computes standard Levenshtein distance between two normalized character sequences.
+ */
+function levenshtein(a: string, b: string): number {
+  const al = a.length;
+  const bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+
+  const row = Array.from({ length: bl + 1 }, (_, i) => i);
+  for (let i = 1; i <= al; i++) {
+    let prev = i - 1;
+    row[0] = i;
+    for (let j = 1; j <= bl; j++) {
+      const cur = a[i - 1] === b[j - 1] ? prev : Math.min(prev + 1, row[j] + 1, row[j - 1] + 1);
+      prev = row[j];
+      row[j] = cur;
+    }
+  }
+  return row[bl];
+}
+
+/**
+ * Robust fuzzy similarity using Levenshtein distance for speech recognition deviations.
+ * Tolerates stutters (hyphenated prefixes), minor inflections, and speech engine typos.
  */
 function isWordMatch(spoken: string, target: string): boolean {
   const s = normalizeWord(spoken);
@@ -19,37 +41,28 @@ function isWordMatch(spoken: string, target: string): boolean {
   if (!s || !t) return false;
   if (s === t) return true;
 
-  // Prefix match for longer words (e.g. "running" vs "run", "jump" vs "jumps")
+  // Stutter handling (e.g. "th-the", "b-ball", "d-dog")
+  if (spoken.includes("-")) {
+    const parts = spoken.split("-").map(normalizeWord).filter(Boolean);
+    if (parts.length > 0 && parts[parts.length - 1] === t) {
+      return true;
+    }
+  }
+
+  // Prefix matching for extended verb forms or plurals (e.g. "runs" vs "run")
   if (s.length >= 4 && t.length >= 4) {
     if (s.startsWith(t) || t.startsWith(s)) {
       if (Math.abs(s.length - t.length) <= 2) return true;
     }
   }
 
-  // Levenshtein distance of 1 for words length >= 4
-  if (Math.abs(s.length - t.length) <= 1 && s.length >= 4 && t.length >= 4) {
-    let diff = 0;
-    let i = 0;
-    let j = 0;
-    while (i < s.length && j < t.length) {
-      if (s[i] !== t[j]) {
-        diff++;
-        if (diff > 1) return false;
-        if (s.length > t.length) i++;
-        else if (t.length > s.length) j++;
-        else {
-          i++;
-          j++;
-        }
-      } else {
-        i++;
-        j++;
-      }
-    }
-    return true;
-  }
-
-  return false;
+  // Adaptive Levenshtein threshold:
+  // Short words (<=3 chars): exact match only
+  // Medium words (4-6 chars): max distance 1
+  // Longer words (>=7 chars): max distance 2
+  const maxLen = Math.max(s.length, t.length);
+  const maxDist = maxLen >= 7 ? 2 : maxLen >= 4 ? 1 : 0;
+  return levenshtein(s, t) <= maxDist;
 }
 
 /**
@@ -115,7 +128,8 @@ export function useLiveCaption({
   }, [passageText]);
 
   /**
-   * Aligns stream of spoken words with passage words using greedy lookahead.
+   * Aligns stream of spoken words with passage words using a sliding window Levenshtein fuzzy match (3 words).
+   * Prevents premature jumps when learner pauses, stutters, or repeats a word.
    */
   const alignSpokenWithPassage = useCallback((spokenWords: string[]) => {
     const pWords = passageWordsRef.current;
@@ -124,23 +138,31 @@ export function useLiveCaption({
     }
 
     let pIdx = 0;
-    for (const sWord of spokenWords) {
+    for (let sIdx = 0; sIdx < spokenWords.length; sIdx++) {
+      const sWord = spokenWords[sIdx];
       // Skip non-alphanumeric punctuation tokens in passage
       while (pIdx < pWords.length && !normalizeWord(pWords[pIdx])) {
         pIdx++;
       }
       if (pIdx >= pWords.length) break;
 
-      // Check current target word
+      // 1. Repetition / Stutter check: If learner repeated or hesitated on the prior word (pIdx - 1),
+      // keep current tracking position without advancing forward.
+      if (pIdx > 0 && isWordMatch(sWord, pWords[pIdx - 1])) {
+        continue;
+      }
+
+      // 2. Direct match with current passage token
       if (isWordMatch(sWord, pWords[pIdx])) {
         pIdx++;
         continue;
       }
 
-      // Forward lookahead window of up to 3 words
+      // 3. Sliding window Levenshtein fuzzy match across a 3-word window: [pIdx + 1, pIdx + 2, pIdx + 3]
       let matchedAhead = -1;
-      const lookaheadMax = Math.min(pIdx + 4, pWords.length);
-      for (let ahead = pIdx + 1; ahead < lookaheadMax; ahead++) {
+      const windowEnd = Math.min(pIdx + 4, pWords.length);
+      for (let ahead = pIdx + 1; ahead < windowEnd; ahead++) {
+        if (!normalizeWord(pWords[ahead])) continue;
         if (isWordMatch(sWord, pWords[ahead])) {
           matchedAhead = ahead;
           break;
@@ -148,18 +170,33 @@ export function useLiveCaption({
       }
 
       if (matchedAhead !== -1) {
-        // Gracefully skip forward (e.g. skipped or unpunctuated words)
+        // If there is an upcoming spoken word, verify that it also aligns ahead to prevent false jumps
+        const nextSpoken = spokenWords[sIdx + 1];
+        if (nextSpoken && matchedAhead + 1 < pWords.length) {
+          if (isWordMatch(nextSpoken, pWords[matchedAhead + 1])) {
+            pIdx = matchedAhead + 2;
+            sIdx++; // Advance spoken index as well
+            continue;
+          }
+        }
+        // Advance to matched lookahead token
         pIdx = matchedAhead + 1;
       }
     }
 
-    // The active word index is the latest completed or in-progress match
+    // Smooth active word index (latest completed or in-progress match)
     if (pIdx > 0) {
       let activeIdx = pIdx - 1;
       while (activeIdx > 0 && !normalizeWord(pWords[activeIdx])) {
         activeIdx--;
       }
-      setActiveWordIndex(activeIdx);
+      setActiveWordIndex((prev) => {
+        // Smooth transition: don't jump erratically backwards if in intermediate pause
+        if (prev >= 0 && activeIdx < prev && activeIdx >= prev - 1) {
+          return prev;
+        }
+        return activeIdx;
+      });
     }
   }, []);
 
