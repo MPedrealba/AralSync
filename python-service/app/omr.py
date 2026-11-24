@@ -680,8 +680,8 @@ def find_bubble_grid(warped_gray: np.ndarray,
                 opt_xs = nom_xs
 
             # 5-Row Vertical Anchors: Incorporate vertical gap after Items 5, 10, and 15
-            top_cands = [y for y in ys if 0.25 * h <= y <= 0.30 * h]
-            bot_cands = [y for y in ys if 0.78 * h <= y <= 0.85 * h]
+            top_cands = [y for y in ys if 0.26 * h <= y <= 0.285 * h]
+            bot_cands = [y for y in ys if 0.805 * h <= y <= 0.835 * h]
             y_top = float(np.median(top_cands)) if top_cands else nom_y_top_40
             y_bottom = float(np.median(bot_cands)) if bot_cands else nom_y_bottom_40
 
@@ -696,8 +696,8 @@ def find_bubble_grid(warped_gray: np.ndarray,
                 target_y = int(round(y_top + slot * delta_y_40))
                 q_bubbles: list[tuple[int, int, int, int]] = []
                 for opt_idx, x_coord in enumerate(opt_xs):
-                    # Local dark-mass peak snapping (8px)
-                    mc_x, mc_y = _micro_center_bubble(equalized, int(round(x_coord)), target_y, search_px=8)
+                    # Local dark-mass peak snapping (6-8px)
+                    mc_x, mc_y = _micro_center_bubble(equalized, int(round(x_coord)), target_y, search_px=6)
                     q_bubbles.append((mc_x, mc_y, radius, q_idx))
                 grid.append(q_bubbles)
                 q_idx += 1
