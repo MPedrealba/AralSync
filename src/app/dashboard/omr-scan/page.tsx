@@ -293,6 +293,7 @@ function OMRWorkstationContent() {
   // ── Camera Modal State ──
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   // ── Finalized Success & Intervention State ──
@@ -794,12 +795,65 @@ function OMRWorkstationContent() {
   const capturePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
+
+    const sourceW = video.videoWidth || 1280;
+    const sourceH = video.videoHeight || 720;
+
+    // Calculate normalized bounding box corresponding to the green viewfinder guide
+    // (inset by ~10% horizontal, ~12% vertical)
+    const insetH = 0.10;
+    const insetV = 0.12;
+    let cropX = Math.round(sourceW * insetH);
+    let cropY = Math.round(sourceH * insetV);
+    let cropW = Math.round(sourceW * (1 - 2 * insetH));
+    let cropH = Math.round(sourceH * (1 - 2 * insetV));
+
+    // Client-Side Guide-Aligned Auto-Crop: Refine with DOM bounding rect if viewfinder guide is mounted
+    if (guideRef.current) {
+      const vRect = video.getBoundingClientRect();
+      const gRect = guideRef.current.getBoundingClientRect();
+      if (vRect.width > 0 && vRect.height > 0 && gRect.width > 0 && gRect.height > 0) {
+        const scaleFactor = Math.max(vRect.width / sourceW, vRect.height / sourceH);
+        const offsetX = (sourceW * scaleFactor - vRect.width) / 2;
+        const offsetY = (sourceH * scaleFactor - vRect.height) / 2;
+        const refinedX = Math.max(0, Math.round(((gRect.left - vRect.left) + offsetX) / scaleFactor));
+        const refinedY = Math.max(0, Math.round(((gRect.top - vRect.top) + offsetY) / scaleFactor));
+        const refinedW = Math.min(sourceW - refinedX, Math.round(gRect.width / scaleFactor));
+        const refinedH = Math.min(sourceH - refinedY, Math.round(gRect.height / scaleFactor));
+        if (refinedW > 100 && refinedH > 100) {
+          cropX = refinedX;
+          cropY = refinedY;
+          cropW = refinedW;
+          cropH = refinedH;
+        }
+      }
+    }
+
+    // Clamp bounds safely within video dimensions
+    cropX = Math.max(0, Math.min(cropX, sourceW - 10));
+    cropY = Math.max(0, Math.min(cropY, sourceH - 10));
+    cropW = Math.max(10, Math.min(cropW, sourceW - cropX));
+    cropH = Math.max(10, Math.min(cropH, sourceH - cropY));
+
+    // Crop the canvas directly to this viewfinder bounding rectangle before generating the JPEG blob
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    canvas.width = cropW;
+    canvas.height = cropH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    ctx.drawImage(
+      video,
+      cropX,
+      cropY,
+      cropW,
+      cropH,
+      0,
+      0,
+      cropW,
+      cropH
+    );
+
     canvas.toBlob((blob) => {
       if (blob) {
         const file = new File([blob], `camera-omr-${Date.now()}.jpg`, { type: "image/jpeg" });
@@ -2413,49 +2467,52 @@ function OMRWorkstationContent() {
               </button>
             </div>
 
-            <div className="relative aspect-4/3 w-full bg-black overflow-hidden flex items-center justify-center">
+            <div className="relative h-[72vh] max-h-[640px] w-full aspect-[3/4] sm:aspect-[4/3] bg-black overflow-hidden flex items-center justify-center">
               <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
 
-              {/* Floating Helper Badge */}
-              <div className="pointer-events-none absolute top-3 z-10 flex items-center gap-1.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11px] font-semibold text-emerald-300 backdrop-blur-md shadow-lg border border-emerald-500/30">
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Align the 4 sheet corners inside the green brackets</span>
-              </div>
-
-              {/* Aspect-Ratio-Locked (Letter/A4 1:1.3) Viewfinder Guide Box */}
-              <div className="pointer-events-none absolute inset-y-4 w-auto aspect-[1/1.3] max-w-[85%] flex items-center justify-center">
+              {/* Aspect-Ratio-Locked (Letter/A4 1:1.35) Viewfinder Guide Box */}
+              <div
+                ref={guideRef}
+                className="pointer-events-none absolute h-[85%] w-auto aspect-[1/1.35] max-w-[85%] flex items-center justify-center"
+              >
                 <div className="relative h-full w-full">
                   {/* Top-Left Bracket ⌜ */}
-                  <div className="absolute top-0 left-0 h-8 w-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  <div className="absolute -top-1 -left-1 h-10 w-10 border-t-4 border-l-4 border-emerald-400 rounded-lg shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
                   {/* Top-Right Bracket ⌝ */}
-                  <div className="absolute top-0 right-0 h-8 w-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  <div className="absolute -top-1 -right-1 h-10 w-10 border-t-4 border-r-4 border-emerald-400 rounded-lg shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
                   {/* Bottom-Left Bracket ⌞ */}
-                  <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  <div className="absolute -bottom-1 -left-1 h-10 w-10 border-b-4 border-l-4 border-emerald-400 rounded-lg shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
                   {/* Bottom-Right Bracket ⌟ */}
-                  <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-emerald-400 rounded-br-sm shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  <div className="absolute -bottom-1 -right-1 h-10 w-10 border-b-4 border-r-4 border-emerald-400 rounded-lg shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
 
                   {/* Subtle inner framing line */}
-                  <div className="absolute inset-0 border border-emerald-400/20 rounded-md" />
+                  <div className="absolute inset-0 border border-emerald-400/20 rounded-lg" />
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between bg-slate-900 px-5 py-4">
-              <button
-                type="button"
-                onClick={stopCamera}
-                className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={capturePhoto}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-500 active:scale-95"
-              >
-                <Camera className="h-4 w-4" />
-                <span>Capture &amp; Grade</span>
-              </button>
+            <div className="flex flex-col gap-2 bg-slate-900 px-5 py-3 border-t border-slate-800">
+              <div className="flex items-center justify-center gap-1.5 py-1 text-emerald-400 text-xs font-semibold">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Align all 4 sheet corners inside the green brackets</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-500 active:scale-95"
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>Capture &amp; Grade</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

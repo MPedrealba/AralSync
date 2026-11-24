@@ -56,17 +56,18 @@ describe('OMR Frame Indicator & Camera Viewfinder HUD Suite', () => {
     );
   });
 
-  test('4. omr-scan/page.tsx displays floating helper badge: "Align the 4 sheet corners inside the green brackets"', () => {
+  test('4. omr-scan/page.tsx displays guidance hint: "Align all 4 sheet corners inside the green brackets"', () => {
     assert.ok(
+      omrScanSrc.includes('Align all 4 sheet corners inside the green brackets') ||
       omrScanSrc.includes('Align the 4 sheet corners inside the green brackets'),
-      'Camera modal must contain floating helper badge with instruction'
+      'Camera modal must contain helper guidance with corner alignment instruction'
     );
   });
 
-  test('5. omr-scan/page.tsx renders 4 emerald green corner brackets & aspect-[1/1.3] guide box', () => {
+  test('5. omr-scan/page.tsx renders 4 emerald green corner brackets & portrait guide box', () => {
     assert.ok(
-      omrScanSrc.includes('aspect-[1/1.3]'),
-      'Camera modal must center an aspect-ratio-locked (Letter/A4 1:1.3) guide box'
+      omrScanSrc.includes('aspect-[1/1.35]') || omrScanSrc.includes('aspect-[1/1.3]'),
+      'Camera modal must center an aspect-ratio-locked (Letter/A4 1:1.35) guide box'
     );
     assert.ok(
       omrScanSrc.includes('border-t-4 border-l-4 border-emerald-400') &&
