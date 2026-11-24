@@ -35,15 +35,24 @@ export async function POST(req: Request) {
     const { username, password, role } = await req.json();
 
     if (!username || !password) {
+      const missingField = !username ? "username" : "password";
       return NextResponse.json(
-        { error: "Username and password are required" },
+        {
+          success: false,
+          error: "Username and password are required",
+          field: missingField,
+        },
         { status: 400 }
       );
     }
 
     if (!role) {
       return NextResponse.json(
-        { error: "Please select your role" },
+        {
+          success: false,
+          error: "Please select your role",
+          field: "role",
+        },
         { status: 400 }
       );
     }
@@ -51,7 +60,11 @@ export async function POST(req: Request) {
     const normalizedRole = String(role).trim().toLowerCase();
     if (!ROLE_LABELS[normalizedRole]) {
       return NextResponse.json(
-        { error: "Invalid role selected" },
+        {
+          success: false,
+          error: "Invalid role selected",
+          field: "role",
+        },
         { status: 400 }
       );
     }
@@ -72,7 +85,11 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { error: "Invalid credentials" },
+        {
+          success: false,
+          error: "No account found with that username. Please verify your username or LRN.",
+          field: "username",
+        },
         { status: 401 }
       );
     }
@@ -108,7 +125,11 @@ export async function POST(req: Request) {
     }
     if (!isMatch) {
       return NextResponse.json(
-        { error: "Invalid credentials" },
+        {
+          success: false,
+          error: "Incorrect password. Please try again.",
+          field: "password",
+        },
         { status: 401 }
       );
     }
@@ -116,7 +137,11 @@ export async function POST(req: Request) {
     // Disabled accounts cannot sign in.
     if (user.active === false) {
       return NextResponse.json(
-        { error: "This account has been disabled. Contact the ARAL Coordinator." },
+        {
+          success: false,
+          error: "This account has been disabled. Contact the ARAL Coordinator.",
+          field: "general",
+        },
         { status: 403 }
       );
     }
@@ -125,10 +150,11 @@ export async function POST(req: Request) {
     const userRole = (user.role || '').toLowerCase();
     if (userRole !== normalizedRole) {
       const actualLabel = ROLE_LABELS[userRole] || user.role;
-      const selectedLabel = ROLE_LABELS[normalizedRole] || role;
       return NextResponse.json(
         {
-          error: `Unauthorized: This account is registered as a ${actualLabel}, not a ${selectedLabel}. Please select "${actualLabel}" in the role dropdown.`,
+          success: false,
+          error: `Role mismatch: This account is registered as a ${actualLabel}. Please choose ${actualLabel} in the role selector.`,
+          field: "role",
         },
         { status: 403 }
       );
@@ -193,7 +219,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Login API Error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { success: false, error: "Internal server error", field: "general" },
       { status: 500 }
     );
   }

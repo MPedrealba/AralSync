@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { User, Lock, Eye, EyeOff, Users, ChevronDown, LogIn } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Users, ChevronDown, LogIn, AlertCircle } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
 export default function LoginPage() {
@@ -14,18 +14,46 @@ export default function LoginPage() {
   const [role, setRole] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorField, setErrorField] = useState<"username" | "password" | "role" | "general" | null>(null);
+  const [fieldErrorHint, setFieldErrorHint] = useState<string>("");
+  const [isShaking, setIsShaking] = useState(false);
+
+  const triggerShake = () => {
+    setIsShaking(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 600);
+      });
+    });
+  };
+
+  const clearFieldError = (field: "username" | "password" | "role") => {
+    if (errorField === field) {
+      setErrorField(null);
+      setFieldErrorHint("");
+      setError("");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (!username.trim() || !password) {
+      const missingField = !username.trim() ? "username" : "password";
       setError("Please enter both username and password.");
+      setErrorField(missingField);
+      setFieldErrorHint(missingField === "username" ? "Check your username" : "Incorrect password");
+      triggerShake();
       return;
     }
 
     if (!role) {
       setError("Please select your role.");
+      setErrorField("role");
+      setFieldErrorHint("Please select your role");
+      triggerShake();
       return;
     }
 
@@ -41,7 +69,23 @@ export default function LoginPage() {
       const data = await parseJsonResponse(res);
 
       if (!res.ok || !data.success) {
-        setError(data.error || "Invalid credentials. Please try again.");
+        const errorMsg = data.error || "Invalid credentials. Please try again.";
+        setError(errorMsg);
+        const respField = (data.field as "username" | "password" | "role" | "general") || "general";
+        setErrorField(respField);
+
+        let hint = "";
+        if (respField === "username") {
+          hint = "Check your username";
+        } else if (respField === "password") {
+          hint = "Incorrect password";
+        } else if (respField === "role") {
+          hint = errorMsg.includes("Role mismatch")
+            ? errorMsg
+            : "Please choose the correct role in the role selector";
+        }
+        setFieldErrorHint(hint);
+        triggerShake();
         setIsLoading(false);
         return;
       }
@@ -64,14 +108,21 @@ export default function LoginPage() {
       }
     } catch {
       setError("Something went wrong. Please try again.");
+      setErrorField("general");
+      setFieldErrorHint("");
+      triggerShake();
       setIsLoading(false);
     }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[url('/login_background_page.png')] bg-cover bg-center p-4">
-      {/* Centered Login Card */}
-      <div className="w-full max-w-[420px] rounded-3xl bg-white px-8 py-10 shadow-2xl">
+      {/* Centered Login Card with Shake Animation */}
+      <div
+        className={`w-full max-w-[420px] rounded-3xl bg-white px-8 py-10 shadow-2xl transition-transform ${
+          isShaking ? "animate-shake" : ""
+        }`}
+      >
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight">
@@ -83,13 +134,17 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-gray-700">Login to your account</p>
         </div>
 
-        {/* Error Alert */}
+        {/* Top Alert Banner */}
         {error && (
-          <div className="mt-5 flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-            </svg>
-            {error}
+          <div
+            role="alert"
+            className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/95 p-3.5 text-xs text-red-800 shadow-sm animate-fadeInDown"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <div className="leading-snug">
+              <span className="font-bold text-red-900">Login Failed: </span>
+              <span className="font-medium text-red-800">{error}</span>
+            </div>
           </div>
         )}
 
@@ -101,16 +156,32 @@ export default function LoginPage() {
               Username
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <User
+                className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${
+                  errorField === "username" ? "text-red-500" : "text-gray-400"
+                }`}
+              />
               <input
                 id="username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  clearFieldError("username");
+                }}
                 placeholder="Enter your username"
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                className={`h-11 w-full rounded-lg pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 ${
+                  errorField === "username"
+                    ? "border border-red-400 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                    : "border border-gray-200 bg-white focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                }`}
               />
             </div>
+            {errorField === "username" && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 animate-fadeInDown">
+                <span>{fieldErrorHint || "Check your username"}</span>
+              </p>
+            )}
           </div>
 
           {/* Password */}
@@ -119,14 +190,25 @@ export default function LoginPage() {
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Lock
+                className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${
+                  errorField === "password" ? "text-red-500" : "text-gray-400"
+                }`}
+              />
               <input
                 id="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearFieldError("password");
+                }}
                 placeholder="Enter your password"
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-11 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                className={`h-11 w-full rounded-lg pl-10 pr-11 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 ${
+                  errorField === "password"
+                    ? "border border-red-400 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                    : "border border-gray-200 bg-white focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                }`}
               />
               <button
                 type="button"
@@ -138,6 +220,11 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
               </button>
             </div>
+            {errorField === "password" && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 animate-fadeInDown">
+                <span>{fieldErrorHint || "Incorrect password"}</span>
+              </p>
+            )}
           </div>
 
           {/* Role selector */}
@@ -146,15 +233,24 @@ export default function LoginPage() {
               Role
             </label>
             <div className="relative">
-              <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Users
+                className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${
+                  errorField === "role" ? "text-red-500" : "text-gray-400"
+                }`}
+              />
               <select
                 id="role"
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  clearFieldError("role");
+                }}
                 required
-                className={`h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-10 pr-10 text-sm outline-none transition-colors cursor-pointer focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15 ${
-                  role ? "text-gray-800 font-medium" : "text-gray-400"
-                }`}
+                className={`h-11 w-full appearance-none rounded-lg pl-10 pr-10 text-sm outline-none transition-colors cursor-pointer ${
+                  errorField === "role"
+                    ? "border border-red-400 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                    : "border border-gray-200 bg-white focus:border-[#DE2B2B] focus:ring-2 focus:ring-[#DE2B2B]/15"
+                } ${role ? "text-gray-800 font-medium" : "text-gray-400"}`}
               >
                 <option value="" disabled className="text-gray-400 font-normal">
                   Select your role
@@ -174,6 +270,11 @@ export default function LoginPage() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             </div>
+            {errorField === "role" && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 animate-fadeInDown">
+                <span>{fieldErrorHint || "Role mismatch"}</span>
+              </p>
+            )}
           </div>
 
           {/* Submit */}
