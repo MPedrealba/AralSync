@@ -486,14 +486,18 @@ function OMRWorkstationContent() {
     }
   }, [selectedKeyId, answerKeys, sheetImage]);
 
-  // Clean up blob URLs on unmount
+  // Track blob URLs to clean up strictly on component unmount (not when toggling images)
+  const createdBlobUrlsRef = useRef<string[]>([]);
   useEffect(() => {
     return () => {
-      if (sheetImage && sheetImage.startsWith("blob:")) {
-        URL.revokeObjectURL(sheetImage);
-      }
+      createdBlobUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      });
+      createdBlobUrlsRef.current = [];
     };
-  }, [sheetImage]);
+  }, []);
 
   // ── Real-Time Calculated Metrics ──
   const effectiveTotalItems =
@@ -615,6 +619,7 @@ function OMRWorkstationContent() {
 
     setSheetFile(file);
     const localUrl = URL.createObjectURL(file);
+    createdBlobUrlsRef.current.push(localUrl);
     setOriginalImage(localUrl);
     setErrorMessage("");
     setInfoMessage("");
@@ -642,11 +647,17 @@ function OMRWorkstationContent() {
 
       const data = json.data;
       setAssessmentId(data.assessmentId || null);
+      if (data.omrSheetUrl) {
+        setOriginalImage(data.omrSheetUrl);
+      } else {
+        setOriginalImage(localUrl);
+      }
+
       if (data.warpedImage) {
         setWarpedImage(data.warpedImage);
         setSheetImage(data.warpedImage);
       } else {
-        setSheetImage(localUrl || data.omrSheetUrl);
+        setSheetImage(data.omrSheetUrl || localUrl);
       }
 
       const initialDetected: (string | null)[] = data.detectedAnswers || [];
@@ -1910,10 +1921,18 @@ function OMRWorkstationContent() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={sheetImage}
+                    src={sheetImage || warpedImage || originalImage || ""}
                     alt="Scanned Student Answer Sheet"
                     draggable={false}
                     className="h-auto w-auto max-w-full rounded-lg shadow-2xl border border-slate-800"
+                    onError={() => {
+                      // Fallback to warpedImage or originalImage if sheetImage fails or blob URL is expired
+                      if (warpedImage && sheetImage !== warpedImage) {
+                        setSheetImage(warpedImage);
+                      } else if (originalImage && sheetImage !== originalImage) {
+                        setSheetImage(originalImage);
+                      }
+                    }}
                   />
                 </div>
               </div>

@@ -131,7 +131,7 @@ export function useLiveCaption({
    * Aligns stream of spoken words with passage words using a sliding window Levenshtein fuzzy match (3 words).
    * Prevents premature jumps when learner pauses, stutters, or repeats a word.
    */
-  const alignSpokenWithPassage = useCallback((spokenWords: string[]) => {
+  const alignSpokenWithPassage = useCallback((spokenWords: string[], isInterim: boolean = false) => {
     const pWords = passageWordsRef.current;
     if (pWords.length === 0 || spokenWords.length === 0) {
       return;
@@ -184,14 +184,15 @@ export function useLiveCaption({
       }
     }
 
-    // Smooth active word index (latest completed or in-progress match)
-    if (pIdx > 0) {
-      let activeIdx = pIdx - 1;
+    // Smooth active word index: if learner is actively articulating (interim speech),
+    // highlight the upcoming/current word (pIdx). If in a pause, highlight last completed word (pIdx - 1).
+    if (pIdx >= 0) {
+      let activeIdx = isInterim ? Math.min(pIdx, pWords.length - 1) : Math.max(0, pIdx - 1);
       while (activeIdx > 0 && !normalizeWord(pWords[activeIdx])) {
         activeIdx--;
       }
       setActiveWordIndex((prev) => {
-        // Smooth transition: don't jump erratically backwards if in intermediate pause
+        // Prevent erratic backwards jumps during short recognition re-parses
         if (prev >= 0 && activeIdx < prev && activeIdx >= prev - 1) {
           return prev;
         }
@@ -205,13 +206,14 @@ export function useLiveCaption({
    */
   const processSpeech = useCallback(
     (finalStr: string, interimStr: string) => {
+      const isInterim = Boolean(interimStr && interimStr.trim().length > 0);
       const combined = `${finalStr} ${interimStr}`.trim();
       const rawWords = combined
         .split(/\s+/)
         .filter((w) => Boolean(normalizeWord(w)));
 
       setSpokenWordCount(rawWords.length);
-      alignSpokenWithPassage(rawWords);
+      alignSpokenWithPassage(rawWords, isInterim);
     },
     [alignSpokenWithPassage]
   );

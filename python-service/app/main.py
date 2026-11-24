@@ -59,12 +59,14 @@ def health_check():
 async def omr_detect(
     file: UploadFile = File(...),
     num_questions: int = Form(50),
+    answer_key: Optional[str] = Form(None),
 ):
     """
     Detect answers from a scanned OMR bubble sheet.
 
     Accepts: PNG/JPEG image of a filled bubble sheet.
-    Returns: Per-question detected answer (A/B/C/D) or blank.
+    Optional: answer_key as JSON string (e.g. '["A", "B", "C"]' or '[0, 1, 2]')
+    Returns: Per-question detected answer (A/B/C/D) or blank, with correct/incorrect visual feedback.
     """
     try:
         if not file.content_type or not file.content_type.startswith("image/"):
@@ -74,7 +76,26 @@ async def omr_detect(
         if len(image_bytes) > 10 * 1024 * 1024:  # 10MB limit
             raise HTTPException(400, "Image too large (max 10MB)")
 
-        result = detect_omr_sheet(image_bytes, num_questions)
+        # Parse optional answer key for color annotations (Green = Correct, Red = Incorrect)
+        parsed_key = None
+        if answer_key:
+            try:
+                import json
+                from .omr import OPTION_LABELS
+                raw_k = json.loads(answer_key)
+                if isinstance(raw_k, list):
+                    parsed_key = []
+                    for item in raw_k:
+                        if isinstance(item, int) and 0 <= item < 4:
+                            parsed_key.append(item)
+                        elif isinstance(item, str) and item.strip().upper() in OPTION_LABELS:
+                            parsed_key.append(OPTION_LABELS.index(item.strip().upper()))
+                        else:
+                            parsed_key.append(None)
+            except Exception:
+                parsed_key = None
+
+        result = detect_omr_sheet(image_bytes, num_questions, answer_key=parsed_key)
         return result
     except HTTPException:
         raise

@@ -1096,6 +1096,8 @@ function NewSessionTab({
   const timerRef = useRef<number | null>(null);
 
   /* Live Speech Recognition & Karaoke Tracker */
+  const cleanPassage = useMemo(() => cleanPassageText(passageText), [passageText]);
+
   const {
     isListening: liveIsListening,
     transcript: liveTranscript,
@@ -1108,16 +1110,30 @@ function NewSessionTab({
     stopListening: stopLiveCaption,
     reset: resetLiveCaption,
   } = useLiveCaption({
-    passageText,
+    passageText: cleanPassage,
     language: "auto",
   });
 
   /* Live real-time Phil-IRI miscue computation during recording */
   const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
   const liveMiscueResult = useMemo(() => {
-    if (!isRecording || !liveSpeech || !passageText) return null;
-    return classifyMiscues(liveSpeech, passageText);
-  }, [isRecording, liveSpeech, passageText]);
+    if (!isRecording || !liveSpeech || !cleanPassage) return null;
+    return classifyMiscues(liveSpeech, cleanPassage);
+  }, [isRecording, liveSpeech, cleanPassage]);
+
+  /* Live real-time sync of Phil-IRI 2024 miscue counts into tracker while recording */
+  useEffect(() => {
+    if (isRecording && liveMiscueResult?.counts) {
+      setMiscues({
+        substitutions: liveMiscueResult.counts.substitutions || 0,
+        omissions: liveMiscueResult.counts.omissions || 0,
+        insertions: liveMiscueResult.counts.insertions || 0,
+        repetitions: liveMiscueResult.counts.repetitions || 0,
+        mispronunciations: liveMiscueResult.counts.mispronunciations || 0,
+        reversals: liveMiscueResult.counts.reversals || 0,
+      });
+    }
+  }, [isRecording, liveMiscueResult]);
 
   /* Analysis state */
   const [analyzing, setAnalyzing] = useState(false);
@@ -1273,6 +1289,9 @@ function NewSessionTab({
           const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
           if (AudioCtxClass) {
             const ctx = new AudioCtxClass();
+            if (ctx.state === "suspended") {
+              await ctx.resume();
+            }
             audioContextRef.current = ctx;
             const source = ctx.createMediaStreamSource(stream);
 
@@ -1363,7 +1382,7 @@ function NewSessionTab({
       setError("Record the learner's reading first (or use Simulate).");
       return;
     }
-    if (!passageText.trim()) {
+    if (!cleanPassage.trim()) {
       setError("Provide the reading passage text.");
       return;
     }
@@ -1373,14 +1392,14 @@ function NewSessionTab({
     // If completely offline, run client-side Phil-IRI evaluation directly
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const localEval = computeLocalPhilIriEvaluation({
-        passageText,
+        passageText: cleanPassage,
         durationSec: Math.max(recTime, 1),
         miscues,
       });
 
       const mockResult: AnalyzeResult = {
         id: `offline-${Date.now()}`,
-        transcript: passageText.slice(0, 200),
+        transcript: cleanPassage.slice(0, 200),
         wpm: localEval.wpm,
         accuracy: localEval.accuracy,
         pauses: 0,
@@ -1432,7 +1451,7 @@ function NewSessionTab({
       const fd = new FormData();
       if (audioBlob) fd.append("file", audioBlob, "recording.webm");
       fd.append("studentId", studentId);
-      fd.append("passage", passageText);
+      fd.append("passage", cleanPassage);
       fd.append("passageTitle", passageTitle || "Oral Reading Passage");
       fd.append("durationSec", String(Math.max(recTime, 1)));
       if (simulate) fd.append("simulate", "1");
@@ -1462,14 +1481,14 @@ function NewSessionTab({
     } catch {
       // Offline fallback: compute client-side metrics and allow calibration
       const localEval = computeLocalPhilIriEvaluation({
-        passageText,
+        passageText: cleanPassage,
         durationSec: Math.max(recTime, 1),
         miscues,
       });
 
       const mockResult: AnalyzeResult = {
         id: `offline-${Date.now()}`,
-        transcript: passageText.slice(0, 200),
+        transcript: cleanPassage.slice(0, 200),
         wpm: localEval.wpm,
         accuracy: localEval.accuracy,
         pauses: 0,
@@ -1539,7 +1558,6 @@ function NewSessionTab({
     setFinalizeSuccess(false);
   };
 
-  const cleanPassage = useMemo(() => cleanPassageText(passageText), [passageText]);
   const wordCount = useMemo(() => Math.max(1, cleanPassage.split(/\s+/).filter(Boolean).length), [cleanPassage]);
 
   const totalMiscues =

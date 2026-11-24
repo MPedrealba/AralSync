@@ -36,6 +36,18 @@ FILL_THRESHOLD = 0.35   # ratio of dark pixels to consider bubble "filled"
 MIN_BUBBLE_AREA = 45    # minimum contour area to consider as a bubble
 FIDUCIAL_SIZE_RATIO = 0.02  # fiducial mark diameter as fraction of image width
 
+# ── Bubble Fill Decision Thresholds & Calibration ──────────────────────────────
+# Standard calibrated parameters to distinguish genuinely filled marks from unshaded blank bubbles:
+# - STRICT_FILL_DIFF: Minimum raw intensity difference between darkest bubble and median of other 3
+# - STRICT_FILL_RATIO: Minimum contrast ratio (median_others / darkest)
+# - ABS_DARK_CEILING: Maximum raw intensity ceiling for a filled mark (blank paper is typically > 180)
+STRICT_FILL_DIFF = 18.0
+STRICT_FILL_RATIO = 1.14
+ABS_DARK_CEILING = 175.0
+
+# Revert switch: set to True if you ever need to revert to lenient / legacy permissive fill detection
+ALLOW_PERMISSIVE_FILL_FALLBACK = False
+
 
 # ── Document Paper Boundary & Corner Detection ───────────────────────────────
 
@@ -63,27 +75,9 @@ def order_corners(pts: np.ndarray) -> np.ndarray:
 def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
     """
     CamScanner-Style 4-Point Quadrilateral Homography Flattener & Document Boundary Detection.
-
-    1. Edge-Preserving Pre-Processing (Bilateral Filter + Adaptive Threshold):
-       - Downscale the image to a standardized height of 800px (scale_ratio = h / 800.0).
-       - Apply cv2.bilateralFilter(resized, 9, 75, 75) to eliminate table grain, background texture,
-         and surface glare while preserving razor-sharp document borders.
-       - Apply adaptive inverse thresholding: cv2.adaptiveThreshold(blurred, 255,
-         cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 5).
-
-    2. Multi-Scale 4-Corner Quadrilateral Search:
-       - Extract contours using cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE).
-       - Filter candidate contours covering >= 25% (or > 20% resized_area) and <= 98% of the frame.
-       - Perform multi-epsilon polygonal simplification: eps in [0.015, 0.02, 0.025, 0.03, 0.035, 0.04].
-       - Enforce 4-sided convex polygon with aspect ratio (height / width) between 1.15 and 1.65.
-       - Select the largest valid boundary.
-
-    3. Fallback Strategies (Extreme-Point Convex Hull & Step A / Step B Frame Locking):
-       - Extreme-Point Convex Hull on external contours (cv2.RETR_EXTERNAL).
-       - Step A: Look for the printed outer black rectangle frame first using Otsu (cv2.THRESH_OTSU),
-         morphological closing (cv2.MORPH_CLOSE), and cv2.RETR_LIST covering 25% to 95% (or 0.20 * resized_area
-         to 0.95 * resized_area) with 1.15 <= aspect <= 1.55.
-       - Step B: Fallback Margin Fiducial Search using cv2.minAreaRect for bounding box.
+    Uses edge-preserving Gaussian blur, Canny edge detection, morphological closing,
+    and multi-epsilon Convex Hull polygon simplification to extract the true 4 corners
+    of the printed bubble sheet paper / outer frame from handheld mobile phone photos.
     """
     h, w = img_gray.shape
 
@@ -97,32 +91,36 @@ def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
 
     resized_h, resized_w = resized.shape
     resized_area = float(resized_h * resized_w)
-    frame_area = resized_area
 
     # ──────────────────────────────────────────────────────────────────────────
-    # 1. Edge-Preserving Pre-Processing (Bilateral Filter + Adaptive Threshold)
+    # 1. Primary CamScanner Algorithm: Canny + Morphological Closing + Convex Hull
     # ──────────────────────────────────────────────────────────────────────────
-    blurred_bilateral = cv2.bilateralFilter(resized, 9, 75, 75)
-    thresh_cam = cv2.adaptiveThreshold(
-        blurred_bilateral, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 5
-    )
+    blurred = cv2.GaussianBlur(resized, (5, 5), 0)
+    edged = cv2.Canny(blurred, 30, 150)
+    kernel_11 = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+    closed = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel_11, iterations=2)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # 2. Multi-Scale 4-Corner Quadrilateral Search
-    # ──────────────────────────────────────────────────────────────────────────
-    cnts_cam, _ = cv2.findContours(thresh_cam, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cam_candidates = []
+    cnts_ext, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts_sorted = sorted(cnts_ext, key=cv2.contourArea, reverse=True)
 
-    for cnt in cnts_cam:
-        area = cv2.contourArea(cnt)
-        if area < 0.20 * resized_area or area > 0.98 * frame_area:
+    for c in cnts_sorted[:8]:
+        area = cv2.contourArea(c)
+        if area < 0.20 * resized_area or area > 0.95 * resized_area:
             continue
-        peri = cv2.arcLength(cnt, True)
-        for eps in [0.015, 0.02, 0.025, 0.03, 0.035, 0.04]:
-            approx = cv2.approxPolyDP(cnt, eps * peri, True)
+        hull = cv2.convexHull(c)
+        peri = cv2.arcLength(hull, True)
+        for eps in [0.02, 0.03, 0.04, 0.05, 0.06, 0.08]:
+            approx = cv2.approxPolyDP(hull, eps * peri, True)
             if len(approx) == 4 and cv2.isContourConvex(approx):
                 pts = approx.reshape((4, 2))
                 ordered = order_corners(pts)
+                # Check for camera border hugging (must not be the entire camera photo)
+                border_hug = sum(
+                    1 for p in ordered
+                    if p[0] <= 3 or p[0] >= resized_w - 4 or p[1] <= 3 or p[1] >= resized_h - 4
+                )
+                if border_hug >= 4:
+                    continue
                 w_top = np.linalg.norm(ordered[1] - ordered[0])
                 w_bot = np.linalg.norm(ordered[3] - ordered[2])
                 h_left = np.linalg.norm(ordered[2] - ordered[0])
@@ -130,120 +128,69 @@ def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
                 avg_w = max(float((w_top + w_bot) / 2.0), 1.0)
                 avg_h = max(float((h_left + h_right) / 2.0), 1.0)
                 aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
-                if (1.15 <= aspect <= 1.55) or (1.15 <= aspect <= 1.65):
-                    cam_candidates.append((area, ordered * scale_ratio, aspect))
-                    break
-
-    if cam_candidates:
-        cam_candidates.sort(key=lambda x: x[0], reverse=True)
-        return order_corners(cam_candidates[0][1])
+                if 1.05 <= aspect <= 1.85:
+                    return order_corners(ordered * scale_ratio)
 
     # ──────────────────────────────────────────────────────────────────────────
-    # Fallback 1: Extreme-Point Convex Hull algorithm on Largest Paper Boundary
+    # 2. Secondary Adaptive Bilateral Filter Search
     # ──────────────────────────────────────────────────────────────────────────
-    blurred_7 = cv2.GaussianBlur(resized, (7, 7), 0)
-    edged_40_120 = cv2.Canny(blurred_7, 40, 120)
-    kernel_9 = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-    closed_9 = cv2.morphologyEx(edged_40_120, cv2.MORPH_CLOSE, kernel_9, iterations=2)
-    cnts_ext, _ = cv2.findContours(closed_9, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if cnts_ext:
-        cnts_ext_sorted = sorted(cnts_ext, key=cv2.contourArea, reverse=True)
-        largest_cnt = cnts_ext_sorted[0]
-        area = cv2.contourArea(largest_cnt)
-        if area > 0.35 * resized_area:
-            hull = cv2.convexHull(largest_cnt)
-            pts = hull.reshape((-1, 2))
-            s = pts[:, 0] + pts[:, 1]
-            tl = pts[np.argmin(s)]
-            br = pts[np.argmax(s)]
-            d = pts[:, 0] - pts[:, 1]
-            tr = pts[np.argmax(d)]
-            bl = pts[np.argmin(d)]
-
-            corners = np.array([tl, tr, bl, br], dtype=np.float32)
-            w_top = np.linalg.norm(tr - tl)
-            w_bot = np.linalg.norm(br - bl)
-            h_left = np.linalg.norm(bl - tl)
-            h_right = np.linalg.norm(br - tr)
-            avg_w = max(float((w_top + w_bot) / 2.0), 1.0)
-            avg_h = max(float((h_left + h_right) / 2.0), 1.0)
-            aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
-            if (1.10 <= aspect <= 1.60) or (1.10 <= aspect <= 1.85):
-                orig_pts = corners * scale_ratio
-                return order_corners(orig_pts)
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Step A: Look for the printed outer black rectangle frame first (Fallback)
-    # ──────────────────────────────────────────────────────────────────────────
-    blurred = cv2.GaussianBlur(resized, (5, 5), 0)
-    _, otsu_bin = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    _, otsu_norm = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    kernel_5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    otsu_closed = cv2.morphologyEx(otsu_bin, cv2.MORPH_CLOSE, kernel_5, iterations=2)
-    otsu_norm_closed = cv2.morphologyEx(otsu_norm, cv2.MORPH_CLOSE, kernel_5, iterations=2)
-    edged = cv2.Canny(blurred, 30, 150)
-    edge_closed = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel_5, iterations=2)
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+    blurred_bilateral = cv2.bilateralFilter(resized, 9, 75, 75)
+    thresh_cam = cv2.adaptiveThreshold(
+        blurred_bilateral, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 5
     )
-    thresh_closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_5, iterations=2)
+    cnts_cam, _ = cv2.findContours(thresh_cam, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    cnts_cam_sorted = sorted(cnts_cam, key=cv2.contourArea, reverse=True)
 
-    cnts_edge, _ = cv2.findContours(edge_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnts_otsu, _ = cv2.findContours(otsu_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnts_norm, _ = cv2.findContours(otsu_norm_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnts_thresh, _ = cv2.findContours(thresh_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-    frame_candidates = list(cnts_edge) + list(cnts_otsu) + list(cnts_thresh)
-    frame_candidates.sort(key=cv2.contourArea, reverse=True)
-
-    for cnt in frame_candidates:
+    for cnt in cnts_cam_sorted[:8]:
         area = cv2.contourArea(cnt)
         if area < 0.20 * resized_area or area > 0.95 * resized_area:
             continue
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            pts = approx.reshape((4, 2))
-            ordered = order_corners(pts)
-            w_top = np.linalg.norm(ordered[1] - ordered[0])
-            w_bot = np.linalg.norm(ordered[3] - ordered[2])
-            h_left = np.linalg.norm(ordered[2] - ordered[0])
-            h_right = np.linalg.norm(ordered[3] - ordered[1])
-            avg_w = max(float((w_top + w_bot) / 2.0), 1.0)
-            avg_h = max(float((h_left + h_right) / 2.0), 1.0)
-            aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
-            if 1.15 <= aspect <= 1.55 or 1.05 <= aspect <= 1.65:
-                orig_pts = ordered * scale_ratio
-                return order_corners(orig_pts)
+        hull = cv2.convexHull(cnt)
+        peri = cv2.arcLength(hull, True)
+        for eps in [0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05]:
+            approx = cv2.approxPolyDP(hull, eps * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                pts = approx.reshape((4, 2))
+                ordered = order_corners(pts)
+                border_hug = sum(
+                    1 for p in ordered
+                    if p[0] <= 3 or p[0] >= resized_w - 4 or p[1] <= 3 or p[1] >= resized_h - 4
+                )
+                if border_hug >= 4:
+                    continue
+                w_top = np.linalg.norm(ordered[1] - ordered[0])
+                w_bot = np.linalg.norm(ordered[3] - ordered[2])
+                h_left = np.linalg.norm(ordered[2] - ordered[0])
+                h_right = np.linalg.norm(ordered[3] - ordered[1])
+                avg_w = max(float((w_top + w_bot) / 2.0), 1.0)
+                avg_h = max(float((h_left + h_right) / 2.0), 1.0)
+                aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
+                if 1.05 <= aspect <= 1.85:
+                    return order_corners(ordered * scale_ratio)
 
     # ──────────────────────────────────────────────────────────────────────────
-    # Step B: Fallback Margin Fiducial Search: search for the 4 corner vertices
+    # 3. Fallback: Otsu & MinAreaRect (Bounded to Prevent Full-Frame Selection)
     # ──────────────────────────────────────────────────────────────────────────
-    candidate_contours = list(cnts_edge) + list(cnts_thresh) + list(cnts_norm)
-    candidate_contours.sort(key=cv2.contourArea, reverse=True)
+    _, otsu_bin = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    kernel_5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    otsu_closed = cv2.morphologyEx(otsu_bin, cv2.MORPH_CLOSE, kernel_5, iterations=2)
+    cnts_otsu, _ = cv2.findContours(otsu_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    for cnt in candidate_contours:
+    for cnt in sorted(cnts_otsu, key=cv2.contourArea, reverse=True)[:5]:
         area = cv2.contourArea(cnt)
-        if area < 0.20 * resized_area:
+        if area < 0.20 * resized_area or area > 0.95 * resized_area:
             continue
-
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-
-        pts = None
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            pts = approx.reshape((4, 2))
-        else:
-            rect = cv2.minAreaRect(cnt)
-            box = cv2.boxPoints(rect)
-            box_area = cv2.contourArea(box)
-            if box_area >= 0.20 * resized_area:
-                pts = box
-
-        if pts is not None:
-            orig_pts = pts * scale_ratio
-            return order_corners(orig_pts)
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box_area = cv2.contourArea(box)
+        if 0.20 * resized_area <= box_area <= 0.95 * resized_area:
+            ordered = order_corners(box)
+            border_hug = sum(
+                1 for p in ordered
+                if p[0] <= 3 or p[0] >= resized_w - 4 or p[1] <= 3 or p[1] >= resized_h - 4
+            )
+            if border_hug < 4:
+                return order_corners(ordered * scale_ratio)
 
     return None
 
@@ -978,7 +925,7 @@ def read_bubbles(warped_gray: np.ndarray,
             answers.append(None)
             continue
 
-        # 3. Relative Rank Decision (Highest Contrast Wins):
+        # 3. Relative Rank Decision & Unshaded Blank Protection:
         sorted_indices = np.argsort(intensities_norm)
         darkest_idx = int(sorted_indices[0])
         runner_up_idx = int(sorted_indices[1])
@@ -1005,22 +952,32 @@ def read_bubbles(warped_gray: np.ndarray,
         best_ratio = min(ratio, ratio_raw)
         best_contrast = max(contrast_ratio, contrast_ratio_raw)
 
-        # Mark as UNSHADED only if all 4 bubbles are bright (> 205 in CLAHE space),
-        # or if darkest bubble is not genuinely dark (>= 200.0 or > 185.0 with low separation)
-        all_bright = all(v > 205.0 or v > ABS_DARK_CEILING for v in intensities_norm)
-        is_unshaded = all_bright or (darkest >= 200.0) or (darkest > 185.0 and best_diff < 15.0)
-
-        # Mark as FILLED if EITHER:
-        # (other_median - darkest) >= 10.0 (or best_diff > 14.0)
-        # OR (darkest / max(other_median, 1.0)) <= 0.88 (or contrast_ratio > 1.10)
-        is_filled = (best_diff >= 10.0) or (best_ratio <= 0.88) or (best_contrast > RATIO_THRESHOLD)
-
-        # 4. Multi-Mark Protection:
-        # If runner_up is also significantly dark ((other_median - runner_up) > 12 and abs(runner_up - darkest) < 4),
-        # flag as ambiguous multi-fill (None)
+        # Multi-mark protection
         runner_diff = other_median - runner_up
         dark_diff = abs(runner_up - darkest)
         is_multi = (runner_diff > 12.0) and (dark_diff < 4.0)
+
+        if ALLOW_PERMISSIVE_FILL_FALLBACK:
+            # Legacy permissive fill detection (can be toggled back via ALLOW_PERMISSIVE_FILL_FALLBACK)
+            all_bright = all(v > 205.0 or v > ABS_DARK_CEILING for v in intensities_norm)
+            is_unshaded = all_bright or (darkest >= 200.0) or (darkest > 185.0 and best_diff < 15.0)
+            is_filled = (best_diff >= 10.0) or (best_ratio <= 0.88) or (best_contrast > RATIO_THRESHOLD)
+        else:
+            # Calibrated Strict Fill Decision:
+            # Ensures empty, unshaded bubbles are never assigned a false answer.
+            # A bubble is only recognized as filled if it has legitimate dark mass (raw <= 175)
+            # and strong separation from the other 3 options.
+            is_legitimate_dark = raw_darkest <= ABS_DARK_CEILING
+            is_unshaded = (
+                (not is_legitimate_dark)
+                or (diff_raw < STRICT_FILL_DIFF and best_diff < 22.0)
+                or (contrast_ratio_raw < STRICT_FILL_RATIO and best_contrast < 1.18)
+            )
+            is_filled = (
+                is_legitimate_dark
+                and (diff_raw >= STRICT_FILL_DIFF or best_diff >= 22.0)
+                and (contrast_ratio_raw >= STRICT_FILL_RATIO or best_contrast >= 1.18)
+            )
 
         if not is_unshaded and is_filled and not is_multi:
             if 0 <= darkest_idx < OPTIONS_PER_Q:
@@ -1042,36 +999,70 @@ def generate_annotated_sheet(
     warped_gray: np.ndarray,
     grid: list[list[tuple[int, int, int, int]]],
     raw_answers: list[Optional[int]],
+    key_answers: Optional[list[Optional[int]]] = None,
 ) -> str:
     """
     Generate an annotated visualization of the standardized warped sheet (1275x1650):
-    - Draw green circles at the exact sampled positions.
-    - Highlight the chosen filled bubble in solid green.
+    - Color coding:
+      * Student mark is CORRECT (matches answer key) -> Vibrant Solid GREEN
+      * Student mark is INCORRECT (does not match answer key) -> Vibrant Solid RED
+      * Expected correct answer (when student was incorrect or blank) -> GREEN ring
+      * No answer key provided -> Solid GREEN on all detected marks
+      * Unshaded / blank bubbles -> Clean subtle neutral ring (no false answers)
     Returns base64-encoded JPEG data URL: "data:image/jpeg;base64,..."
     """
     # Convert grayscale warped sheet to BGR for color overlay
     annotated = cv2.cvtColor(warped_gray, cv2.COLOR_GRAY2BGR)
 
+    COLOR_CORRECT = (34, 197, 94)      # Vibrant Emerald Green (BGR: #22C55E)
+    COLOR_INCORRECT = (36, 36, 239)    # Vibrant DepEd Red (BGR: #EF2424)
+    COLOR_OUTLINE_CORRECT = (16, 185, 129)
+    COLOR_NEUTRAL = (195, 195, 195)
+
     for q_idx, question_bubbles in enumerate(grid):
         ans_idx = raw_answers[q_idx] if q_idx < len(raw_answers) else None
+        key_idx = (
+            key_answers[q_idx]
+            if (key_answers is not None and q_idx < len(key_answers))
+            else None
+        )
 
         for opt_idx, (cx, cy, radius, _) in enumerate(question_bubbles):
             center = (int(cx), int(cy))
             r = int(radius)
 
-            # Draw green circles at the exact sampled positions
-            cv2.circle(annotated, center, max(r, 8), (34, 197, 94), 2)
+            # 1. Subtle neutral outline on every bubble
+            cv2.circle(annotated, center, max(r, 8), COLOR_NEUTRAL, 1)
 
-            # Highlight the chosen filled bubble in solid green
+            # 2. Student answered this bubble:
             if ans_idx is not None and opt_idx == ans_idx:
-                cv2.circle(annotated, center, max(r - 2, 4), (34, 197, 94), -1)
-                cv2.circle(annotated, center, r + 3, (16, 185, 129), 2)
+                if key_idx is not None:
+                    if ans_idx == key_idx:
+                        # CORRECT: Solid green bubble
+                        cv2.circle(annotated, center, max(r - 2, 4), COLOR_CORRECT, -1)
+                        cv2.circle(annotated, center, r + 3, COLOR_OUTLINE_CORRECT, 2)
+                    else:
+                        # INCORRECT: Solid red bubble
+                        cv2.circle(annotated, center, max(r - 2, 4), COLOR_INCORRECT, -1)
+                        cv2.circle(annotated, center, r + 3, (20, 20, 200), 2)
+                else:
+                    # Default without answer key: Solid green
+                    cv2.circle(annotated, center, max(r - 2, 4), COLOR_CORRECT, -1)
+                    cv2.circle(annotated, center, r + 3, COLOR_OUTLINE_CORRECT, 2)
+
+            # 3. If student was INCORRECT or BLANK, outline the expected correct answer in green:
+            elif key_idx is not None and opt_idx == key_idx and ans_idx != key_idx:
+                cv2.circle(annotated, center, max(r, 8), COLOR_CORRECT, 2)
 
     _, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
     return f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
 
 
-def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
+def detect_omr_sheet(
+    image_bytes: bytes,
+    num_questions: int = 50,
+    answer_key: Optional[list[Optional[int]]] = None,
+) -> dict:
     """
     Main entry point: process an OMR bubble sheet image.
 
@@ -1139,8 +1130,8 @@ def detect_omr_sheet(image_bytes: bytes, num_questions: int = 50) -> dict:
     # Step 4: Read bubbles
     raw_answers = read_bubbles(warped, grid)
 
-    # Step 5: Generate annotated visualization of standardized warped sheet
-    warped_image_base64 = generate_annotated_sheet(warped, grid, raw_answers)
+    # Step 5: Generate annotated visualization with correct (green) and incorrect (red) feedback
+    warped_image_base64 = generate_annotated_sheet(warped, grid, raw_answers, key_answers=answer_key)
 
     # Build result
     results = []
@@ -1258,7 +1249,11 @@ def build_name_collages(crop_items: list[dict], max_per_collage: int = 8) -> lis
     return collages
 
 
-def detect_omr_sheet_path(image_path: str, num_questions: int = 50) -> dict:
+def detect_omr_sheet_path(
+    image_path: str,
+    num_questions: int = 50,
+    answer_key: Optional[list[Optional[int]]] = None,
+) -> dict:
     """Convenience wrapper for file path input."""
     with open(image_path, "rb") as f:
-        return detect_omr_sheet(f.read(), num_questions)
+        return detect_omr_sheet(f.read(), num_questions, answer_key=answer_key)
