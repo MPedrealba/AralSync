@@ -66,4 +66,8 @@ scratch/
 earist_*
 slider_*
 parse_earist.js
+crop_*
+warped_*
+filled_sample_*
+rendered_official_*
 

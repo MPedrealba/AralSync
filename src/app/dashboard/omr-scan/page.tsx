@@ -255,6 +255,8 @@ function OMRWorkstationContent() {
   // ── Sheet & Scan State ──
   const [sheetImage, setSheetImage] = useState<string | null>(null);
   const [sheetFile, setSheetFile] = useState<File | null>(null);
+  const [warpedImage, setWarpedImage] = useState<string | null>(null);
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [assessmentId, setAssessmentId] = useState<string | null>(null);
@@ -612,6 +614,7 @@ function OMRWorkstationContent() {
 
     setSheetFile(file);
     const localUrl = URL.createObjectURL(file);
+    setOriginalImage(localUrl);
     setErrorMessage("");
     setInfoMessage("");
     setIsScanning(true);
@@ -638,7 +641,12 @@ function OMRWorkstationContent() {
 
       const data = json.data;
       setAssessmentId(data.assessmentId || null);
-      setSheetImage(localUrl || data.omrSheetUrl);
+      if (data.warpedImage) {
+        setWarpedImage(data.warpedImage);
+        setSheetImage(data.warpedImage);
+      } else {
+        setSheetImage(localUrl || data.omrSheetUrl);
+      }
 
       const initialDetected: (string | null)[] = data.detectedAnswers || [];
       setDetectedAnswers(initialDetected);
@@ -663,6 +671,8 @@ function OMRWorkstationContent() {
       }
       setSheetImage(null);
       setSheetFile(null);
+      setWarpedImage(null);
+      setOriginalImage(null);
       setAssessmentId(null);
       setDetectedAnswers([]);
       setVerifiedAnswers([]);
@@ -1116,6 +1126,8 @@ function OMRWorkstationContent() {
       // Reset sheet & scores while preserving answer key, competency, grade, and section configuration
       setSheetImage(null);
       setSheetFile(null);
+      setWarpedImage(null);
+      setOriginalImage(null);
       setAssessmentId(null);
       setDetectedAnswers([]);
       setVerifiedAnswers([]);
@@ -1138,6 +1150,8 @@ function OMRWorkstationContent() {
     }
     setSheetImage(null);
     setSheetFile(null);
+    setWarpedImage(null);
+    setOriginalImage(null);
     setAssessmentId(null);
     setDetectedAnswers([]);
     setVerifiedAnswers([]);
@@ -1727,15 +1741,45 @@ function OMRWorkstationContent() {
             >
               {/* Viewer Control Toolbar */}
               <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 sm:px-4 py-2 sm:py-2.5 text-white backdrop-blur-xs overflow-x-auto no-scrollbar gap-2">
-                {/* Paper Info */}
-                <div className="flex items-center gap-2 text-xs">
-                  <FileImage className="h-4 w-4 text-blue-400" />
-                  <span className="font-semibold text-slate-200">
+                {/* Paper Info & View Mode Toggle */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <FileImage className="h-4 w-4 text-blue-400 shrink-0" />
+                  <span className="font-semibold text-slate-200 truncate max-w-[130px] sm:max-w-none">
                     {sheetFile?.name || "Scanned Paper Sheet"}
                   </span>
                   <span className="hidden sm:inline text-slate-500">
                     &bull; {selectedStudentObj?.name || "Learner"}
                   </span>
+
+                  {/* Toggle between Warped Analysis and Original Photo */}
+                  {warpedImage && (
+                    <div className="inline-flex items-center rounded-md bg-slate-800 p-0.5 border border-slate-700 text-[11px] ml-1">
+                      <button
+                        type="button"
+                        onClick={() => setSheetImage(warpedImage)}
+                        className={`px-2 py-0.5 rounded font-medium transition-all ${
+                          sheetImage === warpedImage
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "text-slate-300 hover:text-white"
+                        }`}
+                        title="View Warped Analysis with Detected Bubble Overlays"
+                      >
+                        View Warped Analysis
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => (originalImage ? setSheetImage(originalImage) : null)}
+                        className={`px-2 py-0.5 rounded font-medium transition-all ${
+                          sheetImage !== warpedImage
+                            ? "bg-slate-700 text-white shadow-sm"
+                            : "text-slate-300 hover:text-white"
+                        }`}
+                        title="View Original Scanned Photo"
+                      >
+                        View Original Photo
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Toolbar Buttons */}

@@ -6,6 +6,14 @@ export interface BubbleSheetInfo {
   downloadName: string;
 }
 
+export const OFFICIAL_40_BUBBLE_SHEET: BubbleSheetInfo = {
+  subject: "Official 40-Item",
+  title: "Official 40-Item OMR Bubble Sheet",
+  filename: "official-40-bubble.pdf",
+  url: "/bubble-sheets/official-40-bubble.pdf",
+  downloadName: "AralSync-Official-40-BubbleSheet.pdf",
+};
+
 export const BUBBLE_SHEETS: Record<"Math" | "Reading" | "Science", BubbleSheetInfo> = {
   Math: {
     subject: "Mathematics",

@@ -33,7 +33,7 @@ export class OMRServiceError extends Error {
 async function detectSingleSheetAnswers(
   imageBuffer: ArrayBuffer,
   keyLength: number = 20
-): Promise<{ answers: (string | null)[]; nameCropBase64?: string | null }> {
+): Promise<{ answers: (string | null)[]; nameCropBase64?: string | null; warpedImage?: string | null }> {
   const blob = new Blob([imageBuffer], { type: 'image/png' });
   const form = new FormData();
   form.append('file', blob, 'sheet.png');
@@ -82,6 +82,7 @@ async function detectSingleSheetAnswers(
   return {
     answers: data.answers.map((a: any) => a.answer_label || null),
     nameCropBase64: data.name_crop_base64 || null,
+    warpedImage: data.warped_image_base64 || null,
   };
 }
 

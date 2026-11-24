@@ -2,6 +2,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 
 describe('OMR Row Clustering, Bubble Grid Detection & Adaptive Thresholds Suite', () => {
@@ -79,7 +80,7 @@ describe('OMR Row Clustering, Bubble Grid Detection & Adaptive Thresholds Suite'
   test('5. Python OMR engine compiles without syntax or import errors', () => {
     const pythonExe = path.join(__dirname, '..', 'python-service', '.venv', 'Scripts', 'python.exe');
     if (fs.existsSync(pythonExe)) {
-      const compileCmd = `"${pythonExe}" -m py_compile "${pythonOmrPath}"`;
+      const compileCmd = `"${pythonExe}" -X pycache_prefix="${os.tmpdir()}" -m py_compile "${pythonOmrPath}"`;
       const output = execSync(compileCmd, { encoding: 'utf8' });
       assert.equal(output.trim(), '', 'py_compile should produce no output on success');
     }

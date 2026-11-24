@@ -248,7 +248,9 @@ export default function ReadingFluencyPage() {
           echoCancellation: noiseCancellation,
           autoGainControl: true,
           channelCount: 1,
-        },
+          sampleRate: 44100,
+          suppressLocalAudioPlayback: true,
+        } as MediaTrackConstraints,
       });
 
       let recordingStream = stream;

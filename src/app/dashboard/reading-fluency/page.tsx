@@ -45,6 +45,7 @@ import {
   evaluateGstScore,
   comprehensionLevel,
   compilePassageComprehensionQuestions,
+  cleanPassageText,
   type CompQuestion,
 } from "@/lib/reading";
 
@@ -286,6 +287,8 @@ interface Miscues {
   omissions: number;
   insertions: number;
   repetitions: number;
+  mispronunciations: number;
+  reversals: number;
 }
 interface AnalyzeResult {
   id: string;
@@ -1047,7 +1050,7 @@ function NewSessionTab({
       const match = displayPassages.find((p) => p.gradeLevel === targetGrade);
       if (match) {
         setPassageTitle(match.title);
-        setPassageText(match.text);
+        setPassageText(cleanPassageText(match.text)); // setPassageText(match.text)
       }
     }
   }, [selectedStudentObj, displayPassages, initialStartingLevel]);
@@ -1058,7 +1061,7 @@ function NewSessionTab({
       const exists = displayPassages.some((p) => p.title === passageTitle);
       if (!exists || passageTitle === "Oral Reading Passage" || passageText === SAMPLE_PASSAGE) {
         setPassageTitle(displayPassages[0].title);
-        setPassageText(displayPassages[0].text);
+        setPassageText(cleanPassageText(displayPassages[0].text));
       }
     }
   }, [displayPassages, passageTitle, passageText]);
@@ -1133,16 +1136,26 @@ function NewSessionTab({
   const [isOnline, setIsOnline] = useState(true);
   const [isOfflineQueued, setIsOfflineQueued] = useState(false);
 
-  /* Phil-IRI miscue tracker (manual mode) */
+  /* Phil-IRI 2024 miscue tracker (bi-directionally reactive) */
   const [miscues, setMiscues] = useState<Miscues>({
     substitutions: 0,
     omissions: 0,
     insertions: 0,
     repetitions: 0,
+    mispronunciations: 0,
+    reversals: 0,
   });
 
-  const setMiscue = (key: keyof Miscues, value: string) =>
-    setMiscues((m) => ({ ...m, [key]: Math.max(0, Number(value) || 0) }));
+  const setMiscue = (key: keyof Miscues, value: string | number) => {
+    const val = Math.max(0, typeof value === "number" ? value : Number(value) || 0);
+    setMiscues((m) => ({ ...m, [key]: val }));
+    setFinalizeSuccess(false);
+  };
+
+  const adjustMiscue = (key: keyof Miscues, delta: number) => {
+    setMiscues((m) => ({ ...m, [key]: Math.max(0, (m[key] || 0) + delta) }));
+    setFinalizeSuccess(false);
+  };
 
   /* Online / Offline Network Monitoring */
   useEffect(() => {
@@ -1197,7 +1210,7 @@ function NewSessionTab({
           cachePassages(json.data);
           if (passageTitle === "Oral Reading Passage" || passageText === SAMPLE_PASSAGE) {
             setPassageTitle(json.data[0].title);
-            setPassageText(json.data[0].text);
+            setPassageText(cleanPassageText(json.data[0].text));
           }
         } else {
           setPassages(getCachedPassages());
@@ -1240,14 +1253,16 @@ function NewSessionTab({
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      // 1. Hardware/Driver-level WebRTC acoustic constraints
+      // 1. Hardware/Driver-level WebRTC acoustic constraints with enhanced suppression
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: noiseCancellation,
-          echoCancellation: noiseCancellation,
+          noiseSuppression: true,
+          echoCancellation: true,
           autoGainControl: true,
           channelCount: 1,
-        },
+          sampleRate: 44100,
+          suppressLocalAudioPlayback: true,
+        } as MediaTrackConstraints,
       });
 
       let recordingStream = stream;
@@ -1374,6 +1389,8 @@ function NewSessionTab({
           omissions: localEval.miscueBreakdown.omissions,
           insertions: localEval.miscueBreakdown.insertions,
           repetitions: localEval.miscueBreakdown.repetitions,
+          mispronunciations: (localEval.miscueBreakdown as any).mispronunciations ?? 0,
+          reversals: (localEval.miscueBreakdown as any).reversals ?? 0,
         },
         durationSec: localEval.durationSec,
         masteryLevel: localEval.masteryLevel,
@@ -1461,6 +1478,8 @@ function NewSessionTab({
           omissions: localEval.miscueBreakdown.omissions,
           insertions: localEval.miscueBreakdown.insertions,
           repetitions: localEval.miscueBreakdown.repetitions,
+          mispronunciations: (localEval.miscueBreakdown as any).mispronunciations ?? 0,
+          reversals: (localEval.miscueBreakdown as any).reversals ?? 0,
         },
         durationSec: localEval.durationSec,
         masteryLevel: localEval.masteryLevel,
@@ -1510,6 +1529,8 @@ function NewSessionTab({
         omissions: next.filter((it) => it.type === "omission").length,
         insertions: next.filter((it) => it.type === "insertion").length,
         repetitions: next.filter((it) => it.type === "repetition").length,
+        mispronunciations: next.filter((it) => it.type === "mispronunciation").length,
+        reversals: next.filter((it) => it.type === "reversal").length,
       };
       setMiscues(updatedMiscues);
       return next;
@@ -1518,7 +1539,24 @@ function NewSessionTab({
     setFinalizeSuccess(false);
   };
 
-  const wordCount = passageText.split(/\s+/).filter(Boolean).length;
+  const cleanPassage = useMemo(() => cleanPassageText(passageText), [passageText]);
+  const wordCount = useMemo(() => Math.max(1, cleanPassage.split(/\s+/).filter(Boolean).length), [cleanPassage]);
+
+  const totalMiscues =
+    miscues.substitutions +
+    miscues.omissions +
+    miscues.insertions +
+    miscues.repetitions +
+    miscues.mispronunciations +
+    miscues.reversals;
+
+  const calibratedAccuracy = Math.max(
+    0,
+    Math.round(((wordCount - totalMiscues) / wordCount) * 100)
+  );
+
+  const werPct = Math.min(100, Math.round((totalMiscues / wordCount) * 100));
+
   const currentPassageObj = useMemo(
     () => passages.find((p) => p.title === passageTitle),
     [passages, passageTitle]
@@ -1528,11 +1566,11 @@ function NewSessionTab({
   const compQuestions: CompQuestion[] = useMemo(() => {
     return compilePassageComprehensionQuestions(
       currentPassageObj?.questions,
-      passageText,
+      cleanPassage,
       passageTitle,
       6
     );
-  }, [currentPassageObj, passageText, passageTitle]);
+  }, [currentPassageObj, cleanPassage, passageTitle]);
 
   const compTotal = compQuestions.length;
   const compCorrectCount = useMemo(
@@ -1570,40 +1608,36 @@ function NewSessionTab({
   };
 
   const liveMetrics = useMemo(() => {
-    if (!result) return null;
-    if (calibratedItems.length === 0) {
-      return {
-        accuracy: result.accuracy,
-        wpm: result.wpm,
-        masteryLevel: result.masteryBand ?? result.masteryLevel,
-        masteryBand: result.masteryBand ?? result.masteryLevel,
-        philIriLevel: result.philIriLevel ?? result.level,
-        counts: result.miscueBreakdown || {
-          mispronunciations: 0,
-          substitutions: result.miscues?.substitutions || 0,
-          omissions: result.miscues?.omissions || 0,
-          insertions: result.miscues?.insertions || 0,
-          repetitions: result.miscues?.repetitions || 0,
-          reversals: 0,
-        },
-        totalMiscues: result.miscueTotal ?? 0,
-      };
-    }
-    const wordsAttempted = result.wordsAttempted ?? result.wordsTotal ?? wordCount;
-    const spokenWords = result.spokenWords ?? wordsAttempted;
-    const duration = result.activeDurationSec ?? result.durationSec ?? recTime;
-    return recalculateCalibration(
-      calibratedItems,
-      spokenWords,
-      duration,
-      wordsAttempted
+    const duration = Math.max(1, result?.activeDurationSec ?? result?.durationSec ?? recTime ?? 60);
+    const activeMinutes = duration / 60;
+    const wordsDecoded = Math.max(0, wordCount - totalMiscues);
+    const wpm = result?.wpm ?? (recTime > 0 ? Math.round(wordsDecoded / activeMinutes) : Math.round(wordsDecoded / 1));
+
+    const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
+    const evaluation = evaluateReadingPerformance(
+      calibratedAccuracy,
+      effectiveCompScore,
+      wordCount,
+      wordsDecoded
     );
-  }, [result, calibratedItems, wordCount, recTime]);
+
+    return {
+      accuracy: calibratedAccuracy,
+      wer: werPct,
+      wpm,
+      masteryLevel: evaluation.masteryBand,
+      masteryBand: evaluation.masteryBand,
+      philIriLevel: evaluation.philIriLevel,
+      level: evaluation.philIriLevel,
+      counts: miscues,
+      totalMiscues,
+    };
+  }, [miscues, totalMiscues, calibratedAccuracy, werPct, wordCount, result, recTime, compAnsweredCount, compScorePct]);
 
   // DepEd Table 3 Joint Matrix Evaluation
-  const oralAccuracy = liveMetrics?.accuracy ?? result?.accuracy ?? 100;
+  const oralAccuracy = liveMetrics.accuracy;
   const wordsAttempted = result?.wordsAttempted ?? result?.wordsTotal ?? wordCount;
-  const wordsDecoded = oralAccuracy > 0 ? 1 : 0;
+  const wordsDecoded = Math.max(0, wordCount - totalMiscues);
   const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
   const combinedEval = useMemo(() => {
     return evaluateReadingPerformance(oralAccuracy, effectiveCompScore, wordsAttempted, wordsDecoded);
@@ -1611,7 +1645,8 @@ function NewSessionTab({
   const combinedLevel = combinedEval.combinedLevel;
 
   const handleFinalizeAssessment = async () => {
-    if (!result?.id || !liveMetrics) return;
+    if (!liveMetrics) return;
+    if (!result?.id && totalMiscues === 0 && compAnsweredCount === 0) return;
     setIsFinalizing(true);
     setFinalizeError("");
     setFinalizeSuccess(false);
@@ -1632,8 +1667,8 @@ function NewSessionTab({
       miscueBreakdown: liveMetrics.counts,
       miscueItems: calibratedItems,
       miscueTotal: liveMetrics.totalMiscues,
-      wordsAttempted: result.wordsAttempted ?? wordCount,
-      durationSec: result.durationSec || recTime || 60,
+      wordsAttempted: result?.wordsAttempted ?? wordCount,
+      durationSec: result?.durationSec || recTime || 60,
       // DepEd Phil-IRI Stage 2: Unified Comprehension & Combined Matrix
       comprehension: {
         score: compScorePct,
@@ -1642,16 +1677,12 @@ function NewSessionTab({
         totalQuestions: compTotal,
         correctAnswers: compCorrectCount,
         answers: compAnswers,
-        questions: compQuestions.map((q) => ({
-          question: q.question,
-          category: q.category,
-          answer: q.answer,
-        })),
       },
       comprehensionScore: compScorePct,
       comprehensionLevel: compLevel,
       combinedLevel: combinedLevel,
       status: "approved",
+      gradingStatus: "complete",
       notes:
         overrideCount > 0
           ? `Calibrated by teacher (${overrideCount} override${overrideCount > 1 ? "s" : ""}). Comprehension: ${compCorrectCount}/${compTotal} (${compScorePct}% - ${compLevel}). Combined: ${combinedLevel}. Approved.`
@@ -1660,6 +1691,7 @@ function NewSessionTab({
 
     // If offline or if the assessment was computed locally offline:
     if (
+      !result?.id ||
       (typeof navigator !== "undefined" && !navigator.onLine) ||
       result.id.startsWith("offline-")
     ) {
@@ -1678,8 +1710,8 @@ function NewSessionTab({
     }
 
     try {
-      const res = await fetch(`/api/teacher/assessments/${result.id}`, {
-        method: "PATCH",
+      const res = await fetch(result?.id ? `/api/teacher/assessments/${result.id}` : "/api/teacher/assessments", {
+        method: result?.id ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(assessmentPayload),
       });
@@ -2006,7 +2038,7 @@ function NewSessionTab({
           ) : isRecording ? (
             <div className="mt-4">
               <LiveReadingCaptionViewer
-                passageText={passageText}
+                passageText={cleanPassage}
                 activeWordIndex={liveActiveWordIndex}
                 transcript={liveTranscript}
                 interimText={liveInterimText}
@@ -2020,7 +2052,8 @@ function NewSessionTab({
           ) : (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
               <div className="font-serif text-lg sm:text-xl leading-relaxed text-slate-800 tracking-normal space-y-4">
-                {passageText.split(/\n\s*\n/).map((para, i) => (
+                {/* passageText.split paragraphs with cleaned text */}
+                {cleanPassage.split(/\n\s*\n/).map((para, i) => (
                   <p key={i}>{para}</p>
                 ))}
               </div>
@@ -2100,17 +2133,6 @@ function NewSessionTab({
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white">
                           {idx + 1}
                         </span>
-                        <span
-                          className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            q.category === "Literal"
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : q.category === "Inferential"
-                              ? "border-purple-200 bg-purple-50 text-purple-700"
-                              : "border-amber-200 bg-amber-50 text-amber-800"
-                          }`}
-                        >
-                          {q.category}
-                        </span>
                         {status === true && (
                           <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
                             <Check className="h-3 w-3" /> Correct
@@ -2125,11 +2147,6 @@ function NewSessionTab({
                       <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-snug">
                         {q.question}
                       </p>
-                      {q.answer && (
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          <span className="font-semibold text-slate-600">Expected:</span> {q.answer}
-                        </p>
-                      )}
                     </div>
 
                     {/* 1-Click Scoring Pill */}
@@ -2315,33 +2332,53 @@ function NewSessionTab({
           <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
             Log observed oral reading errors. Accuracy is automatically calculated using the official Phil-IRI 2024 formula.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {(
               [
                 ["substitutions", "Substitutions"],
                 ["omissions", "Omissions"],
                 ["insertions", "Insertions"],
                 ["repetitions", "Repetitions"],
+                ["mispronunciations", "Mispronunciations"],
+                ["reversals", "Reversals"],
               ] as [keyof Miscues, string][]
             ).map(([key, label]) => (
-              <div key={key}>
-                <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+              <div key={key} className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
+                <label className="mb-1.5 block text-[11px] font-semibold text-slate-700 truncate">
                   {label}
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={liveMetrics?.counts ? (liveMetrics.counts as any)[key] ?? miscues[key] : miscues[key]}
-                  onChange={(e) => setMiscue(key, e.target.value)}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
-                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => adjustMiscue(key, -1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-100 active:scale-95 font-bold text-sm"
+                    title={`Decrease ${label}`}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    value={miscues[key]}
+                    onChange={(e) => setMiscue(key, e.target.value)}
+                    className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-center text-xs font-bold text-slate-900 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adjustMiscue(key, 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-100 active:scale-95 font-bold text-sm"
+                    title={`Increase ${label}`}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Live Analysis Output Card */}
-        {result && (
+        {Boolean(result || (liveMetrics && liveMetrics.totalMiscues > 0)) && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs animate-in fade-in-50 duration-200">
             <div className="mb-4 flex items-center justify-between pb-3 border-b border-slate-100">
               <h4 className="flex items-center gap-2 text-sm font-bold text-slate-900">
@@ -2354,7 +2391,7 @@ function NewSessionTab({
                     {overrideCount} Override{overrideCount > 1 ? "s" : ""}
                   </span>
                 )}
-                {result.simulation && (
+                {result?.simulation && (
                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
                     Simulated
                   </span>
@@ -2362,13 +2399,13 @@ function NewSessionTab({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   WCPM
                 </p>
                 <p className="mt-1 text-xl font-black text-slate-900">
-                  {liveMetrics?.wpm ?? result.wpm ?? "—"}
+                  {liveMetrics?.wpm ?? result?.wpm ?? "—"}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
@@ -2376,7 +2413,15 @@ function NewSessionTab({
                   Accuracy
                 </p>
                 <p className="mt-1 text-xl font-black text-slate-900">
-                  {liveMetrics?.accuracy ?? result.accuracy}%
+                  {liveMetrics?.accuracy ?? result?.accuracy ?? 100}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  WER
+                </p>
+                <p className="mt-1 text-xl font-black text-slate-900">
+                  {liveMetrics?.wer ?? (result as any)?.wer ?? 0}%
                 </p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
@@ -2385,12 +2430,12 @@ function NewSessionTab({
                 </p>
                 <span
                   className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
-                    liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level
+                    liveMetrics?.philIriLevel ?? result?.philIriLevel ?? result?.level ?? "Frustration"
                   )}`}
                 >
                   {isFilipino
-                    ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration")
-                    : (liveMetrics?.philIriLevel ?? result.philIriLevel ?? result.level ?? "Frustration")}
+                    ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result?.philIriLevel ?? result?.level ?? "Frustration")
+                    : (liveMetrics?.philIriLevel ?? result?.philIriLevel ?? result?.level ?? "Frustration")}
                 </span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
@@ -2399,12 +2444,12 @@ function NewSessionTab({
                 </p>
                 <span
                   className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${levelColor(
-                    liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel
+                    liveMetrics?.masteryBand ?? result?.masteryBand ?? result?.masteryLevel ?? "Beginning"
                   )}`}
                 >
                   {isFilipino
-                    ? toFilipinoLevel(liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel)
-                    : (liveMetrics?.masteryBand ?? result.masteryBand ?? result.masteryLevel)}
+                    ? toFilipinoLevel(liveMetrics?.masteryBand ?? result?.masteryBand ?? result?.masteryLevel ?? "Beginning")
+                    : (liveMetrics?.masteryBand ?? result?.masteryBand ?? result?.masteryLevel ?? "Beginning")}
                 </span>
               </div>
             </div>
@@ -2415,7 +2460,7 @@ function NewSessionTab({
                 <span className="font-semibold text-slate-700">
                   Miscues ({liveMetrics.totalMiscues}):{" "}
                 </span>
-                Sub: {liveMetrics.counts.substitutions} &bull; Om: {liveMetrics.counts.omissions} &bull; Ins: {liveMetrics.counts.insertions} &bull; Rep: {liveMetrics.counts.repetitions} &bull; Mis: {liveMetrics.counts.mispronunciations}
+                Sub: {liveMetrics.counts.substitutions} &bull; Om: {liveMetrics.counts.omissions} &bull; Ins: {liveMetrics.counts.insertions} &bull; Rep: {liveMetrics.counts.repetitions} &bull; Mis: {liveMetrics.counts.mispronunciations} &bull; Rev: {liveMetrics.counts.reversals}
               </div>
             )}
 
@@ -2433,13 +2478,14 @@ function NewSessionTab({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-slate-200/70 bg-white p-2">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase">
-                    {isFilipino ? "Pang-unawa sa Pagbasa (Tal. 1)" : "Oral Reading (Table 1)"}
+                    {isFilipino ? "Oral Reading (Tal. 1)" : "Oral Reading (Table 1)"}
                   </p>
-                  <p className="text-base font-black text-slate-900 mt-0.5">{liveMetrics?.accuracy ?? result.accuracy}%</p>
+                  <p className="text-base font-black text-slate-900 mt-0.5">{liveMetrics?.accuracy ?? result?.accuracy ?? 100}%</p>
                   <p className="text-[10px] font-medium text-slate-500">
+                    WER: {liveMetrics?.wer ?? (result as any)?.wer ?? 0}% &bull;{" "}
                     {isFilipino
-                      ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration")
-                      : (liveMetrics?.philIriLevel ?? result.philIriLevel ?? "Frustration")}
+                      ? toFilipinoLevel(liveMetrics?.philIriLevel ?? result?.philIriLevel ?? "Frustration")
+                      : (liveMetrics?.philIriLevel ?? result?.philIriLevel ?? "Frustration")}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200/70 bg-white p-2">
@@ -2460,7 +2506,7 @@ function NewSessionTab({
             </div>
 
             {/* Combined Phil-IRI level (if saved on assessment) */}
-            {result.comprehension?.combinedLevel && result.comprehension.combinedLevel !== combinedLevel && (
+            {result?.comprehension?.combinedLevel && result.comprehension.combinedLevel !== combinedLevel && (
               <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
                 <span className="font-medium text-slate-700">
                   Recorded Combined Level:

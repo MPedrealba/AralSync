@@ -55,7 +55,12 @@ export class OMRServiceError extends Error {
 
 const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<(string | null)[]> {
+interface OMRSheetResult {
+  answers: (string | null)[];
+  warpedImage: string | null;
+}
+
+async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20): Promise<OMRSheetResult> {
   const blob = new Blob([imageBuffer], { type: 'image/png' });
   const form = new FormData();
   form.append('file', blob, 'sheet.png');
@@ -101,7 +106,10 @@ async function processOMRSheet(imageBuffer: ArrayBuffer, keyLength: number = 20)
     throw new OMRServiceError(errorDetails, 'OMR_DETECTION_FAILED', 422);
   }
 
-  return data.answers.map((a: any) => a.answer_label || null);
+  return {
+    answers: data.answers.map((a: any) => a.answer_label || null),
+    warpedImage: data.warped_image_base64 || null,
+  };
 }
 
 /** Compute mastery level from a percentage score */
@@ -226,7 +234,9 @@ export async function POST(req: NextRequest) {
 
     /* ── Process OMR sheet (simulated or OpenCV) ── */
     const imageBuffer = await file.arrayBuffer();
-    const detectedAnswers = await processOMRSheet(imageBuffer, totalItems);
+    const omrResult = await processOMRSheet(imageBuffer, totalItems);
+    const detectedAnswers = omrResult.answers;
+    const warpedImage = omrResult.warpedImage;
     const answersToGrade = verifiedAnswers || detectedAnswers;
 
     /* ── Persist uploaded sheet image to disk ── */
@@ -356,6 +366,7 @@ export async function POST(req: NextRequest) {
       masteryLevel: mastery,
       assessmentId: String(assessment._id),
       omrSheetUrl,
+      warpedImage,
       detectedAnswers,
       keyAnswers,
       keyModes,

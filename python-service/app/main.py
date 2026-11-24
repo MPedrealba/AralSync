@@ -117,6 +117,7 @@ async def omr_detect_pdf(
             "answers": res.get("answers", []),
             "detected_count": res.get("detected_count", 0),
             "name_crop_base64": res.get("name_crop_base64", None),
+            "warped_image_base64": res.get("warped_image_base64", None),
         })
 
     return {"success": True, "page_count": len(pages), "pages": pages}
