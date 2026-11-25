@@ -484,17 +484,10 @@ function recalculateCalibration(
     Math.min(100, Math.round(((baseWords - totalMiscues) / baseWords) * 100))
   );
 
-  const spokenInItems = items.filter((it) => it.spoken && it.type !== "unattempted").length;
-  const spoken =
-    spokenWordsCount && spokenWordsCount > 0
-      ? spokenWordsCount
-      : spokenInItems > 0
-      ? spokenInItems
-      : baseWords;
   const duration = Math.max(1, activeDurationSec || 60);
   const activeMinutes = duration / 60;
-  const wordsDecoded = Math.max(0, spoken - totalMiscues);
-  const wpm = spoken > 0 ? Math.max(0, Math.round(wordsDecoded / activeMinutes)) : 0;
+  const wordsDecoded = Math.max(0, baseWords - totalMiscues);
+  const wpm = baseWords > 0 ? Math.max(0, Math.round(wordsDecoded / activeMinutes)) : 0;
 
   const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
   const evaluation = evaluateReadingPerformance(accuracy, null, baseWords, decodedForEval);
@@ -752,8 +745,32 @@ function WordByWordReader({
       syncDuration();
     };
 
+    let animId: number | null = null;
+    const startRaf = () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+      const tick = () => {
+        if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime)) {
+          setCurrentTime(audio.currentTime);
+          animId = requestAnimationFrame(tick);
+        } else {
+          animId = null;
+        }
+      };
+      animId = requestAnimationFrame(tick);
+    };
+
+    const stopRaf = () => {
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+    };
+
     // Immediately sync state from shared <audio> element (covers playback started prior to mount)
     syncPlaybackState();
+    if (!audio.paused && !audio.ended) {
+      startRaf();
+    }
 
     const handleLoadedMetadata = () => syncDuration();
     const handleDurationChange = () => syncDuration();
@@ -762,12 +779,15 @@ function WordByWordReader({
     };
     const handleEnded = () => {
       setIsPlaying(false);
+      stopRaf();
     };
     const handlePlay = () => {
       setIsPlaying(true);
+      startRaf();
     };
     const handlePause = () => {
       setIsPlaying(false);
+      stopRaf();
     };
     const handleRateChangeEvent = () => {
       if (Number.isFinite(audio.playbackRate) && audio.playbackRate > 0) {
@@ -784,6 +804,7 @@ function WordByWordReader({
     audio.addEventListener("ratechange", handleRateChangeEvent);
 
     return () => {
+      stopRaf();
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("durationchange", handleDurationChange);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
@@ -950,30 +971,37 @@ function WordByWordReader({
   const currentPlayingWordIdx = useMemo(() => {
     if (!isPlaying || items.length === 0) return -1;
 
-    const hasTimestamps = items.some(
-      (it) => it.startTime != null && it.endTime != null
-    );
+    // Collect all items with valid startTime
+    const timedItemsWithIdx: { item: MiscueItem; idx: number }[] = [];
+    items.forEach((it, idx) => {
+      if (it.startTime != null && Number.isFinite(it.startTime)) {
+        timedItemsWithIdx.push({ item: it, idx });
+      }
+    });
 
-    if (hasTimestamps) {
-      // 1. Direct window match: currentTime is within [startTime, endTime]
-      const directIdx = items.findIndex((it) => {
-        if (it.startTime == null || it.endTime == null) return false;
-        const s = it.startTime;
-        const e = Math.max(it.endTime, s + 0.15);
+    if (timedItemsWithIdx.length > 0) {
+      // Sort in chronological order
+      timedItemsWithIdx.sort((a, b) => (a.item.startTime ?? 0) - (b.item.startTime ?? 0));
+
+      // 1. Direct window match: [startTime - 0.05, Math.max(endTime ?? startTime + 0.25, startTime + 0.15)]
+      const direct = timedItemsWithIdx.find(({ item: it }) => {
+        const s = it.startTime! - 0.05;
+        const e = Math.max(it.endTime ?? it.startTime! + 0.25, it.startTime! + 0.15);
         return currentTime >= s && currentTime <= e;
       });
-      if (directIdx !== -1) return directIdx;
+      if (direct) return direct.idx;
 
-      // 2. Gap tolerance: if currentTime is in a tiny pause right after a word,
-      // keep that word active for up to 0.25s before moving to idle/next word
-      for (let i = items.length - 1; i >= 0; i--) {
-        const it = items[i];
-        if (it.startTime != null && currentTime >= it.startTime) {
-          const e = it.endTime != null ? it.endTime : it.startTime + 0.25;
-          if (currentTime <= e + 0.25) {
-            return i;
-          }
-          break;
+      // 2. Latching during gaps: keep the most recently started word latched until the next timed word starts
+      const firstStart = timedItemsWithIdx[0].item.startTime!;
+      if (currentTime < firstStart - 0.05) return -1;
+
+      const lastTimed = timedItemsWithIdx[timedItemsWithIdx.length - 1];
+      const lastEnd = Math.max(lastTimed.item.endTime ?? lastTimed.item.startTime! + 0.25, lastTimed.item.startTime! + 0.15);
+      if (currentTime > lastEnd + 3.0) return -1;
+
+      for (let i = timedItemsWithIdx.length - 1; i >= 0; i--) {
+        if (currentTime >= timedItemsWithIdx[i].item.startTime! - 0.05) {
+          return timedItemsWithIdx[i].idx;
         }
       }
       return -1;
@@ -992,7 +1020,7 @@ function WordByWordReader({
 
   // Auto-scroll active word into view center during playback
   useEffect(() => {
-    if (playingWordRef.current && playbackContainerRef.current) {
+    if (currentPlayingWordIdx >= 0 && playingWordRef.current && playbackContainerRef.current) {
       playingWordRef.current.scrollIntoView({
         behavior: "smooth",
         block: "center",
@@ -1592,19 +1620,6 @@ function NewSessionTab({
 
   const postStopLiveMiscues = liveMiscueResult?.items ?? null;
 
-  /* Live real-time sync of Phil-IRI 2024 miscue counts into tracker while recording */
-  useEffect(() => {
-    if (isRecording && liveMiscueResult?.counts) {
-      setMiscues({
-        substitutions: liveMiscueResult.counts.substitutions || 0,
-        omissions: liveMiscueResult.counts.omissions || 0,
-        insertions: liveMiscueResult.counts.insertions || 0,
-        repetitions: liveMiscueResult.counts.repetitions || 0,
-        mispronunciations: liveMiscueResult.counts.mispronunciations || 0,
-        reversals: liveMiscueResult.counts.reversals || 0,
-      });
-    }
-  }, [isRecording, liveMiscueResult]);
 
   const setMiscue = (key: keyof Miscues, value: string | number) => {
     const val = Math.max(0, typeof value === "number" ? value : Number(value) || 0);
@@ -1685,12 +1700,6 @@ function NewSessionTab({
   /* Clean up on unmount */
   useEffect(() => {
     return () => {
-      stopLiveCaption();
-      if (vadRafRef.current !== null) {
-        window.cancelAnimationFrame(vadRafRef.current);
-        vadRafRef.current = null;
-      }
-      analyserRef.current = null;
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
       if (audioContextRef.current) {
@@ -1705,15 +1714,9 @@ function NewSessionTab({
         playbackAudioRef.current.pause();
       }
     };
-  }, [stopLiveCaption]);
+  }, []);
 
   const stopRecording = useCallback(() => {
-    stopLiveCaption();
-    if (vadRafRef.current !== null) {
-      window.cancelAnimationFrame(vadRafRef.current);
-      vadRafRef.current = null;
-    }
-    analyserRef.current = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -1722,7 +1725,7 @@ function NewSessionTab({
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  }, [stopLiveCaption]);
+  }, []);
 
   const startRecording = async () => {
     setError("");
@@ -1731,6 +1734,14 @@ function NewSessionTab({
     setViewMode("passage");
     setIsEditingPassage(false);
     setActiveWordIdx(null);
+    setMiscues({
+      substitutions: 0,
+      omissions: 0,
+      insertions: 0,
+      repetitions: 0,
+      mispronunciations: 0,
+      reversals: 0,
+    });
     if (playbackAudioRef.current) {
       playbackAudioRef.current.pause();
       playbackAudioRef.current.currentTime = 0;
@@ -1742,123 +1753,90 @@ function NewSessionTab({
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      // 1. Hardware/Driver-level WebRTC acoustic constraints with enhanced suppression
+      // 1. Hardware/Driver-level acoustic constraints calibrated for clean oral reading capture
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: true,
-          echoCancellation: true,
-          autoGainControl: true,
+          noiseSuppression: noiseCancellation,
+          echoCancellation: false,
+          autoGainControl: false,
           channelCount: 1,
-          sampleRate: 44100,
           suppressLocalAudioPlayback: true,
         } as MediaTrackConstraints,
       });
 
       let recordingStream = stream;
 
-      // 2. Web Audio API AnalyserNode VAD gate (always connected) + DSP Filter Chain (when noiseCancellation enabled)
-      try {
-        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtxClass) {
-          const ctx = new AudioCtxClass();
-          if (ctx.state === "suspended") {
-            await ctx.resume();
-          }
-          audioContextRef.current = ctx;
-          const source = ctx.createMediaStreamSource(stream);
-
-          // RMS voice-activity detector via AnalyserNode
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 512;
-          source.connect(analyser);
-          analyserRef.current = analyser;
-
-          const timeDomainBuf = new Uint8Array(analyser.fftSize);
-          const calibStartAt = performance.now();
-          const calibSamples: number[] = [];
-          let noiseFloor = 0.008;
-          lastVoiceActivityAtRef.current = 0;
-
-          if (vadRafRef.current !== null) {
-            window.cancelAnimationFrame(vadRafRef.current);
-            vadRafRef.current = null;
-          }
-          const measureVoiceActivity = () => {
-            const activeAnalyser = analyserRef.current;
-            if (!activeAnalyser) return;
-            activeAnalyser.getByteTimeDomainData(timeDomainBuf);
-            let sumSq = 0;
-            for (let k = 0; k < timeDomainBuf.length; k++) {
-              const norm = (timeDomainBuf[k] - 128) / 128;
-              sumSq += norm * norm;
+      // 2. Web Audio DSP Filter Chain (when noiseCancellation enabled)
+      if (noiseCancellation) {
+        try {
+          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtxClass) {
+            const ctx = new AudioCtxClass();
+            if (ctx.state === "suspended") {
+              await ctx.resume();
             }
-            const rms = Math.sqrt(sumSq / timeDomainBuf.length);
+            audioContextRef.current = ctx;
+            const source = ctx.createMediaStreamSource(stream);
 
-            // Calibrate room noise floor during the first ~300ms (with safe ceiling & minimum floor)
-            if (performance.now() - calibStartAt <= 300) {
-              calibSamples.push(rms);
-              const sorted = [...calibSamples].sort((a, b) => a - b);
-              const floorEst = sorted[Math.floor(sorted.length * 0.4)] ?? rms;
-              noiseFloor = Math.max(0.006, Math.min(0.035, floorEst));
-            }
-
-            if (rms > Math.max(0.015, noiseFloor * 2.2)) {
-              lastVoiceActivityAtRef.current = Date.now();
-            }
-            vadRafRef.current = window.requestAnimationFrame(measureVoiceActivity);
-          };
-          vadRafRef.current = window.requestAnimationFrame(measureVoiceActivity);
-
-          if (noiseCancellation) {
-            // High-pass filter (85 Hz): Cuts electric fan hum, AC drone, and desk bumps
+            // High-pass filter (70 Hz): Cuts low rumble and desk bumps
             const highPass = ctx.createBiquadFilter();
             highPass.type = "highpass";
-            highPass.frequency.value = 85;
+            highPass.frequency.value = 70;
 
-            // Low-pass filter (8000 Hz): Cuts high-frequency electrical hiss & coil whine
-            const lowPass = ctx.createBiquadFilter();
-            lowPass.type = "lowpass";
-            lowPass.frequency.value = 8000;
-
-            // Vocal Dynamics Compressor: Stabilizes reading loudness & suppresses sudden ambient spikes
+            // Gentle vocal dynamics compressor
             const compressor = ctx.createDynamicsCompressor();
-            compressor.threshold.value = -24;
-            compressor.knee.value = 30;
-            compressor.ratio.value = 12;
-            compressor.attack.value = 0.003;
-            compressor.release.value = 0.25;
+            compressor.threshold.value = -20;
+            compressor.knee.value = 20;
+            compressor.ratio.value = 3;
+            compressor.attack.value = 0.005;
+            compressor.release.value = 0.15;
+
+            // Post-compressor makeup gain
+            const makeupGain = ctx.createGain();
+            makeupGain.gain.value = 1.5;
 
             const dest = ctx.createMediaStreamDestination();
             source.connect(highPass);
-            highPass.connect(lowPass);
-            lowPass.connect(compressor);
-            compressor.connect(dest);
+            highPass.connect(compressor);
+            compressor.connect(makeupGain);
+            makeupGain.connect(dest);
 
             recordingStream = dest.stream;
           }
+        } catch {
+          recordingStream = stream;
         }
-      } catch {
-        analyserRef.current = null;
-        recordingStream = stream;
       }
 
       setCalibratedItems([]);
       setViewMode("passage");
       setActiveWordIdx(null);
-      resetLiveCaption();
-      startLiveCaption();
 
       const mr = new MediaRecorder(recordingStream);
       const chunks: BlobPart[] = [];
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
+      mr.onstart = () => {
+        // ~150ms mic warm-up before cueing learner to speak
+        setTimeout(() => {
+          setIsRecording(true);
+          setRecTime(0);
+          if (timerRef.current) window.clearInterval(timerRef.current);
+          timerRef.current = window.setInterval(() => {
+            setRecTime((prevTime) => {
+              const nextTime = prevTime + 1;
+              if (nextTime >= 60) {
+                // Auto-stop recording at exactly 60 seconds (1 minute max)
+                stopRecording();
+                return 60;
+              }
+              return nextTime;
+            });
+          }, 1000);
+        }, 150);
+      };
       mr.onstop = () => {
-        if (vadRafRef.current !== null) {
-          window.cancelAnimationFrame(vadRafRef.current);
-          vadRafRef.current = null;
-        }
-        analyserRef.current = null;
         const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
@@ -1870,21 +1848,8 @@ function NewSessionTab({
           audioContextRef.current = null;
         }
       };
-      mr.start();
+      mr.start(250);
       mediaRecorderRef.current = mr;
-      setIsRecording(true);
-      setRecTime(0);
-      timerRef.current = window.setInterval(() => {
-        setRecTime((prevTime) => {
-          const nextTime = prevTime + 1;
-          if (nextTime >= 60) {
-            // Auto-stop recording at exactly 60 seconds (1 minute max)
-            stopRecording();
-            return 60;
-          }
-          return nextTime;
-        });
-      }, 1000);
     } catch {
       setError(
         "Microphone access was denied or unavailable. Use the Simulate button to demo."
@@ -1989,7 +1954,9 @@ function NewSessionTab({
       fd.append("passageTitle", passageTitle || "Oral Reading Passage");
       fd.append("durationSec", String(Math.max(recTime, 1)));
       if (simulate) fd.append("simulate", "1");
-      fd.append("miscues", JSON.stringify(miscues));
+      if (!audioBlob && !simulate) {
+        fd.append("miscues", JSON.stringify(miscues));
+      }
 
       const res = await fetch("/api/teacher/reading/analyze", {
         method: "POST",
@@ -2108,25 +2075,33 @@ function NewSessionTab({
     miscues.mispronunciations +
     miscues.reversals;
 
+  const wordsAttempted = useMemo(() => {
+    if (calibratedItems.length > 0) {
+      const attempted = calibratedItems.filter((it) => it.expected != null && it.type !== "unattempted").length;
+      if (attempted > 0) return attempted;
+    }
+    return result?.wordsAttempted || wordCount;
+  }, [calibratedItems, result, wordCount]);
+
   const calibratedAccuracy = Math.max(
     0,
-    Math.round(((wordCount - totalMiscues) / wordCount) * 100)
+    Math.min(100, Math.round(((wordsAttempted - totalMiscues) / wordsAttempted) * 100))
   );
 
-  const werPct = Math.min(100, Math.round((totalMiscues / wordCount) * 100));
+  const werPct = Math.min(100, Math.round((totalMiscues / wordsAttempted) * 100));
 
   const currentPassageObj = useMemo(
     () => passages.find((p) => p.title === passageTitle),
     [passages, passageTitle]
   );
 
-  // Compile official 5-8 Phil-IRI comprehension questions (Literal, Inferential, Critical)
+  // Compile official 10-item Phil-IRI comprehension questions (Literal, Inferential, Critical)
   const compQuestions: CompQuestion[] = useMemo(() => {
     return compilePassageComprehensionQuestions(
       currentPassageObj?.questions,
       cleanPassage,
       passageTitle,
-      6
+      10
     );
   }, [currentPassageObj, cleanPassage, passageTitle]);
 
@@ -2167,15 +2142,42 @@ function NewSessionTab({
 
   const liveMetrics = useMemo(() => {
     const duration = Math.max(1, result?.activeDurationSec ?? result?.durationSec ?? recTime ?? 60);
+    const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
+
+    if (calibratedItems.length > 0) {
+      const recalced = recalculateCalibration(
+        calibratedItems,
+        result?.spokenWords,
+        duration,
+        wordsAttempted
+      );
+      const evalWithComp = evaluateReadingPerformance(
+        recalced.accuracy,
+        effectiveCompScore,
+        wordsAttempted,
+        Math.max(0, wordsAttempted - recalced.totalMiscues)
+      );
+      return {
+        accuracy: recalced.accuracy,
+        wer: Math.min(100, Math.round((recalced.totalMiscues / wordsAttempted) * 100)),
+        wpm: recalced.wpm,
+        masteryLevel: evalWithComp.masteryBand,
+        masteryBand: evalWithComp.masteryBand,
+        philIriLevel: evalWithComp.philIriLevel,
+        level: evalWithComp.philIriLevel,
+        counts: recalced.counts,
+        totalMiscues: recalced.totalMiscues,
+      };
+    }
+
     const activeMinutes = duration / 60;
-    const wordsDecoded = Math.max(0, wordCount - totalMiscues);
+    const wordsDecoded = Math.max(0, wordsAttempted - totalMiscues);
     const wpm = result?.wpm ?? (recTime > 0 ? Math.round(wordsDecoded / activeMinutes) : Math.round(wordsDecoded / 1));
 
-    const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
     const evaluation = evaluateReadingPerformance(
       calibratedAccuracy,
       effectiveCompScore,
-      wordCount,
+      wordsAttempted,
       wordsDecoded
     );
 
@@ -2190,12 +2192,22 @@ function NewSessionTab({
       counts: miscues,
       totalMiscues,
     };
-  }, [miscues, totalMiscues, calibratedAccuracy, werPct, wordCount, result, recTime, compAnsweredCount, compScorePct]);
+  }, [
+    calibratedItems,
+    result,
+    recTime,
+    wordsAttempted,
+    compAnsweredCount,
+    compScorePct,
+    calibratedAccuracy,
+    werPct,
+    totalMiscues,
+    miscues,
+  ]);
 
   // DepEd Table 3 Joint Matrix Evaluation
   const oralAccuracy = liveMetrics.accuracy;
-  const wordsAttempted = result?.wordsAttempted ?? result?.wordsTotal ?? wordCount;
-  const wordsDecoded = Math.max(0, wordCount - totalMiscues);
+  const wordsDecoded = Math.max(0, wordsAttempted - liveMetrics.totalMiscues);
   const effectiveCompScore = compAnsweredCount > 0 ? compScorePct : (result?.comprehension?.score ?? null);
   const combinedEval = useMemo(() => {
     return evaluateReadingPerformance(oralAccuracy, effectiveCompScore, wordsAttempted, wordsDecoded);
@@ -2595,22 +2607,14 @@ function NewSessionTab({
                 setActiveWordIdx={setActiveWordIdx}
               />
             </div>
-          ) : isRecording || ((Boolean(audioUrl) || Boolean(liveFullTranscript)) && calibratedItems.length === 0) ? (
-            <div className="mt-4">
-              <LiveReadingCaptionViewer
-                passageText={cleanPassage}
-                activeWordIndex={liveActiveWordIndex}
-                transcript={liveTranscript}
-                interimText={liveInterimText}
-                spokenWordCount={liveSpokenWordCount}
-                isListening={isRecording && liveIsListening}
-                isSupported={liveIsSupported}
-                elapsedSec={recTime}
-                miscueItems={postStopLiveMiscues}
-              />
-            </div>
           ) : (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs">
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 select-none shadow-xs relative">
+              {isRecording && (
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-800 shadow-2xs animate-pulse">
+                  <span className="h-2 w-2 rounded-full bg-red-600 animate-ping" />
+                  <span>Recording oral reading...</span>
+                </div>
+              )}
               <div className="font-serif text-lg sm:text-xl leading-relaxed text-slate-800 tracking-normal space-y-4">
                 {/* passageText.split paragraphs with cleaned text */}
                 {cleanPassage.split(/\n\s*\n/).map((para, i) => (
@@ -2863,18 +2867,6 @@ function NewSessionTab({
                 <p className="mt-1.5 text-center text-[11px] text-slate-500">
                   Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI 2024 transcription
                 </p>
-                {liveFullTranscript && (
-                  <div className="mt-2.5 rounded-lg border border-slate-200/80 bg-white p-2.5 text-left text-xs shadow-xs">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold mb-1">
-                      <span>Live Speech Tracked:</span>
-                      <span className="font-mono text-emerald-700">
-                        {liveSpokenWordCount} {liveSpokenWordCount === 1 ? "word" : "words"}
-                        {recTime > 2 && ` (~${Math.round((liveSpokenWordCount / Math.max(recTime, 1)) * 60)} WPM)`}
-                      </span>
-                    </div>
-                    <p className="font-serif text-slate-800 italic line-clamp-3">“{liveFullTranscript}”</p>
-                  </div>
-                )}
               </div>
             )}
 

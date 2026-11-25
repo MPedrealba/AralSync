@@ -1035,13 +1035,11 @@ export async function transcribeGroq(
   const lang = detectPassageLanguage(passage);
   groqForm.append('language', lang);
 
-  // Prepend verbatim instruction prompt to Whisper
-  const systemPrompt = 'Transcribe oral reading verbatim. Do not omit repetitions, stutters, mispronunciations, or filler words.';
-  const passageSnippet = passage
-    ? ' ' + normalizeWords(passage).slice(0, 100).join(' ')
-    : '';
-  const prompt = `${systemPrompt}${passageSnippet}`.slice(0, 400);
-  groqForm.append('prompt', prompt);
+  // Prepend clean passage excerpt to Whisper (avoid hallucination-inducing imperative commands)
+  const prompt = cleanPassageText(passage || '').split(/\s+/).slice(0, 50).join(' ').slice(0, 400);
+  if (prompt) {
+    groqForm.append('prompt', prompt);
+  }
 
   const groqRes = await fetch(GROQ_URL, {
     method: 'POST',
@@ -1081,6 +1079,7 @@ export function computeFluencyMetrics(opts: {
 }) {
   const { simulate, file, passage, durationSec, miscues } = opts;
   const hasMiscues = Object.values(miscues).some((n) => Number(n) > 0);
+  const isManualMode = !file && !simulate && hasMiscues;
 
   let transcript = opts.transcriptInput;
   let segments = opts.segmentsInput;
@@ -1123,11 +1122,11 @@ export function computeFluencyMetrics(opts: {
         hesitations: 0,
       };
 
-  const wordsAttempted = classified.wordsAttempted > 0
-    ? classified.wordsAttempted
-    : normalizeWords(passage).length;
+  const wordsAttempted = isManualMode
+    ? (classified.wordsAttempted > 0 ? classified.wordsAttempted : normalizeWords(passage).length)
+    : (classified.wordsAttempted > 0 ? classified.wordsAttempted : (transcript ? 0 : normalizeWords(passage).length));
 
-  const totalMiscues = hasMiscues
+  const totalMiscues = isManualMode
     ? Object.values(miscues).reduce((a, b) => a + (Number(b) || 0), 0)
     : classified.totalMiscues;
 
@@ -1137,28 +1136,32 @@ export function computeFluencyMetrics(opts: {
     ? Math.max(0, Math.round(((wordsAttempted - classified.totalMiscues) / wordsAttempted) * 100))
     : 0;
 
-  const accuracy = hasMiscues
+  const accuracy = isManualMode
     ? computeAccuracyFromMiscues(passage, miscues, classified.wordsAttempted)
     : autoAccuracy;
 
-  // ── WER ──
-  const wer = transcript ? werFor(transcript, passage) : null;
+  // ── WER relative to wordsAttempted for partial/timed readings ──
+  const wer = wordsAttempted > 0
+    ? Math.max(0, Math.min(100, Math.round((totalMiscues / wordsAttempted) * 100)))
+    : (transcript ? werFor(transcript, passage) : null);
 
   // ── Active reading duration from segment timestamps ──
-  let activeDurationSec = durationSec;
-  if (segments.length >= 2) {
+  // Do NOT shrink activeDurationSec down to segment window if durationSec >= 5
+  let effectiveDurationSec = Math.max(1, durationSec);
+  if (durationSec < 5 && segments.length >= 2) {
     const speechDuration = segments[segments.length - 1].end - segments[0].start;
-    if (speechDuration > 1) activeDurationSec = speechDuration;
+    if (speechDuration > 1) effectiveDurationSec = Math.max(1, speechDuration);
   }
 
-  // ── Reading Rate (WCPM): Words Correct Per Minute ──
-  // Math.max(0, Math.round((Spoken Words - Total Miscues) / (activeDurationSec / 60)))
-  const activeMinutes = Math.max(1 / 60, activeDurationSec / 60);
-  const spokenWords = normalizeWords(transcript).length;
-  const wordsDecoded = Math.max(0, spokenWords - totalMiscues);
-  const wpm = spokenWords > 0
-    ? Math.max(0, Math.round((spokenWords - totalMiscues) / activeMinutes))
+  // ── Reading Rate (WCPM): Words Correct Per Minute under Phil-IRI ──
+  const activeMinutes = effectiveDurationSec / 60;
+  const wordsCorrect = Math.max(0, wordsAttempted - totalMiscues);
+  const wpm = wordsAttempted > 0
+    ? Math.max(0, Math.round(wordsCorrect / activeMinutes))
     : 0;
+
+  const spokenWords = normalizeWords(transcript).length;
+  const wordsDecoded = wordsCorrect;
 
   const pauses = countPauses(segments);
 
@@ -1168,7 +1171,7 @@ export function computeFluencyMetrics(opts: {
 
   // ── DepEd Phil-IRI Reading Level & DepEd Mastery Band ──
   const comp = opts.comprehension;
-  // If the student achieved positive accuracy or spoke words, do not falsely flag as Non-Reader due to STT latency
+  // If the student achieved positive accuracy or decoded words, do not falsely flag as Non-Reader
   const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
   const evaluation = evaluateReadingPerformance(
     accuracy,
@@ -1193,7 +1196,7 @@ export function computeFluencyMetrics(opts: {
     spokenWords,
     wordsAttempted,
     wordsTotal: classified.wordsTotal,
-    activeDurationSec,
+    activeDurationSec: effectiveDurationSec,
     miscueBreakdown: classified.counts,
     miscueItems: classified.items,
     miscueTotal: totalMiscues,
@@ -1459,15 +1462,19 @@ export function cleanPassageText(text: string): string {
  * Loads or compiles the official 5–8 Phil-IRI comprehension questions for an oral reading passage.
  * Automatically guarantees an even distribution:
  * - Questions 1 & 2: Literal (Direct facts from passage)
- * - Questions 3 & 4: Inferential (Cause & effect, vocabulary, feelings)
- * - Questions 5 & 6: Critical (Theme, main lesson, author's perspective)
+ * Compiles a standardized set of comprehension questions for a passage
+ * (Phil-IRI DepEd Form 2: Literal, Inferential, and Critical domains).
+ * Prioritizes authentic stored passage questions first (up to targetCount, default 10).
+ * If fewer than targetCount questions exist, synthesizes contextual questions
+ * from expanded template pools across Literal, Inferential, and Critical dimensions.
  */
 export function compilePassageComprehensionQuestions(
   passageQuestions: Array<{ question: string; options?: string[]; answer?: string; category?: string }> | undefined,
   passageText: string = '',
   passageTitle: string = 'Reading Selection',
-  targetCount: number = 6
+  targetCount: number = 10
 ): CompQuestion[] {
+  const effectiveTarget = Math.max(5, Math.min(10, targetCount));
   const cleanedText = cleanPassageText(passageText);
   const cleanTitle = (passageTitle || 'the selection').replace(/\s+/g, ' ').trim();
   const sentences = cleanedText
@@ -1476,16 +1483,32 @@ export function compilePassageComprehensionQuestions(
     .filter((s) => s.length > 15);
 
   const firstSentence = sentences[0] || 'The passage details the essential facts and events.';
+  const secondSentence = sentences[1] || firstSentence;
   const middleSentence = sentences[Math.floor(sentences.length / 2)] || 'The events develop through interconnected stages.';
+  const thirdSentence = sentences[2] || middleSentence;
   const lastSentence = sentences[sentences.length - 1] || 'The selection concludes with an important reflection.';
 
-  const literalPool: CompQuestion[] = [];
-  const inferentialPool: CompQuestion[] = [];
-  const criticalPool: CompQuestion[] = [];
+  const results: CompQuestion[] = [];
+  const seenQuestions = new Set<string>();
 
-  // 1. Ingest existing passage questions if available
+  const addQuestion = (q: string, a: string, cat: 'Literal' | 'Inferential' | 'Critical', opts?: string[]) => {
+    const norm = q.toLowerCase().trim();
+    if (seenQuestions.has(norm)) return false;
+    seenQuestions.add(norm);
+    results.push({
+      id: results.length + 1,
+      question: q,
+      answer: a,
+      category: cat,
+      options: opts,
+    });
+    return true;
+  };
+
+  // 1. Prioritize authentic passage questions first (up to effectiveTarget)
   if (Array.isArray(passageQuestions) && passageQuestions.length > 0) {
     for (let i = 0; i < passageQuestions.length; i++) {
+      if (results.length >= effectiveTarget) break;
       const pq = passageQuestions[i];
       if (!pq?.question) continue;
       const qText = pq.question.trim();
@@ -1521,22 +1544,16 @@ export function compilePassageComprehensionQuestions(
         cat = 'Literal';
       }
 
-      const qItem: CompQuestion = {
-        id: 0,
-        question: qText,
-        options: Array.isArray(pq.options) && pq.options.length ? pq.options : undefined,
-        answer: pq.answer || (Array.isArray(pq.options) && pq.options[0]) || firstSentence,
-        category: cat,
-      };
-
-      if (cat === 'Literal') literalPool.push(qItem);
-      else if (cat === 'Inferential') inferentialPool.push(qItem);
-      else criticalPool.push(qItem);
+      addQuestion(
+        qText,
+        pq.answer || (Array.isArray(pq.options) && pq.options[0]) || firstSentence,
+        cat,
+        Array.isArray(pq.options) && pq.options.length ? pq.options : undefined
+      );
     }
   }
 
-  // 2. Synthesize benchmark templates for each category
-  // Literal (Direct facts from passage)
+  // 2. Synthesize benchmark templates for each category (at least 4 distinct items each)
   const literalTemplates: Array<{ q: string; a: string }> = [
     {
       q: `Based directly on the passage "${cleanTitle}", what is the primary subject or central event described?`,
@@ -1548,11 +1565,14 @@ export function compilePassageComprehensionQuestions(
     },
     {
       q: `According to the text, what specific detail or action takes place in "${cleanTitle}"?`,
-      a: sentences[1] || firstSentence,
+      a: secondSentence,
+    },
+    {
+      q: `What additional factual evidence or observation is directly mentioned in the selection?`,
+      a: thirdSentence,
     },
   ];
 
-  // Inferential (Cause & effect, vocabulary, feelings)
   const inferentialTemplates: Array<{ q: string; a: string }> = [
     {
       q: `What logical cause or motive drives the actions and outcomes described in "${cleanTitle}"?`,
@@ -1566,9 +1586,12 @@ export function compilePassageComprehensionQuestions(
       q: `What would most likely happen if the key factors or conditions described in "${cleanTitle}" were altered?`,
       a: 'The progression would break down, producing deficiency or failure in the dependent system.',
     },
+    {
+      q: `What can be deduced about the broader significance of the events described in "${cleanTitle}"?`,
+      a: 'The underlying principles apply consistently across related environmental and human contexts.',
+    },
   ];
 
-  // Critical (Theme, main lesson, author's perspective)
   const criticalTemplates: Array<{ q: string; a: string }> = [
     {
       q: `What is the most enduring theme, main lesson, or real-world insight conveyed by the author in "${cleanTitle}"?`,
@@ -1582,45 +1605,30 @@ export function compilePassageComprehensionQuestions(
       q: `How does the author's viewpoint and presentation support the overall significance of "${cleanTitle}"?`,
       a: 'By presenting concrete descriptive details, orderly progression, and verifiable observations.',
     },
+    {
+      q: `How effectively does "${cleanTitle}" encourage readers to reflect critically on their own actions and surroundings?`,
+      a: 'It prompts deeper evaluation of cause, consequence, and personal responsibility in community settings.',
+    },
   ];
 
-  for (const t of literalTemplates) {
-    if (!literalPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
-      literalPool.push({ id: 0, question: t.q, answer: t.a, category: 'Literal' });
+  // 3. If fewer than effectiveTarget exist, pad remaining slots evenly from literal, inferential, and critical templates
+  let templateIdx = 0;
+  while (results.length < effectiveTarget && templateIdx < 4) {
+    if (results.length < effectiveTarget) {
+      addQuestion(literalTemplates[templateIdx].q, literalTemplates[templateIdx].a, 'Literal');
     }
-  }
-
-  for (const t of inferentialTemplates) {
-    if (!inferentialPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
-      inferentialPool.push({ id: 0, question: t.q, answer: t.a, category: 'Inferential' });
+    if (results.length < effectiveTarget) {
+      addQuestion(inferentialTemplates[templateIdx].q, inferentialTemplates[templateIdx].a, 'Inferential');
     }
-  }
-
-  for (const t of criticalTemplates) {
-    if (!criticalPool.some((p) => p.question.toLowerCase() === t.q.toLowerCase())) {
-      criticalPool.push({ id: 0, question: t.q, answer: t.a, category: 'Critical' });
+    if (results.length < effectiveTarget) {
+      addQuestion(criticalTemplates[templateIdx].q, criticalTemplates[templateIdx].a, 'Critical');
     }
+    templateIdx++;
   }
 
-  // 3. Assemble with strict Phil-IRI even distribution:
-  // Questions 1 & 2: Literal (Direct facts from passage)
-  // Questions 3 & 4: Inferential (Cause & effect, vocabulary, feelings)
-  // Questions 5 & 6: Critical (Theme, main lesson, author's perspective)
-  const results: CompQuestion[] = [];
-  results.push({ ...literalPool[0], id: 1, category: 'Literal' });
-  results.push({ ...literalPool[1], id: 2, category: 'Literal' });
-  results.push({ ...inferentialPool[0], id: 3, category: 'Inferential' });
-  results.push({ ...inferentialPool[1], id: 4, category: 'Inferential' });
-  results.push({ ...criticalPool[0], id: 5, category: 'Critical' });
-  results.push({ ...criticalPool[1], id: 6, category: 'Critical' });
-
-  // If targetCount is 7 or 8, fill from remaining templates
-  if (targetCount >= 7 && literalPool[2]) {
-    results.push({ ...literalPool[2], id: 7, category: 'Literal' });
-  }
-  if (targetCount >= 8 && inferentialPool[2]) {
-    results.push({ ...inferentialPool[2], id: 8, category: 'Inferential' });
-  }
-
-  return results.slice(0, Math.max(5, Math.min(8, targetCount)));
+  // Ensure sequential IDs 1..N
+  return results.slice(0, effectiveTarget).map((item, idx) => ({
+    ...item,
+    id: idx + 1,
+  }));
 }
