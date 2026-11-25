@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import { useSearch } from "@/components/SearchContext";
@@ -1237,14 +1237,21 @@ function NewSessionTab({
   } = useLiveCaption({
     passageText: cleanPassage,
     language: "auto",
+    elapsedSec: recTime,
   });
 
   /* Live real-time Phil-IRI miscue computation during recording */
   const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
   const liveMiscueResult = useMemo(() => {
     if (!isRecording || !liveSpeech || !cleanPassage) return null;
-    return classifyMiscues(liveSpeech, cleanPassage);
-  }, [isRecording, liveSpeech, cleanPassage]);
+    // Bounded Phil-IRI window: restrict reference passage strictly to words attempted so far
+    // based on liveActiveWordIndex, preventing unread future paragraphs from being marked as false omissions.
+    const pWords = cleanPassage.split(/\s+/).filter(Boolean);
+    const wordsReached = liveActiveWordIndex >= 0 ? liveActiveWordIndex + 1 : liveSpeech.split(/\s+/).length;
+    const maxBound = Math.min(pWords.length, Math.max(3, wordsReached + 1));
+    const attemptedPassage = pWords.slice(0, maxBound).join(" ");
+    return classifyMiscues(liveSpeech, attemptedPassage);
+  }, [isRecording, liveSpeech, cleanPassage, liveActiveWordIndex]);
 
   /* Live real-time sync of Phil-IRI 2024 miscue counts into tracker while recording */
   useEffect(() => {
@@ -1380,6 +1387,18 @@ function NewSessionTab({
     };
   }, [stopLiveCaption]);
 
+  const stopRecording = useCallback(() => {
+    stopLiveCaption();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [stopLiveCaption]);
+
   const startRecording = async () => {
     setError("");
     setResult(null);
@@ -1478,21 +1497,21 @@ function NewSessionTab({
       mediaRecorderRef.current = mr;
       setIsRecording(true);
       setRecTime(0);
-      timerRef.current = window.setInterval(() => setRecTime((t) => t + 1), 1000);
+      timerRef.current = window.setInterval(() => {
+        setRecTime((prevTime) => {
+          const nextTime = prevTime + 1;
+          if (nextTime >= 60) {
+            // Auto-stop recording at exactly 60 seconds (1 minute max)
+            stopRecording();
+            return 60;
+          }
+          return nextTime;
+        });
+      }, 1000);
     } catch {
       setError(
         "Microphone access was denied or unavailable. Use the Simulate button to demo."
       );
-    }
-  };
-
-  const stopRecording = () => {
-    stopLiveCaption();
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
     }
   };
 
@@ -2370,10 +2389,40 @@ function NewSessionTab({
               </button>
             </div>
 
-            {/* Timer */}
-            <p className="mb-6 font-mono text-4xl font-bold tracking-tight text-slate-900">
-              {fmtTimer(recTime)}
-            </p>
+            {/* Phil-IRI 1-Min Standard Indicator & Timer */}
+            <div className="flex flex-col items-center gap-1.5 mb-6 text-center">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
+                <span className={`h-2 w-2 rounded-full ${isRecording ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                <span>Phil-IRI 1-Min Standard</span>
+                <span className="font-mono text-slate-500">({fmtTimer(recTime)} / 01:00)</span>
+              </div>
+
+              <p className={`font-mono text-4xl sm:text-5xl font-bold tracking-tight transition-colors ${
+                recTime >= 50 && isRecording ? "text-rose-600 animate-pulse" : "text-slate-900"
+              }`}>
+                {fmtTimer(recTime)}
+                <span className="text-xl sm:text-2xl font-normal text-slate-400"> / 01:00</span>
+              </p>
+
+              {/* 10 seconds remaining alert banner */}
+              {isRecording && recTime >= 50 && recTime < 60 && (
+                <div
+                  role="alert"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1 text-xs font-bold text-amber-900 shadow-xs animate-bounce mt-1"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                  <span>10 seconds remaining — wrap up oral reading</span>
+                </div>
+              )}
+
+              {/* 1-Minute Assessment Completed Badge */}
+              {recTime >= 60 && !isRecording && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-900 shadow-xs mt-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>1-Minute Assessment Completed</span>
+                </div>
+              )}
+            </div>
 
             {/* Generous Mic Toggle Button */}
             <button
@@ -2381,7 +2430,9 @@ function NewSessionTab({
               onClick={isRecording ? stopRecording : startRecording}
               className={`group relative flex h-24 w-24 items-center justify-center rounded-full transition-all duration-300 shadow-md ${
                 isRecording
-                  ? "bg-rose-600 text-white ring-4 ring-rose-200 animate-pulse active:scale-95"
+                  ? recTime >= 50
+                    ? "bg-amber-600 text-white ring-4 ring-amber-300 ring-offset-2 animate-pulse active:scale-95"
+                    : "bg-rose-600 text-white ring-4 ring-rose-200 animate-pulse active:scale-95"
                   : "bg-red-800 text-white hover:bg-red-900 active:scale-95"
               }`}
               title={isRecording ? "Stop recording" : "Start recording"}
@@ -2394,7 +2445,13 @@ function NewSessionTab({
             </button>
 
             <p className="mt-4 text-xs font-medium text-slate-500">
-              {isRecording ? "Recording in progress... Tap to stop" : "Tap mic to begin oral reading"}
+              {isRecording
+                ? recTime >= 50
+                  ? "Wrapping up 1-minute timed reading..."
+                  : "Recording in progress... Tap to stop"
+                : recTime >= 60
+                ? "Assessment finished (60s). Click Analyze to score."
+                : "Tap mic to begin oral reading"}
             </p>
 
             {/* Playback preview */}

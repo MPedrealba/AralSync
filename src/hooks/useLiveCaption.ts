@@ -76,10 +76,17 @@ function detectPassageLanguage(text: string): "fil-PH" | "en-US" {
   return matches && matches.length >= 3 ? "fil-PH" : "en-US";
 }
 
+/** Common short stopwords that should not trigger isolated ahead-jumping on phantom noise */
+const STOP_WORDS = new Set([
+  "a", "an", "the", "in", "on", "at", "to", "for", "of", "and", "is", "it", "as", "by", "or",
+  "ang", "mga", "sa", "ng", "si", "sina", "ni", "nina", "kay", "kina", "ay", "at", "na", "may", "kung"
+]);
+
 export interface UseLiveCaptionOptions {
   passageText?: string;
   language?: "fil-PH" | "en-US" | "auto";
   active?: boolean;
+  elapsedSec?: number;
 }
 
 export interface UseLiveCaptionReturn {
@@ -100,6 +107,7 @@ export function useLiveCaption({
   passageText = "",
   language = "auto",
   active = false,
+  elapsedSec,
 }: UseLiveCaptionOptions = {}): UseLiveCaptionReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -114,6 +122,12 @@ export function useLiveCaption({
   const isStartedRef = useRef(false);
   const passageWordsRef = useRef<string[]>([]);
   const restartTimeoutRef = useRef<any>(null);
+  const elapsedSecRef = useRef(elapsedSec);
+
+  // Sync elapsed seconds into ref without forcing recognition restarts
+  useEffect(() => {
+    elapsedSecRef.current = elapsedSec;
+  }, [elapsedSec]);
 
   // Resolved language
   const resolvedLang =
@@ -128,14 +142,22 @@ export function useLiveCaption({
   }, [passageText]);
 
   /**
-   * Aligns stream of spoken words with passage words using a sliding window Levenshtein fuzzy match (3 words).
-   * Prevents premature jumps when learner pauses, stutters, or repeats a word.
+   * Aligns stream of spoken words with passage words using a sliding window Levenshtein fuzzy match.
+   * Clamps forward progression to maximum physiological human reading velocity (~3.5 words/sec),
+   * preventing ambient noise from teleporting deep into the passage.
    */
   const alignSpokenWithPassage = useCallback((spokenWords: string[], isInterim: boolean = false) => {
     const pWords = passageWordsRef.current;
     if (pWords.length === 0 || spokenWords.length === 0) {
       return;
     }
+
+    // Velocity clamp: at elapsedSec seconds, a reader physically cannot exceed ~3.5 words/sec + 3 buffer
+    const elapsed = elapsedSecRef.current;
+    const maxAllowedIdx =
+      elapsed != null && elapsed >= 0
+        ? Math.min(pWords.length - 1, Math.floor(elapsed * 3.5) + 3)
+        : pWords.length - 1;
 
     let pIdx = 0;
     for (let sIdx = 0; sIdx < spokenWords.length; sIdx++) {
@@ -144,7 +166,7 @@ export function useLiveCaption({
       while (pIdx < pWords.length && !normalizeWord(pWords[pIdx])) {
         pIdx++;
       }
-      if (pIdx >= pWords.length) break;
+      if (pIdx >= pWords.length || pIdx > maxAllowedIdx) break;
 
       // 1. Repetition / Stutter check: If learner repeated or hesitated on the prior word (pIdx - 1),
       // keep current tracking position without advancing forward.
@@ -160,7 +182,7 @@ export function useLiveCaption({
 
       // 3. Sliding window Levenshtein fuzzy match across a 3-word window: [pIdx + 1, pIdx + 2, pIdx + 3]
       let matchedAhead = -1;
-      const windowEnd = Math.min(pIdx + 4, pWords.length);
+      const windowEnd = Math.min(pIdx + 4, maxAllowedIdx + 1, pWords.length);
       for (let ahead = pIdx + 1; ahead < windowEnd; ahead++) {
         if (!normalizeWord(pWords[ahead])) continue;
         if (isWordMatch(sWord, pWords[ahead])) {
@@ -170,24 +192,37 @@ export function useLiveCaption({
       }
 
       if (matchedAhead !== -1) {
-        // If there is an upcoming spoken word, verify that it also aligns ahead to prevent false jumps
+        const targetWordNorm = normalizeWord(pWords[matchedAhead]);
+        const isStopword = STOP_WORDS.has(targetWordNorm);
         const nextSpoken = spokenWords[sIdx + 1];
-        if (nextSpoken && matchedAhead + 1 < pWords.length) {
-          if (isWordMatch(nextSpoken, pWords[matchedAhead + 1])) {
-            pIdx = matchedAhead + 2;
-            sIdx++; // Advance spoken index as well
+
+        // If target word is a common stopword or very short (<=3 chars), require next-word confirmation
+        if (isStopword || targetWordNorm.length <= 3) {
+          if (nextSpoken && matchedAhead + 1 < pWords.length && isWordMatch(nextSpoken, pWords[matchedAhead + 1])) {
+            pIdx = Math.min(maxAllowedIdx, matchedAhead + 2);
+            sIdx++;
             continue;
           }
+          // Do not jump ahead on isolated short stopwords from ambient noise
+        } else {
+          // Content word: verify next word if available, otherwise advance safely up to velocity clamp
+          if (nextSpoken && matchedAhead + 1 < pWords.length && isWordMatch(nextSpoken, pWords[matchedAhead + 1])) {
+            pIdx = Math.min(maxAllowedIdx, matchedAhead + 2);
+            sIdx++;
+            continue;
+          }
+          pIdx = Math.min(maxAllowedIdx, matchedAhead + 1);
         }
-        // Advance to matched lookahead token
-        pIdx = matchedAhead + 1;
       }
     }
+
+    // Clamp pIdx to velocity ceiling
+    pIdx = Math.min(pIdx, maxAllowedIdx);
 
     // Smooth active word index: if learner is actively articulating (interim speech),
     // highlight the upcoming/current word (pIdx). If in a pause, highlight last completed word (pIdx - 1).
     if (pIdx >= 0) {
-      let activeIdx = isInterim ? Math.min(pIdx, pWords.length - 1) : Math.max(0, pIdx - 1);
+      let activeIdx = isInterim ? Math.min(pIdx, maxAllowedIdx, pWords.length - 1) : Math.max(0, Math.min(pIdx - 1, maxAllowedIdx));
       while (activeIdx > 0 && !normalizeWord(pWords[activeIdx])) {
         activeIdx--;
       }
@@ -196,13 +231,13 @@ export function useLiveCaption({
         if (prev >= 0 && activeIdx < prev && activeIdx >= prev - 1) {
           return prev;
         }
-        return activeIdx;
+        return Math.min(activeIdx, maxAllowedIdx);
       });
     }
   }, []);
 
   /**
-   * Process updated transcript & interim speech
+   * Process updated transcript & interim speech with speech rate clamping
    */
   const processSpeech = useCallback(
     (finalStr: string, interimStr: string) => {
@@ -212,7 +247,13 @@ export function useLiveCaption({
         .split(/\s+/)
         .filter((w) => Boolean(normalizeWord(w)));
 
-      setSpokenWordCount(rawWords.length);
+      const elapsed = elapsedSecRef.current;
+      const maxSpokenWords =
+        elapsed != null && elapsed >= 0
+          ? Math.floor(elapsed * 3.5) + 3
+          : rawWords.length;
+
+      setSpokenWordCount(Math.min(rawWords.length, maxSpokenWords));
       alignSpokenWithPassage(rawWords, isInterim);
     },
     [alignSpokenWithPassage]
