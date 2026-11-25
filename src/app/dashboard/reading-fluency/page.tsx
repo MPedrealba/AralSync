@@ -512,7 +512,7 @@ function recalculateCalibration(
 }
 
 const fmtAudioTime = (s: number) => {
-  if (!s || Number.isNaN(s) || s < 0) return "0:00";
+  if (!s || !Number.isFinite(s) || s < 0) return "0:00";
   const mins = Math.floor(s / 60);
   const secs = Math.floor(s % 60);
   return `${mins}:${String(secs).padStart(2, "0")}`;
@@ -521,6 +521,7 @@ const fmtAudioTime = (s: number) => {
 function AudioPlayerSync({
   audioUrl,
   audioRef,
+  renderAudioElement = true,
   currentTime,
   duration,
   isPlaying,
@@ -531,6 +532,7 @@ function AudioPlayerSync({
 }: {
   audioUrl?: string | null;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  renderAudioElement?: boolean;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -540,6 +542,12 @@ function AudioPlayerSync({
   onSeek: (seconds: number) => void;
 }) {
   if (!audioUrl) return null;
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const sliderMax = safeDuration > 0 ? safeDuration : 100;
+  const safeCurrentTime =
+    Number.isFinite(currentTime) && currentTime >= 0
+      ? Math.min(currentTime, sliderMax)
+      : 0;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-white shadow-xs">
@@ -591,27 +599,29 @@ function AudioPlayerSync({
 
         {/* Time display */}
         <span className="font-mono text-xs text-slate-300 shrink-0 min-w-16">
-          {fmtAudioTime(currentTime)} / {fmtAudioTime(duration || 0)}
+          {fmtAudioTime(safeCurrentTime)} / {fmtAudioTime(safeDuration)}
         </span>
 
         {/* Scrubber Range Bar */}
         <input
           type="range"
           min={0}
-          max={duration || 100}
+          max={sliderMax}
           step={0.1}
-          value={currentTime}
+          value={safeCurrentTime}
           onChange={(e) => onSeek(Number(e.target.value))}
           className="w-full accent-red-700 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
         />
       </div>
 
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        preload="metadata"
-        className="hidden"
-      />
+      {renderAudioElement && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          className="hidden"
+        />
+      )}
     </div>
   );
 }
@@ -619,6 +629,8 @@ function AudioPlayerSync({
 function WordByWordReader({
   items,
   audioUrl,
+  externalAudioRef,
+  fallbackDurationSec,
   onOverrideWord,
   activeWordIdx,
   setActiveWordIdx,
@@ -626,16 +638,24 @@ function WordByWordReader({
 }: {
   items: MiscueItem[];
   audioUrl?: string | null;
+  externalAudioRef?: React.RefObject<HTMLAudioElement | null>;
+  fallbackDurationSec?: number;
   onOverrideWord?: (index: number, newType: MiscueItem["type"]) => void;
   activeWordIdx: number | null;
   setActiveWordIdx: (idx: number | null) => void;
   readOnly?: boolean;
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const internalAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = externalAudioRef ?? internalAudioRef;
+  const prevAudioUrlRef = useRef<string | null | undefined>(audioUrl);
   const playbackContainerRef = useRef<HTMLDivElement | null>(null);
   const playingWordRef = useRef<HTMLSpanElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(
+    fallbackDurationSec != null && Number.isFinite(fallbackDurationSec) && fallbackDurationSec > 0
+      ? fallbackDurationSec
+      : 0
+  );
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
@@ -686,17 +706,59 @@ function WordByWordReader({
     };
   }, [items]);
 
+  const safeFallbackDuration =
+    fallbackDurationSec != null && Number.isFinite(fallbackDurationSec) && fallbackDurationSec > 0
+      ? fallbackDurationSec
+      : 0;
+
+  const safeDisplayDuration =
+    Number.isFinite(duration) && duration > 0
+      ? duration
+      : safeFallbackDuration;
+
   useEffect(() => {
+    const urlChanged = prevAudioUrlRef.current !== audioUrl;
+    prevAudioUrlRef.current = audioUrl;
+
+    if (!audioUrl) {
+      setCurrentTime(0);
+      setIsPlaying(false);
+      setDuration(safeFallbackDuration);
+      return;
+    }
+
+    if (urlChanged) {
+      setCurrentTime(0);
+      setIsPlaying(false);
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleLoadedMetadata = () => {
-      if (audio.duration && !Number.isNaN(audio.duration)) {
+    const syncDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
+      } else if (safeFallbackDuration > 0) {
+        setDuration(safeFallbackDuration);
       }
     };
+
+    const syncPlaybackState = () => {
+      setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+      setIsPlaying(!audio.paused && !audio.ended);
+      if (Number.isFinite(audio.playbackRate) && audio.playbackRate > 0) {
+        setPlaybackRate(audio.playbackRate);
+      }
+      syncDuration();
+    };
+
+    // Immediately sync state from shared <audio> element (covers playback started prior to mount)
+    syncPlaybackState();
+
+    const handleLoadedMetadata = () => syncDuration();
+    const handleDurationChange = () => syncDuration();
     const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
+      setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
     };
     const handleEnded = () => {
       setIsPlaying(false);
@@ -707,21 +769,30 @@ function WordByWordReader({
     const handlePause = () => {
       setIsPlaying(false);
     };
+    const handleRateChangeEvent = () => {
+      if (Number.isFinite(audio.playbackRate) && audio.playbackRate > 0) {
+        setPlaybackRate(audio.playbackRate);
+      }
+    };
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("durationchange", handleDurationChange);
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ratechange", handleRateChangeEvent);
 
     return () => {
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("durationchange", handleDurationChange);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ratechange", handleRateChangeEvent);
     };
-  }, [audioUrl]);
+  }, [audioUrl, audioRef, safeFallbackDuration]);
 
   /* Close floating action toolbar when clicking outside any word or on Escape */
   useEffect(() => {
@@ -749,12 +820,79 @@ function WordByWordReader({
     };
   }, [activeWordIdx, setActiveWordIdx]);
 
+  const pauseOtherAudioElements = (activeAudio: HTMLAudioElement) => {
+    if (typeof document === "undefined") return;
+    document.querySelectorAll("audio").forEach((el) => {
+      if (el !== activeAudio && !el.paused) {
+        el.pause();
+      }
+    });
+  };
+
+  const resolveFiniteDuration = (audioEl?: HTMLAudioElement | null) => {
+    const elDur = audioEl?.duration;
+    if (elDur != null && Number.isFinite(elDur) && elDur > 0) return elDur;
+    if (Number.isFinite(duration) && duration > 0) return duration;
+    if (safeFallbackDuration > 0) return safeFallbackDuration;
+    return 60;
+  };
+
+  const estimateEntryTimestampSec = (entryIdx: number, totalDur: number): number => {
+    const entry = passageEntries[entryIdx];
+    if (!entry) return 0;
+    const { item } = entry;
+    if (item.startTime != null && Number.isFinite(item.startTime) && item.startTime >= 0) {
+      return item.startTime;
+    }
+
+    // Interpolate between nearest preceding and following passage items with timestamps
+    let prevPos = -1;
+    let prevSec: number | null = null;
+    for (let p = entryIdx - 1; p >= 0; p--) {
+      const it = passageEntries[p].item;
+      const t = it.endTime != null && Number.isFinite(it.endTime) ? it.endTime : it.startTime;
+      if (t != null && Number.isFinite(t) && t >= 0) {
+        prevPos = p;
+        prevSec = t;
+        break;
+      }
+    }
+
+    let nextPos = -1;
+    let nextSec: number | null = null;
+    for (let n = entryIdx + 1; n < passageEntries.length; n++) {
+      const it = passageEntries[n].item;
+      const t = it.startTime != null && Number.isFinite(it.startTime) ? it.startTime : it.endTime;
+      if (t != null && Number.isFinite(t) && t >= 0) {
+        nextPos = n;
+        nextSec = t;
+        break;
+      }
+    }
+
+    if (prevSec != null && nextSec != null && nextPos > prevPos) {
+      const frac = (entryIdx - prevPos) / (nextPos - prevPos);
+      return prevSec + frac * Math.max(0, nextSec - prevSec);
+    }
+    if (prevSec != null && passageEntries.length > prevPos + 1) {
+      const frac = (entryIdx - prevPos) / (passageEntries.length - prevPos);
+      return prevSec + frac * Math.max(0, totalDur - prevSec);
+    }
+    if (nextSec != null && nextPos > 0) {
+      return (entryIdx / nextPos) * nextSec;
+    }
+
+    return passageEntries.length > 0 ? (entryIdx / passageEntries.length) * totalDur : 0;
+  };
+
   const handlePlayPause = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audio.paused && !audio.ended) {
+      audio.pause();
     } else {
-      audioRef.current.play().catch(() => {});
+      pauseOtherAudioElements(audio);
+      audio.play().catch(() => {});
     }
   };
 
@@ -766,31 +904,45 @@ function WordByWordReader({
   };
 
   const handleSeek = (seconds: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = seconds;
-      setCurrentTime(seconds);
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    const finiteDuration = resolveFiniteDuration(audio);
+    const clamped = Math.min(finiteDuration, Math.max(0, Number.isFinite(seconds) ? seconds : 0));
+    audio.currentTime = clamped;
+    setCurrentTime(clamped);
   };
 
   const jumpToWord = (origIdx: number, autoPlay: boolean = true) => {
-    if (!audioRef.current || items.length === 0) return;
+    const audio = audioRef.current;
+    if (!audio || items.length === 0) return;
+
+    // Pause any other stray <audio> elements as a safety guard against double playback
+    pauseOtherAudioElements(audio);
+
+    const finiteDuration = resolveFiniteDuration(audio);
     const item = items[origIdx];
+    const entryPos = passageEntries.findIndex((e) => e.origIdx === origIdx);
     let targetSec: number;
+
     if (item && item.startTime != null && item.startTime >= 0) {
-      targetSec = Math.max(0, item.startTime - 0.15);
+      if (Number.isFinite(item.startTime)) {
+        targetSec = Math.max(0, item.startTime - 0.15);
+      } else {
+        targetSec = 0;
+      }
+    } else if (entryPos >= 0) {
+      const estimated = estimateEntryTimestampSec(entryPos, finiteDuration);
+      targetSec = Math.max(0, estimated - 0.15);
     } else {
-      const audioDur = audioRef.current.duration || duration || 60;
-      const entryPos = passageEntries.findIndex((e) => e.origIdx === origIdx);
-      const ratio =
-        entryPos >= 0 && passageEntries.length > 0
-          ? entryPos / passageEntries.length
-          : origIdx / items.length;
-      targetSec = Math.max(0, ratio * audioDur - 0.35);
+      const ratio = items.length > 0 ? origIdx / items.length : 0;
+      targetSec = Math.max(0, ratio * finiteDuration - 0.35);
     }
-    audioRef.current.currentTime = targetSec;
+
+    targetSec = Math.min(finiteDuration, Math.max(0, targetSec));
+    audio.currentTime = targetSec;
     setCurrentTime(targetSec);
     if (autoPlay) {
-      audioRef.current.play().catch(() => {});
+      audio.play().catch(() => {});
     }
   };
 
@@ -827,16 +979,16 @@ function WordByWordReader({
       return -1;
     }
 
-    // Fallback: proportional mapping across passage word pills if speech timestamps are absent
-    if (duration > 0 && passageEntries.length > 0) {
+    // Fallback: proportional mapping across passage word pills using safe finite duration
+    if (safeDisplayDuration > 0 && passageEntries.length > 0) {
       const entryIdx = Math.min(
         passageEntries.length - 1,
-        Math.floor((currentTime / duration) * passageEntries.length)
+        Math.floor((currentTime / safeDisplayDuration) * passageEntries.length)
       );
       return passageEntries[entryIdx]?.origIdx ?? -1;
     }
     return -1;
-  }, [isPlaying, currentTime, duration, items, passageEntries]);
+  }, [isPlaying, currentTime, safeDisplayDuration, items, passageEntries]);
 
   // Auto-scroll active word into view center during playback
   useEffect(() => {
@@ -856,8 +1008,9 @@ function WordByWordReader({
         <AudioPlayerSync
           audioUrl={audioUrl}
           audioRef={audioRef}
+          renderAudioElement={!externalAudioRef}
           currentTime={currentTime}
-          duration={duration}
+          duration={safeDisplayDuration}
           isPlaying={isPlaying}
           playbackRate={playbackRate}
           onPlayPause={handlePlayPause}
@@ -914,12 +1067,10 @@ function WordByWordReader({
                 : null;
             const isCurrentlyPlaying = playingOwnWord || playingExtraIdx !== -1;
 
-            const wordEstimatedSec =
-              item.startTime != null
-                ? item.startTime
-                : passageEntries.length > 0
-                ? Math.max(0, (entryIdx / passageEntries.length) * (duration || 60) - 0.35)
-                : 0;
+            const wordEstimatedSec = estimateEntryTimestampSec(
+              entryIdx,
+              safeDisplayDuration || 60
+            );
 
             const extrasSummary = attachedExtras
               .map((ex) => `${ex.type === "repetition" ? "Repeat" : ex.type === "hesitation" ? "Filler" : "Extra"}: "${ex.spoken}"`)
@@ -1366,6 +1517,7 @@ function NewSessionTab({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [noiseCancellation, setNoiseCancellation] = useState(true);
   const audioUrlRef = useRef<string | null>(null);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -1549,6 +1701,9 @@ function NewSessionTab({
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
+      if (playbackAudioRef.current) {
+        playbackAudioRef.current.pause();
+      }
     };
   }, [stopLiveCaption]);
 
@@ -1576,6 +1731,10 @@ function NewSessionTab({
     setViewMode("passage");
     setIsEditingPassage(false);
     setActiveWordIdx(null);
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current.currentTime = 0;
+    }
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
@@ -2429,6 +2588,8 @@ function NewSessionTab({
               <WordByWordReader
                 items={calibratedItems}
                 audioUrl={audioUrl}
+                externalAudioRef={playbackAudioRef}
+                fallbackDurationSec={Math.max(recTime, result?.durationSec || 0, 1)}
                 onOverrideWord={handleOverrideWord}
                 activeWordIdx={activeWordIdx}
                 setActiveWordIdx={setActiveWordIdx}
@@ -2698,7 +2859,7 @@ function NewSessionTab({
             {/* Playback preview */}
             {audioUrl && (
               <div className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <audio controls src={audioUrl} className="w-full h-8" />
+                <audio ref={playbackAudioRef} controls src={audioUrl} className="w-full h-8" />
                 <p className="mt-1.5 text-center text-[11px] text-slate-500">
                   Audio captured ({Math.max(recTime, 1)}s) &bull; Ready for Phil-IRI 2024 transcription
                 </p>

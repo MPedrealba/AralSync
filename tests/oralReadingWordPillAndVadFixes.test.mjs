@@ -187,4 +187,27 @@ describe('Part 1 & Part 2: Oral Reading Word-Pill UI, 1-to-1 Passage Preservatio
       );
     });
   });
+
+  describe('Part 3: Unified Single-<audio> Playback, State Sync & WebM Infinity Duration Fix', () => {
+    test('unifies NewSessionTab preview <audio> and WordByWordReader via shared playbackAudioRef', () => {
+      assert.ok(pageSrc.includes('const playbackAudioRef = useRef<HTMLAudioElement | null>(null);'), 'Must define playbackAudioRef in NewSessionTab');
+      assert.ok(pageSrc.includes('<audio ref={playbackAudioRef} controls src={audioUrl}'), 'Preview <audio> must attach playbackAudioRef');
+      assert.ok(pageSrc.includes('externalAudioRef={playbackAudioRef}'), 'NewSessionTab must pass externalAudioRef to WordByWordReader');
+      assert.ok(pageSrc.includes('fallbackDurationSec={Math.max(recTime, result?.durationSec || 0, 1)}'), 'NewSessionTab must pass finite fallbackDurationSec');
+      assert.ok(pageSrc.includes('const audioRef = externalAudioRef ?? internalAudioRef;'), 'WordByWordReader must prefer externalAudioRef when provided');
+      assert.ok(pageSrc.includes('renderAudioElement={!externalAudioRef}'), 'AudioPlayerSync must skip duplicate <audio> when externalAudioRef is provided');
+    });
+
+    test('syncs playback state on mount/URL change and handles WebM Infinity duration & safe word seeking', () => {
+      assert.ok(pageSrc.includes('syncPlaybackState();'), 'Must immediately sync playback state from shared <audio> element');
+      assert.ok(pageSrc.includes('!audio.paused && !audio.ended'), 'Must sync isPlaying from active <audio> state');
+      assert.ok(pageSrc.includes('"durationchange"'), 'Must listen to durationchange event');
+      assert.ok(pageSrc.includes('"ratechange"'), 'Must listen to ratechange event');
+      assert.ok(pageSrc.includes('Number.isFinite(audio.duration) && audio.duration > 0'), 'Must guard against WebM Infinity/NaN duration');
+      assert.ok(pageSrc.includes('if (!s || !Number.isFinite(s) || s < 0) return "0:00";'), 'fmtAudioTime must guard against non-finite numbers');
+      assert.ok(pageSrc.includes('document.querySelectorAll("audio")'), 'Must pause stray audio elements as safety guard');
+      assert.ok(pageSrc.includes('estimateEntryTimestampSec'), 'Must interpolate missing word timestamps from adjacent words');
+      assert.ok(pageSrc.includes('targetSec = Math.min(finiteDuration, Math.max(0, targetSec));'), 'Must clamp targetSec to [0, finiteDuration]');
+    });
+  });
 });
