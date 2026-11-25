@@ -8,7 +8,7 @@ import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface LearnerRow {
   name: string;
-  lrn: string;
+  studentNumber: string;
   grade: string;
   section: string;
   reading: string;
@@ -73,7 +73,7 @@ export default function PrincipalLearnerRecordsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or LRN..."
+              placeholder="Search by name or Student No..."
               className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
             />
           </div>
@@ -106,7 +106,7 @@ export default function PrincipalLearnerRecordsPage() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">LRN</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Student No.</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Grade</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Section</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Reading Level</th>
@@ -118,7 +118,7 @@ export default function PrincipalLearnerRecordsPage() {
                   {learners.map((l, i) => (
                     <tr key={i} className="hover:bg-gray-50/60">
                       <td className="px-6 py-3.5 text-sm font-medium text-gray-800">{l.name}</td>
-                      <td className="px-6 py-3.5 text-sm text-gray-500">{l.lrn}</td>
+                      <td className="px-6 py-3.5 text-sm font-mono text-gray-500">{l.studentNumber}</td>
                       <td className="px-6 py-3.5 text-sm text-gray-600">{l.grade}</td>
                       <td className="px-6 py-3.5 text-sm text-gray-600">{l.section}</td>
                       <td className="px-6 py-3.5"><span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${readingStyle[l.reading] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>{l.reading}</span></td>
@@ -155,7 +155,7 @@ export default function PrincipalLearnerRecordsPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-gray-900">{selectedLearner.name}</h3>
-                    <p className="text-xs text-gray-500">LRN: {selectedLearner.lrn}</p>
+                    <p className="text-xs font-mono text-gray-500">Student No: {selectedLearner.studentNumber}</p>
                   </div>
                 </div>
                 <button

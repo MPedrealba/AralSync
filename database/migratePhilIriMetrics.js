@@ -142,7 +142,7 @@ function combinedReadingLevel(accuracy, compScore) {
       }
     );
 
-    console.log(`Learner ${r.lrn}: readingLevel = ${finalReadingLevel} (Combined: ${finalCombinedLevel || '—'}, Acc: ${oralAccuracy ?? '—'}%, Comp: ${compScore ?? '—'}%)`);
+    console.log(`Learner ${r.studentNumber || r._id}: readingLevel = ${finalReadingLevel} (Combined: ${finalCombinedLevel || '—'}, Acc: ${oralAccuracy ?? '—'}%, Comp: ${compScore ?? '—'}%)`);
     updatedCount++;
   }
 

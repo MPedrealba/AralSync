@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../database/db';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import Assessment from '../../../../../models/Assessment';
+import {
+  getTeacherSubject,
+  getSubjectFilter,
+  getTeacherLearnerFilter,
+} from '@/lib/teacherScope';
 
 /**
  * GET /api/teacher/learners
- * Lists all learners with their record joined to the User identity, plus the
- * latest assessment score per subject. Supports server-side filters via
- * query params: search, grade, section, risk.
+ * Lists all learners assigned to the authenticated teacher within their subject scope,
+ * joined with User identity and latest subject-scoped assessment scores.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -24,28 +27,11 @@ export async function GET(req: NextRequest) {
     const section = searchParams.get('section');
     const risk = searchParams.get('risk');
 
-    const teacherIdObj = mongoose.Types.ObjectId.isValid(teacher.id)
-      ? new mongoose.Types.ObjectId(teacher.id)
-      : teacher.id;
+    const teacherSubject = await getTeacherSubject(teacher);
 
-    // Strictly scope learners to this teacher's direct or subject-specific assignments
-    const teacherMatchConditions: any[] = [
-      { assignedTeacherId: teacher.id },
-      { assignedTeacherId: teacherIdObj },
-      { 'assignedTeachers.reading': teacher.id },
-      { 'assignedTeachers.reading': teacherIdObj },
-      { 'assignedTeachers.english': teacher.id },
-      { 'assignedTeachers.english': teacherIdObj },
-      { 'assignedTeachers.filipino': teacher.id },
-      { 'assignedTeachers.filipino': teacherIdObj },
-      { 'assignedTeachers.math': teacher.id },
-      { 'assignedTeachers.math': teacherIdObj },
-      { 'assignedTeachers.science': teacher.id },
-      { 'assignedTeachers.science': teacherIdObj },
-    ];
-
+    // Strictly scope learners to this teacher's subject-specific or direct assignments
     const filter: Record<string, unknown> = {
-      $or: teacherMatchConditions,
+      ...getTeacherLearnerFilter(teacher.id, teacherSubject),
     };
     if (grade) {
       const g = Number(grade.replace(/\D/g, ''));
@@ -82,6 +68,7 @@ export async function GET(req: NextRequest) {
       const assessments = await Assessment.find({
         studentId: { $in: studentIds },
         score: { $exists: true, $ne: null },
+        ...getSubjectFilter(teacherSubject),
       }).sort({ date: -1 });
 
       for (const a of assessments) {
@@ -95,7 +82,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Search (name, LRN, guardian) applied after DB-level filters.
+    // Search (name, Student Number, guardian) applied after DB-level filters.
     const data = records
       .map((r: any) => {
         const name = r.studentId?.name || 'Unknown';
@@ -105,7 +92,7 @@ export async function GET(req: NextRequest) {
           id: r._id.toString(),
           studentId,
           name,
-          lrn: r.lrn,
+          studentNumber: r.studentNumber || r.studentId?.username || '',
           gradeLevel: r.gradeLevel,
           section: r.section,
           riskLevel: r.riskLevel,
@@ -123,7 +110,13 @@ export async function GET(req: NextRequest) {
           address: r.address || '',
           subjects: {
             Math: perSubject.Math?.score ?? null,
-            Reading: perSubject.Reading?.score ?? null,
+            Reading:
+              perSubject.Reading?.score ??
+              perSubject.English?.score ??
+              perSubject.Filipino?.score ??
+              perSubject['Reading - English']?.score ??
+              perSubject['Reading - Filipino']?.score ??
+              null,
             Science: perSubject.Science?.score ?? null,
           },
         };
@@ -132,7 +125,7 @@ export async function GET(req: NextRequest) {
         if (!search) return true;
         return (
           l.name.toLowerCase().includes(search) ||
-          l.lrn.toLowerCase().includes(search) ||
+          l.studentNumber.toLowerCase().includes(search) ||
           (l.guardian && l.guardian.toLowerCase().includes(search))
         );
       });

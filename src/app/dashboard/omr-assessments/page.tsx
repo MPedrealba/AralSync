@@ -2024,7 +2024,7 @@ function QuestionnairePrint({ doc }: { doc: GeneratedDoc }) {
             </p>
           </div>
 
-          {/* ─── Standard Student Information Fields (NAME: LRN: SECTION: DATE: SCORE:) ─── */}
+          {/* ─── Standard Student Information Fields (NAME: STUDENT NO: SECTION: DATE: SCORE:) ─── */}
           <div className="my-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
             <div className="flex items-center gap-1.5">
               <span className="font-bold">{isFilipino ? "Pangalan:" : "Name:"}</span>
@@ -4836,7 +4836,7 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                         </p>
                       </div>
 
-                      {/* ─── Standard Student Information Fields (NAME: LRN: SECTION: DATE: SCORE:) ─── */}
+                      {/* ─── Standard Student Information Fields (NAME: STUDENT NO: SECTION: DATE: SCORE:) ─── */}
                       <div className="my-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs text-black border-b border-black pb-2 mb-2">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">{isDeskFilipino ? "Pangalan:" : "Name:"}</span>

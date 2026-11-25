@@ -149,7 +149,7 @@ export default function ChangePasswordPage() {
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-amber-800">
                 Please set a new, secure password before accessing your dashboard.
-                Your default password (<span className="font-semibold">password123</span> for faculty/staff or LRN for learners) must be replaced.
+                Your default password (<span className="font-semibold">password123</span> for faculty/staff or surname / Student Number for learners) must be replaced.
               </p>
             </div>
           </div>
@@ -188,7 +188,7 @@ export default function ChangePasswordPage() {
                 type={showCurrent ? "text" : "password"}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="e.g. password123, your LRN, or temporary password"
+                placeholder="e.g. password123, your surname, or temporary password"
                 autoComplete="current-password"
                 className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-10 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#DE2B2B] focus:bg-white focus:ring-2 focus:ring-[#DE2B2B]/10"
               />

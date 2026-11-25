@@ -29,7 +29,7 @@ interface LearnerItem {
   studentId: string | null;
   name: string;
   username: string;
-  lrn: string;
+  studentNumber: string;
   gradeLevel: number;
   section: string;
   riskLevel: string;
@@ -874,7 +874,7 @@ function CoordinatorLearnersContent() {
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search by name, LRN, or section..."
+                  placeholder="Search by name, Student No., or section..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3.5 text-xs text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
@@ -1047,7 +1047,7 @@ function CoordinatorLearnersContent() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-6 py-3.5">Learner Name &amp; LRN</th>
+                  <th className="px-6 py-3.5">Learner Name &amp; Student No.</th>
                   <th className="px-6 py-3.5">Cohort</th>
                   <th className="px-6 py-3.5">Risk Level</th>
                   <th className="px-6 py-3.5">Phil-IRI Level</th>
@@ -1089,7 +1089,7 @@ function CoordinatorLearnersContent() {
                           !learner.assignedTeacherId ? "bg-amber-50/20" : ""
                         }`}
                       >
-                        {/* Name & LRN */}
+                        {/* Name & Student Number */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
@@ -1098,7 +1098,7 @@ function CoordinatorLearnersContent() {
                             <div>
                               <p className="font-bold text-slate-900">{learner.name}</p>
                               <p className="font-mono text-[11px] text-slate-400">
-                                LRN: {learner.lrn}
+                                Student No: {learner.studentNumber}
                               </p>
                             </div>
                           </div>

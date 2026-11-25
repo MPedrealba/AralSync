@@ -4,6 +4,7 @@ import { ok } from '@/lib/api';
 import connectDB from '../../../../database/db';
 import LearningMaterial from '../../../../models/LearningMaterial';
 import { ensureDefaultLearningMaterials } from '@/lib/learningMaterialsSeed';
+import { getTeacherSubject } from '@/lib/teacherScope';
 
 function expandSubject(subject: string): string[] | null {
   const s = subject.trim();
@@ -44,7 +45,7 @@ function expandSubject(subject: string): string[] | null {
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher', 'coordinator', 'principal', 'student']);
+    const authUser = await requireAuth(req, ['teacher', 'coordinator', 'principal', 'student']);
     await connectDB();
 
     // Ensure default materials are populated if database is freshly initialized
@@ -70,9 +71,17 @@ export async function GET(req: NextRequest) {
       andConditions.push({ isActive: true });
     }
 
-    // Subject Normalization & Bridging
-    if (subjectParam && subjectParam !== 'All') {
-      const subjectList = expandSubject(subjectParam);
+    // Subject Normalization & Strict Teacher Scoping
+    let effectiveSubjectParam = subjectParam;
+    if (authUser.role === 'teacher') {
+      const teacherSubject = await getTeacherSubject(authUser);
+      if (teacherSubject !== 'All') {
+        effectiveSubjectParam = teacherSubject;
+      }
+    }
+
+    if (effectiveSubjectParam && effectiveSubjectParam !== 'All') {
+      const subjectList = expandSubject(effectiveSubjectParam);
       if (subjectList && subjectList.length > 0) {
         andConditions.push({ subject: { $in: subjectList } });
       }

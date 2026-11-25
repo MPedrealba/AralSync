@@ -74,10 +74,10 @@ export async function POST(req: Request) {
 
     const trimmedInput = String(username).trim();
 
-    // Search for the user by username, or by student LRN
+    // Search for the user by username, or by Student Number
     let user = await User.findOne({ username: trimmedInput });
     if (!user) {
-      const lr = await LearnerRecord.findOne({ lrn: trimmedInput });
+      const lr = await LearnerRecord.findOne({ studentNumber: trimmedInput });
       if (lr?.studentId) {
         user = await User.findById(lr.studentId);
       }
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "No account found with that username. Please verify your username or LRN.",
+          error: "No account found with that username. Please verify your username or Student Number.",
           field: "username",
         },
         { status: 401 }
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     // Verify the password
     let isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch && user.role === 'student') {
-      // Allow case-insensitive and punctuation/space-tolerant matching for student surnames or LRNs
+      // Allow case-insensitive and punctuation/space-tolerant matching for student surnames or Student Numbers
       const normalizedInput = String(password).toLowerCase().replace(/[^a-z0-9]/gi, '');
       if (normalizedInput && normalizedInput !== password) {
         isMatch = await bcrypt.compare(normalizedInput, user.password);

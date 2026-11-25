@@ -19,7 +19,7 @@ interface PreviewRow {
   status: RowStatus;
   issues: string[];
   data: {
-    lrn: string;
+    studentNumber: string;
     name: string;
     gradeLevel: number | null;
     section: string;
@@ -41,6 +41,13 @@ interface ImportResult {
   created: number;
   skippedDuplicates: number;
   failed: { row: number; reason: string }[];
+  createdLearners?: {
+    studentNumber: string;
+    name: string;
+    gradeLevel: number | null;
+    section: string;
+    defaultPassword: string;
+  }[];
 }
 
 const statusBadge: Record<RowStatus, { label: string; cls: string }> = {
@@ -197,9 +204,10 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
                 </button>
               </div>
               <p className="text-xs leading-relaxed text-gray-400">
-                Imported students log in with their <b>LRN</b> as both username and
-                password. Rows whose LRN already exists in the system are flagged and
-                skipped — you can then correct them manually.
+                Imported students automatically receive system-generated sequential{" "}
+                <b>Student Numbers</b> (e.g. 20260001) as their login ID and their{" "}
+                <b>surname</b> as default password. Duplicate Student Numbers are
+                flagged and skipped.
               </p>
             </div>
           )}
@@ -246,7 +254,7 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/70">
                         <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                        <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">LRN</th>
+                        <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Student No.</th>
                         <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Name</th>
                         <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Grade</th>
                         <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Section</th>
@@ -263,7 +271,9 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
                               <p className="mt-0.5 text-[11px] text-red-500">{r.issues.join(", ")}</p>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-gray-600">{r.data?.lrn || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">
+                            {r.data?.studentNumber || <span className="italic text-gray-400">Auto-assigned</span>}
+                          </td>
                           <td className="px-3 py-2 font-medium text-gray-800">{r.data?.name || "—"}</td>
                           <td className="px-3 py-2 text-gray-600">{r.data?.gradeLevel ?? "—"}</td>
                           <td className="px-3 py-2 text-gray-600">{r.data?.section || "—"}</td>
@@ -299,10 +309,32 @@ export default function ImportLearnersModal({ isOpen, onClose, onImported }: Pro
                 </div>
               )}
               <p className="text-sm text-gray-500">
-                New students can now log in with their LRN as username and password.
+                New students can now log in with their assigned Student Number and surname as default password.
                 {result.skippedDuplicates > 0 &&
                   " Already-in-system students were skipped — edit them from the learner list to correct details."}
               </p>
+              {result.createdLearners && result.createdLearners.length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 text-left text-xs">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2">Student No.</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Default Password</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {result.createdLearners.slice(0, 50).map((item) => (
+                        <tr key={item.studentNumber}>
+                          <td className="px-3 py-1.5 font-mono font-semibold text-blue-700">{item.studentNumber}</td>
+                          <td className="px-3 py-1.5 text-gray-800">{item.name}</td>
+                          <td className="px-3 py-1.5 font-mono text-gray-600">{item.defaultPassword}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -148,6 +148,21 @@ export default function LearnerViewPage() {
   }
 
   const l = data.learner;
+  const teacherSubject: string = data.teacherSubject || "All";
+  const isReadingScope = ["Reading", "English", "Filipino"].includes(teacherSubject);
+  const omrLabelPrefix =
+    teacherSubject === "All" ? "" : isReadingScope ? "Reading & GST " : `${teacherSubject} `;
+  const showReadingAssessments = isReadingScope || teacherSubject === "All";
+  const scopedGrowthSubjects =
+    data.prePostGrowth?.bySubject && Object.keys(data.prePostGrowth.bySubject).length > 0
+      ? Object.keys(data.prePostGrowth.bySubject)
+      : isReadingScope
+      ? ["Reading"]
+      : teacherSubject === "Math"
+      ? ["Math"]
+      : teacherSubject === "Science"
+      ? ["Science"]
+      : ["Math", "Reading", "Science"];
   const riskStyle =
     riskStyles[data.riskClassification] ?? {
       bg: "bg-gray-50",
@@ -191,7 +206,7 @@ export default function LearnerViewPage() {
               <div className="pb-1">
                 <h2 className="text-xl font-bold text-gray-900">{l.name}</h2>
                 <p className="text-sm text-gray-400">
-                  LRN: {l.lrn} · Grade {l.gradeLevel} - {l.section}
+                  Student No: {l.studentNumber} · Grade {l.gradeLevel} - {l.section}
                 </p>
               </div>
             </div>
@@ -217,7 +232,7 @@ export default function LearnerViewPage() {
             icon={<ShieldCheck className="h-5 w-5 text-blue-600" />}
           />
           <MetricCard
-            title="Latest OMR Score"
+            title={teacherSubject !== "All" ? `Latest ${isReadingScope ? "Reading" : teacherSubject} OMR Score` : "Latest OMR Score"}
             value={latestOmr ? `${latestOmr.score}%` : "—"}
             icon={<FileCheck2 className="h-5 w-5 text-emerald-600" />}
           />
@@ -329,7 +344,7 @@ export default function LearnerViewPage() {
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
                 <div className="text-xs font-semibold text-slate-700">Subject Growth Breakdown</div>
                 <div className="mt-2 space-y-1.5">
-                  {["Math", "Reading", "Science"].map((subj) => {
+                  {scopedGrowthSubjects.map((subj) => {
                     const row = data.prePostGrowth.bySubject?.[subj];
                     return (
                       <div key={subj} className="flex items-center justify-between text-xs">
@@ -366,13 +381,15 @@ export default function LearnerViewPage() {
         {/* 2 Assessment Tables */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* OMR Assessments */}
-          <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+          <div className={`rounded-xl border border-gray-100 bg-white shadow-sm ${!showReadingAssessments ? "lg:col-span-2" : ""}`}>
             <div className="border-b border-gray-100 px-5 py-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <span className="text-blue-600">✎</span> OMR Assessments
+                <span className="text-blue-600">✎</span> {omrLabelPrefix}OMR Assessments
               </h3>
               <p className="mt-0.5 text-xs text-gray-400">
-                Recent test scores and mastery
+                {teacherSubject !== "All"
+                  ? `Recent ${isReadingScope ? "reading and GST" : teacherSubject.toLowerCase()} test scores and mastery`
+                  : "Recent test scores and mastery"}
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -403,7 +420,9 @@ export default function LearnerViewPage() {
                         colSpan={5}
                         className="px-5 py-8 text-center text-sm text-gray-400"
                       >
-                        No OMR assessments yet.
+                        {teacherSubject !== "All"
+                          ? `No ${isReadingScope ? "Reading" : teacherSubject} OMR assessments yet.`
+                          : "No OMR assessments yet."}
                       </td>
                     </tr>
                   ) : (
@@ -455,6 +474,7 @@ export default function LearnerViewPage() {
           </div>
 
           {/* Reading Assessments */}
+          {showReadingAssessments && (
           <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
             <div className="border-b border-gray-100 px-5 py-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
@@ -520,6 +540,7 @@ export default function LearnerViewPage() {
               </table>
             </div>
           </div>
+          )}
         </div>
       </main>
 

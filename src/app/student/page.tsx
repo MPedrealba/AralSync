@@ -131,6 +131,19 @@ export default function StudentDashboardPage() {
           <p className="mt-1 text-sm text-gray-500">
             Here is your latest learning recovery progress and assigned activities.
           </p>
+          {(learnerRecord?.studentNumber || user?.username) && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              <span>Student Number:</span>
+              <span className="font-mono font-bold text-slate-900">
+                {learnerRecord?.studentNumber || user?.username}
+              </span>
+              {learnerRecord?.gradeLevel && (
+                <span className="text-slate-400">
+                  &bull; Grade {learnerRecord.gradeLevel} {learnerRecord.section ? `(${learnerRecord.section})` : ""}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <Link
           href="/student/reading-fluency"

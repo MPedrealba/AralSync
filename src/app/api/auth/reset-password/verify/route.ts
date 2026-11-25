@@ -125,24 +125,24 @@ export async function POST(req: NextRequest) {
     }
 
     // ── STUDENT / LEARNER VERIFICATION (Default / Existing Flow) ──
-    const { lrn, birthDate, section } = body;
+    const { studentNumber, birthDate, section } = body;
 
-    if (!lrn || !birthDate || !section) {
+    if (!studentNumber || !birthDate || !section) {
       return NextResponse.json(
-        { error: 'Please provide your LRN, Section, and Birthdate to verify your identity.' },
+        { error: 'Please provide your Student Number, Section, and Birthdate to verify your identity.' },
         { status: 400 }
       );
     }
 
-    const trimmedLrn = String(lrn).trim();
+    const trimmedStudentNumber = String(studentNumber).trim();
     const trimmedSection = String(section).trim().toLowerCase();
     const trimmedBirthDate = String(birthDate).trim();
 
-    // Locate student LearnerRecord by LRN
-    const learner = await LearnerRecord.findOne({ lrn: trimmedLrn });
+    // Locate student LearnerRecord by Student Number
+    const learner = await LearnerRecord.findOne({ studentNumber: trimmedStudentNumber });
     if (!learner) {
       return NextResponse.json(
-        { error: `No student found with Learner Reference Number (LRN): ${trimmedLrn}. Please verify with your school registrar or teacher.` },
+        { error: `No student found with Student Number: ${trimmedStudentNumber}. Please verify with your school registrar or teacher.` },
         { status: 404 }
       );
     }
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     // Generate signed 15-minute Password Reset Token for student
     const resetToken = await new SignJWT({
       sub: user._id.toString(),
-      lrn: learner.lrn,
+      studentNumber: learner.studentNumber,
       role: 'student',
       purpose: 'student_password_reset',
     })
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
       username: user.username,
       section: learner.section,
       gradeLevel: learner.gradeLevel,
-      lrn: learner.lrn,
+      studentNumber: learner.studentNumber,
       userInfo: {
         name: user.name,
         username: user.username,

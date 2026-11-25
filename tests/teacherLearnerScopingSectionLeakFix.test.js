@@ -41,9 +41,9 @@ describe('Teacher Learner Scoping & Cross-Teacher Section Leak Fix Suite', () =>
       'learners route must NOT contain section: { $in'
     );
     assert.ok(
-      learnersSrc.includes("filter: Record<string, unknown> = {\n      $or: teacherMatchConditions,") ||
-      learnersSrc.includes("$or: teacherMatchConditions"),
-      'learners route must strictly scope filter.$or to teacherMatchConditions'
+      learnersSrc.includes('getTeacherLearnerFilter(teacher.id, teacherSubject)') &&
+      learnersSrc.includes('getSubjectFilter(teacherSubject)'),
+      'learners route must strictly scope via getTeacherLearnerFilter and getSubjectFilter'
     );
   });
 

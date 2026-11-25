@@ -4,15 +4,15 @@ import assert from 'node:assert/strict';
 describe('Batch OMR AI Vision Name Matching & Teacher Correction Suite', () => {
   // Mock cohort roster
   const mockRoster = [
-    { _id: 'id-alyssa', name: 'Alyssa Cabrera', lrn: '136860100041', section: 'Rosal', gradeLevel: 7 },
-    { _id: 'id-juan', name: 'Juan Dela Cruz', lrn: '136860100042', section: 'Rosal', gradeLevel: 7 },
-    { _id: 'id-mark', name: 'Mark Santos', lrn: '136860100043', section: 'Rosal', gradeLevel: 7 },
-    { _id: 'id-maria', name: 'Maria Santos', lrn: '136860100044', section: 'Rosal', gradeLevel: 7 },
+    { _id: 'id-alyssa', name: 'Alyssa Cabrera', studentNumber: '20260001', section: 'Rosal', gradeLevel: 7 },
+    { _id: 'id-juan', name: 'Juan Dela Cruz', studentNumber: '20260002', section: 'Rosal', gradeLevel: 7 },
+    { _id: 'id-mark', name: 'Mark Santos', studentNumber: '20260003', section: 'Rosal', gradeLevel: 7 },
+    { _id: 'id-maria', name: 'Maria Santos', studentNumber: '20260004', section: 'Rosal', gradeLevel: 7 },
   ];
 
   const mockOtherCohortStudents = [
-    { _id: 'id-carlos', name: 'Carlos Mendoza', lrn: '136860100050', section: 'Sampaguita', gradeLevel: 7 },
-    { _id: 'id-bea', name: 'Bea De Leon', lrn: '136860100051', section: 'Camia', gradeLevel: 7 },
+    { _id: 'id-carlos', name: 'Carlos Mendoza', studentNumber: '20260005', section: 'Sampaguita', gradeLevel: 7 },
+    { _id: 'id-bea', name: 'Bea De Leon', studentNumber: '20260006', section: 'Camia', gradeLevel: 7 },
   ];
 
   it('groups sheet name crops into collage chunks of up to 8 items', () => {
@@ -117,8 +117,8 @@ describe('Batch OMR AI Vision Name Matching & Teacher Correction Suite', () => {
       if (payload.gradeLevel && (isNaN(Number(payload.gradeLevel)) || Number(payload.gradeLevel) < 7 || Number(payload.gradeLevel) > 12)) {
         return { valid: false, error: 'Invalid grade level.' };
       }
-      if (payload.lrn && !/^\d{11,12}$/.test(payload.lrn.trim())) {
-        return { valid: false, error: 'LRN must be an 11 or 12 digit number.' };
+      if (payload.studentNumber && !/^\d{8,12}$/.test(payload.studentNumber.trim())) {
+        return { valid: false, error: 'Student Number must be an 8 to 12 digit number.' };
       }
       return { valid: true };
     }
@@ -128,7 +128,7 @@ describe('Batch OMR AI Vision Name Matching & Teacher Correction Suite', () => {
       name: 'Alyssa M. Cabrera',
       gradeLevel: '7',
       section: 'Sampaguita',
-      lrn: '136860100041',
+      studentNumber: '20260001',
     });
     assert.equal(validEdit.valid, true);
 

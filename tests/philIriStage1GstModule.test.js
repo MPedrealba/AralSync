@@ -234,9 +234,9 @@ describe('Phil-IRI Stage 1: Group Screening Test (GST) Module Tests', () => {
     assert.ok(content.includes('pageBreakAfter: "always"') || content.includes('page-break-after: always'), 'Booklet pages must enforce print page breaks');
     assert.ok(content.includes('booklet-page'), 'Booklet pages must use booklet-page CSS class');
 
-    // 6. 40-Item Bubble Sheet with corner fiducial marks and LRN shading grid
+    // 6. 40-Item Bubble Sheet with corner fiducial marks and Student Number shading grid
     assert.ok(content.includes('w-5 h-5 bg-slate-950') || content.includes('Fiducial Marks'), 'Bubble sheet must render 4 corner fiducial marks');
-    assert.ok(content.includes('Learner Reference Number (LRN) Shading Grid'), 'Bubble sheet must feature 12-digit LRN shading grid');
+    assert.ok(content.includes('Student Number Shading Grid'), 'Bubble sheet must feature 8-digit Student Number shading grid');
     assert.ok(content.includes('getStampedBubbleSheetUrl'), 'Must import getStampedBubbleSheetUrl for official PDF download');
 
     // 7. Compact 4-Column Answer Key Matrix with domain distribution

@@ -54,18 +54,17 @@ describe("User Management Safety & Button State Suite", () => {
     assert.equal(validateEditUser("User One", "user1", true), true);
   });
 
-  it("enforces mandatory fields for Learner Enrollment modal", () => {
-    const validateAddLearner = (lrn, name, section, isCustom, customText, loading = false) => {
+  it("enforces mandatory fields for Learner Enrollment modal (Student Number auto-assigned)", () => {
+    const validateAddLearner = (name, section, isCustom, customText, loading = false) => {
       const finalSection = (isCustom ? customText : section).trim();
-      return loading || !lrn.trim() || !name.trim() || !finalSection;
+      return loading || !name.trim() || !finalSection;
     };
 
-    assert.equal(validateAddLearner("", "Juan", "Emerald", false, ""), true);
-    assert.equal(validateAddLearner("102938475612", "", "Emerald", false, ""), true);
-    assert.equal(validateAddLearner("102938475612", "Juan", "", false, ""), true);
-    assert.equal(validateAddLearner("102938475612", "Juan", "Emerald", true, "   "), true);
-    assert.equal(validateAddLearner("102938475612", "Juan", "Emerald", true, "CustomSectionA"), false);
-    assert.equal(validateAddLearner("102938475612", "Juan", "Emerald", false, ""), false);
+    assert.equal(validateAddLearner("", "Emerald", false, ""), true);
+    assert.equal(validateAddLearner("Juan", "", false, ""), true);
+    assert.equal(validateAddLearner("Juan", "Emerald", true, "   "), true);
+    assert.equal(validateAddLearner("Juan", "Emerald", true, "CustomSectionA"), false);
+    assert.equal(validateAddLearner("Juan", "Emerald", false, ""), false);
   });
 
   it("enforces mandatory fields for Batch Assignment application", () => {

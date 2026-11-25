@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const connectDB = require('./db');
 const User = require('../models/User');
 const LearnerRecord = require('../models/LearnerRecord');
+const { allocateStudentNumbers, setStudentNumberCounter } = require('../models/Counter');
 const Assessment = require('../models/Assessment');
 const Intervention = require('../models/Intervention');
 const Recommendation = require('../models/Recommendation');
@@ -29,6 +30,9 @@ const seedDB = async () => {
     console.log('Clearing existing collections...');
     await User.deleteMany({});
     await LearnerRecord.deleteMany({});
+    await LearnerRecord.collection.dropIndex('lrn_1').catch(() => {});
+    await LearnerRecord.syncIndexes();
+    await setStudentNumberCounter(0, 2026);
     await Assessment.deleteMany({});
     await Intervention.deleteMany({});
     await Recommendation.deleteMany({});
@@ -84,17 +88,18 @@ const seedDB = async () => {
 
     // Ability drives how well each student performs (0..1).
     const studentsData = [
-      { username: 'student1', name: 'Juan dela Cruz', grade: 7, section: 'Rosal', risk: 'High Risk', mastery: 'Beginning', ability: 0.5, lrn: '102938' },
-      { username: 'student2', name: 'Ana Reyes', grade: 7, section: 'Rosal', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.65, lrn: '102939' },
-      { username: 'student3', name: 'Carlos Mendoza', grade: 7, section: 'Rosal', risk: 'Low Risk', mastery: 'Proficient', ability: 0.82, lrn: '102940' },
-      { username: 'student4', name: 'Elena Torres', grade: 8, section: 'Sampaguita', risk: 'High Risk', mastery: 'Beginning', ability: 0.48, lrn: '102941' },
-      { username: 'student5', name: 'Sofia Bautista', grade: 8, section: 'Sampaguita', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.62, lrn: '102942' },
-      { username: 'student6', name: 'Jose Ramos', grade: 8, section: 'Sampaguita', risk: 'Low Risk', mastery: 'Approaching', ability: 0.78, lrn: '102943' },
-      { username: 'student7', name: 'Maria Lopez', grade: 9, section: 'Ilang-Ilang', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.66, lrn: '102944' },
-      { username: 'student8', name: 'Pedro Santos', grade: 9, section: 'Ilang-Ilang', risk: 'Low Risk', mastery: 'Approaching', ability: 0.76, lrn: '102945' },
-      { username: 'student9', name: 'Rosa Garcia', grade: 10, section: 'Molave', risk: 'Low Risk', mastery: 'Proficient', ability: 0.85, lrn: '102946' },
-      { username: 'student10', name: 'Luis Cruz', grade: 10, section: 'Acacia', risk: 'Moderate Risk', mastery: 'Approaching', ability: 0.7, lrn: '102947' },
+      { name: 'Juan dela Cruz', grade: 7, section: 'Rosal', risk: 'High Risk', mastery: 'Beginning', ability: 0.5 },
+      { name: 'Ana Reyes', grade: 7, section: 'Rosal', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.65 },
+      { name: 'Carlos Mendoza', grade: 7, section: 'Rosal', risk: 'Low Risk', mastery: 'Proficient', ability: 0.82 },
+      { name: 'Elena Torres', grade: 8, section: 'Sampaguita', risk: 'High Risk', mastery: 'Beginning', ability: 0.48 },
+      { name: 'Sofia Bautista', grade: 8, section: 'Sampaguita', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.62 },
+      { name: 'Jose Ramos', grade: 8, section: 'Sampaguita', risk: 'Low Risk', mastery: 'Approaching', ability: 0.78 },
+      { name: 'Maria Lopez', grade: 9, section: 'Ilang-Ilang', risk: 'Moderate Risk', mastery: 'Developing', ability: 0.66 },
+      { name: 'Pedro Santos', grade: 9, section: 'Ilang-Ilang', risk: 'Low Risk', mastery: 'Approaching', ability: 0.76 },
+      { name: 'Rosa Garcia', grade: 10, section: 'Molave', risk: 'Low Risk', mastery: 'Proficient', ability: 0.85 },
+      { name: 'Luis Cruz', grade: 10, section: 'Acacia', risk: 'Moderate Risk', mastery: 'Approaching', ability: 0.7 },
     ];
+    const studentNumbers = await allocateStudentNumbers(studentsData.length, 2026);
 
     const guardians = [
       'Gloria dela Cruz', 'Marites Reyes', 'Ramon Mendoza', 'Liza Torres',
@@ -107,22 +112,24 @@ const seedDB = async () => {
 
     for (let i = 0; i < studentsData.length; i++) {
       const d = studentsData[i];
+      const studentNumber = studentNumbers[i];
       const user = await User.create({
-        username: d.username,
+        username: studentNumber,
         password: defaultPassword,
         name: d.name,
         role: 'student',
         mustChangePassword: true,
       });
-      students.push({ user, ...d });
+      students.push({ user, studentNumber, ...d });
 
       // 1. Learner Record
       records.push(
         await LearnerRecord.create({
           studentId: user._id,
-          lrn: d.lrn,
+          studentNumber,
           gradeLevel: d.grade,
           section: d.section,
+          birthDate: `201${2 - Math.max(0, d.grade - 7)}-05-${String(10 + i).padStart(2, '0')}`,
           riskLevel: d.risk,
           masteryStatus: d.mastery,
           guardian: d.name.includes('Juan') ? 'Gloria dela Cruz' : guardians[i],

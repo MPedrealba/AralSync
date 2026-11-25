@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         const studentId = student._id?.toString() || r._id.toString();
         const gradeLevel = Number(r.gradeLevel) || 7;
         const section = r.section || 'Unassigned';
-        const lrn = r.lrn || 'N/A';
+        const studentNumber = r.studentNumber || 'N/A';
 
         // Extract language stream metrics
         let gstScore: number | null = null;
@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
           id: r._id.toString(),
           studentId,
           name,
-          lrn,
+          studentNumber,
           gradeLevel,
           section,
           gender: r.gender || (name.toLowerCase().includes('maria') || name.toLowerCase().includes('ana') ? 'Female' : 'Male'),
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
         if (!searchParam) return true;
         return (
           l.name.toLowerCase().includes(searchParam) ||
-          l.lrn.toLowerCase().includes(searchParam)
+          l.studentNumber.toLowerCase().includes(searchParam)
         );
       });
 

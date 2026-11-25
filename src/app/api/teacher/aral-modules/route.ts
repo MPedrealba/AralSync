@@ -5,10 +5,19 @@ import connectDB from '../../../../../database/db';
 import Recommendation from '../../../../../models/Recommendation';
 import ReadingPassage from '../../../../../models/ReadingPassage';
 import { syncDynamicRecommendations } from '@/lib/dynamicRecommendations';
+import { getTeacherSubject, getSubjectFilter } from '@/lib/teacherScope';
+
+const READING_REC_SUBJECTS = new Set([
+  'Reading',
+  'English',
+  'Filipino',
+  'Reading - English',
+  'Reading - Filipino',
+]);
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(req, ['teacher', 'student', 'coordinator', 'principal']);
+    const authUser = await requireAuth(req, ['teacher', 'student', 'coordinator', 'principal']);
     await connectDB();
 
     const dynamicCount = await Recommendation.countDocuments({ isDynamic: true });
@@ -16,40 +25,57 @@ export async function GET(req: NextRequest) {
       await syncDynamicRecommendations();
     }
 
+    let subjectFilter: Record<string, any> = {};
+    let allowReadingPassages = true;
+    if (authUser.role === 'teacher') {
+      const teacherSubject = await getTeacherSubject(authUser);
+      subjectFilter = getSubjectFilter(teacherSubject);
+      allowReadingPassages =
+        teacherSubject === 'All' || READING_REC_SUBJECTS.has(teacherSubject);
+    }
+
     const [recommendations, passages] = await Promise.all([
-      Recommendation.find({ workbookUrl: { $ne: null } }).sort({ keyStage: 1, title: 1 }).lean(),
-      ReadingPassage.find({}).lean(),
+      Recommendation.find({ workbookUrl: { $ne: null }, ...subjectFilter })
+        .sort({ keyStage: 1, title: 1 })
+        .lean(),
+      allowReadingPassages ? ReadingPassage.find({}).lean() : Promise.resolve([]),
     ]);
 
-    const catalog = recommendations.map((rec: any) => ({
-      id: String(rec._id),
-      title: rec.title,
-      description: rec.description,
-      subject: rec.subject,
-      kind: rec.kind,
-      keyStage: rec.keyStage,
-      programLevel: rec.programLevel,
-      proficiencyTier: rec.proficiencyTier || null,
-      targetGrades: rec.targetGrades || [],
-      pageStart: rec.pageStart || null,
-      pageEnd: rec.pageEnd || null,
-      sessionInfo: rec.sessionInfo || null,
-      workbookUrl: rec.workbookUrl,
-      tutorGuideUrl: rec.tutorGuideUrl,
-      source: rec.source,
-      passages: passages
-        .filter((p: any) =>
-          (p.keyStage && rec.keyStage && p.keyStage.toLowerCase() === rec.keyStage.toLowerCase()) ||
-          (p.materialId && rec.materialId && String(p.materialId) === String(rec.materialId)) ||
-          p.title.toLowerCase().includes(rec.keyStage?.toLowerCase() || '')
-        )
-        .map((p: any) => ({
-          id: String(p._id),
-          title: p.title,
-          gradeLevel: p.gradeLevel,
-          questionCount: Array.isArray(p.questions) ? p.questions.length : 0,
-        })),
-    }));
+    const catalog = recommendations.map((rec: any) => {
+      const isReadingRec = !rec.subject || READING_REC_SUBJECTS.has(rec.subject);
+      return {
+        id: String(rec._id),
+        title: rec.title,
+        description: rec.description,
+        subject: rec.subject,
+        kind: rec.kind,
+        keyStage: rec.keyStage,
+        programLevel: rec.programLevel,
+        proficiencyTier: rec.proficiencyTier || null,
+        targetGrades: rec.targetGrades || [],
+        pageStart: rec.pageStart || null,
+        pageEnd: rec.pageEnd || null,
+        sessionInfo: rec.sessionInfo || null,
+        workbookUrl: rec.workbookUrl,
+        tutorGuideUrl: rec.tutorGuideUrl,
+        source: rec.source,
+        passages: isReadingRec
+          ? passages
+              .filter(
+                (p: any) =>
+                  (p.keyStage && rec.keyStage && p.keyStage.toLowerCase() === rec.keyStage.toLowerCase()) ||
+                  (p.materialId && rec.materialId && String(p.materialId) === String(rec.materialId)) ||
+                  p.title.toLowerCase().includes(rec.keyStage?.toLowerCase() || '')
+              )
+              .map((p: any) => ({
+                id: String(p._id),
+                title: p.title,
+                gradeLevel: p.gradeLevel,
+                questionCount: Array.isArray(p.questions) ? p.questions.length : 0,
+              }))
+          : [],
+      };
+    });
 
     return ok(catalog);
   } catch (error) {

@@ -15,7 +15,7 @@ interface Flagged {
   name: string;
   risk: string;
   grade: string;
-  lrn: string;
+  studentNumber: string;
   reasons: string[];
   deficiencies: string;
   intervention: string;
@@ -288,7 +288,7 @@ export default function LearningRecoveryPage() {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-slate-500 font-mono">
-                        {student.grade} &bull; LRN: {student.lrn}
+                        {student.grade} &bull; Student No: {student.studentNumber}
                       </p>
                       <ul className="mt-2.5 space-y-1">
                         {student.reasons.map((r, j) => (

@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
         const level = (r.readingLevel && r.readingLevel !== 'Not Assessed') ? r.readingLevel : (readingLevels.get(sid) || 'Not Assessed');
         return {
           name: userMap.get(sid) || 'Unknown',
-          lrn: r.lrn,
+          studentNumber: r.studentNumber,
           grade: `Grade ${r.gradeLevel ?? '?'}`,
           gradeNum: r.gradeLevel ?? 0,
           section: r.section || '—',
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         };
       })
       .filter((r: any) => {
-        const matchSearch = !search || r.name.toLowerCase().includes(search) || r.lrn.toLowerCase().includes(search);
+        const matchSearch = !search || r.name.toLowerCase().includes(search) || (r.studentNumber || '').toLowerCase().includes(search);
         const matchGrade = !grade || r.grade === grade;
         return matchSearch && matchGrade;
       });

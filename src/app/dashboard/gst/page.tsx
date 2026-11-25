@@ -38,7 +38,7 @@ interface LearnerGstRecord {
   id: string;
   studentId: string;
   name: string;
-  lrn: string;
+  studentNumber: string;
   gradeLevel: number;
   section: string;
   gender: string;
@@ -192,7 +192,7 @@ function GstWorkstationContent() {
     if (!searchQuery.trim()) return learners;
     const q = searchQuery.toLowerCase().trim();
     return learners.filter(
-      (l) => l.name.toLowerCase().includes(q) || l.lrn.toLowerCase().includes(q)
+      (l) => l.name.toLowerCase().includes(q) || (l.studentNumber || "").toLowerCase().includes(q)
     );
   }, [learners, searchQuery]);
 
@@ -580,7 +580,7 @@ function GstWorkstationContent() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={isFilipino ? "Hanapin sa pangalan o LRN..." : "Search learner or LRN..."}
+                    placeholder={isFilipino ? "Hanapin sa pangalan o Student No..." : "Search learner or Student No..."}
                     className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 text-slate-800"
                   />
                   {searchQuery && (
@@ -655,7 +655,7 @@ function GstWorkstationContent() {
                       <tr>
                         <th className="py-3 px-4 w-12 text-center">#</th>
                         <th className="py-3 px-4">Learner Name</th>
-                        <th className="py-3 px-4">LRN</th>
+                        <th className="py-3 px-4">Student No.</th>
                         <th className="py-3 px-4">Section</th>
                         <th className="py-3 px-4 text-center">GST Score (/40)</th>
                         <th className="py-3 px-4 text-center">DepEd Status</th>
@@ -680,7 +680,7 @@ function GstWorkstationContent() {
                               <div className="text-[10px] text-slate-400">Gender: {learner.gender}</div>
                             </td>
                             <td className="py-3 px-4 font-mono text-slate-600">
-                              {learner.lrn}
+                              {learner.studentNumber}
                             </td>
                             <td className="py-3 px-4 font-medium text-slate-700">
                               {learner.section}
@@ -1424,7 +1424,7 @@ function GstWorkstationContent() {
                       <span className="flex-1 border-b border-slate-500 border-dashed" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold tracking-wider">LRN:</span>
+                      <span className="font-bold tracking-wider">STUDENT NO.:</span>
                       <span className="flex-1 border-b border-slate-500 border-dashed" />
                     </div>
                     <div className="flex items-center gap-2">
@@ -1446,20 +1446,20 @@ function GstWorkstationContent() {
                     </div>
                   </div>
 
-                  {/* Student LRN Shading Grid */}
+                  {/* Student Number Shading Grid */}
                   <div className="my-5 p-3.5 border border-slate-300 rounded-xl bg-slate-50/60">
                     <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-200">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                        Learner Reference Number (LRN) Shading Grid
+                        Student Number Shading Grid
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium italic">
-                        Write 12-digit LRN in boxes, then shade corresponding bubble below
+                        Write 8-digit Student Number in boxes, then shade corresponding bubble below
                       </span>
                     </div>
                     <div className="flex justify-center">
                       <div className="inline-block border border-slate-400 bg-white p-2 rounded-lg shadow-2xs">
                         <div className="flex gap-1.5 mb-1.5 pb-1.5 border-b border-slate-300">
-                          {Array.from({ length: 12 }).map((_, col) => (
+                          {Array.from({ length: 8 }).map((_, col) => (
                             <div
                               key={col}
                               className="w-5 sm:w-6 h-6 border border-slate-500 text-center text-xs font-bold flex items-center justify-center bg-white"
@@ -1469,7 +1469,7 @@ function GstWorkstationContent() {
                         <div className="space-y-1">
                           {Array.from({ length: 10 }).map((_, digit) => (
                             <div key={digit} className="flex gap-1.5 items-center">
-                              {Array.from({ length: 12 }).map((_, col) => (
+                              {Array.from({ length: 8 }).map((_, col) => (
                                 <span
                                   key={col}
                                   className="w-5 sm:w-6 h-5 rounded-full border border-slate-400 text-[9px] font-mono font-semibold flex items-center justify-center text-slate-600"
@@ -1684,7 +1684,7 @@ function GstWorkstationContent() {
                   Automate Class Scoring with OMR Bubble Scanning
                 </h3>
                 <p className="text-xs text-red-100/90 leading-relaxed">
-                  Teachers can scan batch 40-item answer sheets using a mobile camera or scanner. The engine extracts the student LRN, grades the 40 items against the standardized answer key, and instantly updates the Form 1A roster.
+                  Teachers can scan batch 40-item answer sheets using a mobile camera or scanner. The engine matches the Student Number, grades the 40 items against the standardized answer key, and instantly updates the Form 1A roster.
                 </p>
               </div>
 
@@ -1745,7 +1745,7 @@ function GstWorkstationContent() {
                     <tr>
                       <th className="py-2.5 px-3 w-12 text-center">#</th>
                       <th className="py-2.5 px-3">Learner Name</th>
-                      <th className="py-2.5 px-3">LRN</th>
+                      <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Section</th>
                       <th className="py-2.5 px-3 text-center w-36">Raw Score (/40)</th>
                       <th className="py-2.5 px-3 text-center">Real-Time Evaluation</th>
@@ -1763,7 +1763,7 @@ function GstWorkstationContent() {
                         <tr key={learner.id} className="hover:bg-slate-50/70 transition-colors">
                           <td className="py-2 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
                           <td className="py-2 px-3 font-semibold text-slate-900">{learner.name}</td>
-                          <td className="py-2 px-3 font-mono text-slate-500">{learner.lrn}</td>
+                          <td className="py-2 px-3 font-mono text-slate-500">{learner.studentNumber}</td>
                           <td className="py-2 px-3 text-slate-600">{learner.section}</td>
                           <td className="py-2 px-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
@@ -1906,7 +1906,7 @@ function GstWorkstationContent() {
                   <tr>
                     <th className="p-2 border-r border-slate-300 text-center w-8">#</th>
                     <th className="p-2 border-r border-slate-300">Learner Name</th>
-                    <th className="p-2 border-r border-slate-300">LRN</th>
+                    <th className="p-2 border-r border-slate-300">Student No.</th>
                     <th className="p-2 border-r border-slate-300 text-center">Score (/40)</th>
                     <th className="p-2 border-r border-slate-300 text-center">Status</th>
                     <th className="p-2 text-center">Recommended Passage Level</th>
@@ -1917,7 +1917,7 @@ function GstWorkstationContent() {
                     <tr key={learner.id} className="text-[11px]">
                       <td className="p-1.5 text-center font-mono border-r border-slate-200">{idx + 1}</td>
                       <td className="p-1.5 font-semibold border-r border-slate-200">{learner.name}</td>
-                      <td className="p-1.5 font-mono border-r border-slate-200">{learner.lrn}</td>
+                      <td className="p-1.5 font-mono border-r border-slate-200">{learner.studentNumber}</td>
                       <td className="p-1.5 text-center font-bold border-r border-slate-200">
                         {learner.gstScore !== null ? `${learner.gstScore}/40` : "—"}
                       </td>

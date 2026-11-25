@@ -49,7 +49,7 @@ interface Learner {
   name: string;
   section?: string;
   gradeLevel?: number;
-  lrn?: string;
+  studentNumber?: string;
 }
 
 interface AnswerKeyItem {
@@ -222,9 +222,9 @@ function OMRWorkstationContent() {
     if (!q) return filteredStudents;
     return filteredStudents.filter((s) => {
       const nameMatch = s.name.toLowerCase().includes(q);
-      const lrnMatch = s.lrn ? s.lrn.toLowerCase().includes(q) : false;
+      const studentNumMatch = s.studentNumber ? s.studentNumber.toLowerCase().includes(q) : false;
       const sectionMatch = s.section ? s.section.toLowerCase().includes(q) : false;
-      return nameMatch || lrnMatch || sectionMatch;
+      return nameMatch || studentNumMatch || sectionMatch;
     });
   }, [filteredStudents, studentSearchQuery]);
 
@@ -341,7 +341,7 @@ function OMRWorkstationContent() {
                 name: item.studentId?.name || item.name || "Student",
                 section: item.section || "Rosal",
                 gradeLevel: item.gradeLevel || 7,
-                lrn: item.lrn || "",
+                studentNumber: item.studentNumber || "",
               }))
               .filter((s: Learner) => Boolean(s._id));
           }
@@ -1464,7 +1464,7 @@ function OMRWorkstationContent() {
                         ? "No students assigned to you yet..."
                         : selectedStudentObj
                         ? `${selectedStudentObj.name}`
-                        : "Search learner by name or LRN..."
+                        : "Search learner by name or Student No..."
                     }
                     className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-12 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                   />
@@ -1550,9 +1550,9 @@ function OMRWorkstationContent() {
                                   <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
                                     Grade {s.gradeLevel || 7} - {s.section || "General"}
                                   </span>
-                                  {s.lrn && (
+                                  {s.studentNumber && (
                                     <span className="font-mono text-slate-400">
-                                      LRN: {s.lrn}
+                                      Student No: {s.studentNumber}
                                     </span>
                                   )}
                                 </div>

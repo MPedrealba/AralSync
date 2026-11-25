@@ -138,31 +138,24 @@ describe('Part 1 & Part 2: Oral Reading Word-Pill UI, 1-to-1 Passage Preservatio
       assert.ok(readerCode.includes('+ Extra'), 'Must display subtle + Extra badge for attached extras');
     });
 
-    test('renders LiveReadingCaptionViewer post-recording before Analyze, syncs miscues on Analyze, and updates mic helper text', () => {
+    test('renders clean natural passage post-recording before Analyze, syncs miscues on Analyze, and updates mic helper text', () => {
       assert.ok(
-        pageSrc.includes('isRecording || ((Boolean(audioUrl) || Boolean(liveFullTranscript)) && calibratedItems.length === 0)'),
-        'Must keep LiveReadingCaptionViewer visible after recording stops until Analyze results arrive'
+        pageSrc.includes('Recording oral reading...'),
+        'Must render clean passage recording status pill'
       );
-      assert.ok(pageSrc.includes('miscueItems={postStopLiveMiscues}'), 'Must pass postStopLiveMiscues to LiveReadingCaptionViewer');
       assert.ok(pageSrc.includes('syncMiscuesFromBreakdown('), 'runAnalysis must sync right-hand miscue tracker boxes from analyzed breakdown');
       assert.ok(
         pageSrc.includes('"Analysis complete. Review words or save below."'),
         'Must update mic helper text once result is loaded'
       );
-      assert.ok(
-        captionViewerSrc.includes('Recording Captured — Ready to Analyze'),
-        'LiveReadingCaptionViewer header must reflect stopped preview state cleanly'
-      );
     });
   });
 
-  describe('Part 2: AnalyserNode RMS VAD, Persistent Restarts, Velocity Cap & Number/Hyphen Token Alignment', () => {
-    test('configures AnalyserNode RMS noise-floor gate and cleans up rAF loop properly', () => {
-      assert.ok(pageSrc.includes('analyser.fftSize = 512;'), 'Must configure AnalyserNode with fftSize 512');
-      assert.ok(pageSrc.includes('getByteTimeDomainData'), 'Must compute time-domain RMS via getByteTimeDomainData');
-      assert.ok(pageSrc.includes('Math.max(0.015, noiseFloor * 2.2)'), 'Must compare RMS against noise-floor adaptive threshold');
-      assert.ok(pageSrc.includes('Date.now() - lastVoiceActivityAtRef.current <= 1200'), 'Must keep isVoiceActive active for 1200ms voice window');
-      assert.ok(pageSrc.includes('isVoiceActive,'), 'Must pass isVoiceActive callback to useLiveCaption');
+  describe('Part 2: Clean Audio Capture, Gentle Vocal Filter Chain & Token Alignment', () => {
+    test('removes AnalyserNode VAD gating from NewSessionTab for clean audio capture and verifies gentle vocal filter chain', () => {
+      assert.ok(pageSrc.includes('highPass.frequency.value = 70'), 'Must configure clean highPass at 70Hz');
+      assert.ok(pageSrc.includes('compressor.threshold.value = -20'), 'Must configure gentle compressor at -20dB');
+      assert.ok(pageSrc.includes('makeupGain.gain.value = 1.5'), 'Must configure post-compressor makeup gain at 1.5x');
     });
 
     test('useLiveCaption keeps isVoiceActive optional, preserves transcripts across restarts, gates confidence < 0.45, and clamps velocity cleanly', () => {

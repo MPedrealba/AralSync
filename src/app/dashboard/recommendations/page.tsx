@@ -59,7 +59,7 @@ interface StudentItem {
   name: string;
   gradeLevel?: number;
   section?: string;
-  lrn?: string;
+  studentNumber?: string;
   riskLevel?: string;
   masteryStatus?: string;
   readingLevel?: string;
@@ -154,7 +154,7 @@ export default function RecommendationsPage() {
             name: s.name,
             gradeLevel: s.gradeLevel,
             section: s.section,
-            lrn: s.lrn,
+            studentNumber: s.studentNumber,
             riskLevel: s.riskLevel,
             masteryStatus: s.masteryStatus,
             readingLevel: s.readingLevel,

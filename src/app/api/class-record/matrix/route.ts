@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
         learnerRecordId: learner._id.toString(),
         studentId: sId,
         name: learner.studentId?.name || 'Unknown Learner',
-        lrn: learner.lrn || '',
+        studentNumber: learner.studentNumber || '',
         riskLevel: learner.riskLevel || 'Pending Assessment',
         readingLevel: learner.readingLevel || 'Not Assessed',
         diagnostics: {

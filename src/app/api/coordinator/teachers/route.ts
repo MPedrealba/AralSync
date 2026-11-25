@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
         id: r._id.toString(),
         studentId: r.studentId?._id ? r.studentId._id.toString() : null,
         name: r.studentId?.name || 'Unknown Learner',
-        lrn: r.lrn || '',
+        studentNumber: r.studentNumber || '',
         gradeLevel: r.gradeLevel ?? 7,
         section: r.section || 'Unassigned',
         riskLevel: r.riskLevel || 'Low Risk',

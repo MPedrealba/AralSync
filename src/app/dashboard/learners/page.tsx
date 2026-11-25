@@ -19,7 +19,7 @@ interface Learner {
   id: string;
   studentId: string;
   name: string;
-  lrn: string;
+  studentNumber: string;
   gradeLevel: string;
   section: string;
   riskLevel: string;
@@ -155,7 +155,7 @@ export default function LearnersPage() {
             id: r.id,
             studentId: r.studentId,
             name: r.name,
-            lrn: r.lrn,
+            studentNumber: r.studentNumber,
             gradeLevel: `Grade ${r.gradeLevel}`,
             section: r.section,
             riskLevel: r.riskLevel,
@@ -214,7 +214,7 @@ export default function LearnersPage() {
   const filtered = learners.filter((l) => {
     const matchSearch =
       l.name.toLowerCase().includes(search.toLowerCase()) ||
-      (l.lrn || "").toLowerCase().includes(search.toLowerCase()) ||
+      (l.studentNumber || "").toLowerCase().includes(search.toLowerCase()) ||
       (l.guardian || "").toLowerCase().includes(search.toLowerCase());
     const matchGrade = gradeFilter
       ? String(l.gradeLevel || "").replace(/\D/g, "") === gradeFilter.replace(/\D/g, "")
@@ -262,7 +262,7 @@ export default function LearnersPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by learner name or LRN..."
+                placeholder="Search by learner name or Student No..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
@@ -319,7 +319,7 @@ export default function LearnersPage() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80">
                   <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    LRN
+                    Student No.
                   </th>
                   <th className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Learner Name
@@ -378,7 +378,7 @@ export default function LearnersPage() {
                       className="transition-colors hover:bg-slate-50/80"
                     >
                       <td className="whitespace-nowrap px-3.5 sm:px-6 py-3 sm:py-4 font-mono text-xs text-slate-500">
-                        {learner.lrn}
+                        {learner.studentNumber}
                       </td>
                       <td className="px-3.5 sm:px-6 py-3 sm:py-4 text-sm font-semibold text-slate-900">
                         <Link

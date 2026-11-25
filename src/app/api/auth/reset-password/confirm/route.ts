@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       action: payload.purpose === 'staff_password_reset' ? 'staff_password_reset' : 'student_password_reset',
       targetType: 'User',
       meta: {
-        lrn: payload.lrn,
+        studentNumber: payload.studentNumber,
         username: user.username,
         role: user.role,
       },

@@ -7,6 +7,7 @@ import Assessment from "../../models/Assessment";
 import LearnerRecord from "../../models/LearnerRecord";
 import { readingLevel } from "@/lib/reading";
 import { syLabel, inPeriod, periodLabel } from "@/lib/syPeriod";
+import { getSubjectFilter, type TeacherSubject } from "@/lib/teacherScope";
 import type { SyPeriodKey } from "@/lib/syPeriod";
 import type {
   NationalDashboardData,
@@ -68,14 +69,58 @@ function distinctGrades(entries: any[], gradeOf: Map<string, number>): number[] 
 export async function buildNationalDashboard(opts: {
   period?: SyPeriodKey;
   grade?: number | null;
+  assignedStudentIds?: unknown[];
+  teacherSubject?: TeacherSubject;
 }): Promise<NationalDashboardData> {
   const period = opts.period ?? "ALL";
-  const { grade } = opts;
+  const { grade, assignedStudentIds, teacherSubject } = opts;
+  const hasStudentScope = Array.isArray(assignedStudentIds);
+
+  const includeRma = !teacherSubject || teacherSubject === "All" || teacherSubject === "Math";
+  const includePhilIri =
+    !teacherSubject ||
+    teacherSubject === "All" ||
+    teacherSubject === "Reading" ||
+    teacherSubject === "English" ||
+    teacherSubject === "Filipino";
+
+  if (hasStudentScope && assignedStudentIds!.length === 0) {
+    const emptyGradeOf = new Map<string, number>();
+    const now = new Date();
+    return {
+      school: SCHOOL_NAME,
+      sy: syLabel(now),
+      period,
+      periodLabel: periodLabel(period, now),
+      generatedAt: now.toISOString(),
+      teacherSubject: teacherSubject ?? "All",
+      grades: [],
+      rma: buildRma([], emptyGradeOf),
+      philIri: buildPhilIri([], emptyGradeOf),
+    };
+  }
+
+  const studentScopeFilter = hasStudentScope
+    ? { studentId: { $in: assignedStudentIds } }
+    : {};
+
+  const omrQuery: Record<string, any> = {
+    type: "OMR",
+    subject: "Math",
+    ...studentScopeFilter,
+  };
+  const fluQuery: Record<string, any> = {
+    type: "READING_FLUENCY",
+    ...studentScopeFilter,
+    ...(teacherSubject === "Filipino" || teacherSubject === "English"
+      ? getSubjectFilter(teacherSubject)
+      : {}),
+  };
 
   const [omr, flu, recs] = (await Promise.all([
-    Assessment.find({ type: "OMR", subject: "Math" }).sort({ date: 1 }).lean(),
-    Assessment.find({ type: "READING_FLUENCY" }).sort({ date: 1 }).lean(),
-    LearnerRecord.find().select("studentId gradeLevel").lean(),
+    includeRma ? Assessment.find(omrQuery).sort({ date: 1 }).lean() : Promise.resolve([]),
+    includePhilIri ? Assessment.find(fluQuery).sort({ date: 1 }).lean() : Promise.resolve([]),
+    LearnerRecord.find(studentScopeFilter).select("studentId gradeLevel").lean(),
   ])) as [any[], any[], any[]];
 
   const gradeOf = new Map(recs.map((r) => [String(r.studentId), r.gradeLevel ?? 0]));
@@ -90,6 +135,11 @@ export async function buildNationalDashboard(opts: {
     (a) => grade == null || gradeOf.get(String(a.studentId)) === grade
   );
 
+  const scopedForGrades = [
+    ...(includeRma ? latestOmr.values() : []),
+    ...(includePhilIri ? latestFlu.values() : []),
+  ];
+
   const now = new Date();
   return {
     school: SCHOOL_NAME,
@@ -97,9 +147,10 @@ export async function buildNationalDashboard(opts: {
     period,
     periodLabel: periodLabel(period, now),
     generatedAt: now.toISOString(),
+    teacherSubject: teacherSubject ?? "All",
     // Grade list is computed from the full period-set (before the grade filter)
     // so the client's grade selector never collapses to the single filtered grade.
-    grades: distinctGrades([...latestOmr.values(), ...latestFlu.values()], gradeOf),
+    grades: distinctGrades(scopedForGrades, gradeOf),
     rma: buildRma(rmaEntries, gradeOf),
     philIri: buildPhilIri(iriEntries, gradeOf),
   };

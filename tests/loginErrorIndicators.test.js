@@ -15,7 +15,7 @@ describe('Login Page Error Indicators & Authentication Error Contract Suite', ()
   describe('1. API Route Contract (src/app/api/auth/login/route.ts)', () => {
     it('returns structured username not found error with field: "username"', () => {
       assert.ok(
-        routeSource.includes('"No account found with that username. Please verify your username or LRN."'),
+        routeSource.includes('"No account found with that username. Please verify your username or Student Number."'),
         'Must return specific username not found message'
       );
       assert.ok(

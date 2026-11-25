@@ -13,7 +13,7 @@ interface NameCropItem {
 interface RosterItem {
   _id: string;
   name: string;
-  lrn?: string;
+  studentNumber?: string;
   section?: string;
   gradeLevel?: number;
 }
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       slot: i + 1,
       id: r._id,
       name: r.name,
-      lrn: r.lrn || '',
+      studentNumber: r.studentNumber || '',
       section: r.section || '',
     }));
 

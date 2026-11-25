@@ -47,7 +47,7 @@ class SlidingWindowRateLimiter {
 // Student 3-Point Record Verification Logic
 function verifyStudentRecord(studentRecord, input) {
   if (!studentRecord) {
-    return { ok: false, error: 'Student record not found by LRN' };
+    return { ok: false, error: 'Student record not found by Student Number' };
   }
 
   // 1. Verify Section (case-insensitive)
@@ -114,7 +114,7 @@ describe('Authentication & Rate Limiting Security Suite', () => {
 
   test('validates student identity against 3-point school record criteria', () => {
     const mockStudentRecord = {
-      lrn: '102938',
+      studentNumber: '20260001',
       name: 'Juan dela Cruz',
       section: 'Rosal',
       birthDate: '2012-05-15',
@@ -122,7 +122,7 @@ describe('Authentication & Rate Limiting Security Suite', () => {
 
     // Valid credentials (with case variation in section)
     const valid = verifyStudentRecord(mockStudentRecord, {
-      lrn: '102938',
+      studentNumber: '20260001',
       section: 'rosal',
       birthDate: '2012-05-15',
     });
@@ -130,7 +130,7 @@ describe('Authentication & Rate Limiting Security Suite', () => {
 
     // Invalid section
     const wrongSection = verifyStudentRecord(mockStudentRecord, {
-      lrn: '102938',
+      studentNumber: '20260001',
       section: 'Sampaguita',
       birthDate: '2012-05-15',
     });
@@ -139,7 +139,7 @@ describe('Authentication & Rate Limiting Security Suite', () => {
 
     // Invalid birthdate
     const wrongBirthdate = verifyStudentRecord(mockStudentRecord, {
-      lrn: '102938',
+      studentNumber: '20260001',
       section: 'Rosal',
       birthDate: '2015-08-20',
     });

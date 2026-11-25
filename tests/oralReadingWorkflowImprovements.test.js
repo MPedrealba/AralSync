@@ -179,13 +179,13 @@ describe("Oral Reading Workflow Improvements", () => {
       );
 
       // Verify WebRTC acoustic constraints
-      assert.ok(teacherPage.includes("sampleRate: 44100"));
+      assert.ok(!teacherPage.includes("sampleRate: 44100"), "Teacher page must remove hardcoded sampleRate 44100 to prevent AGC/ducking ramp-up");
       assert.ok(teacherPage.includes("suppressLocalAudioPlayback: true"));
       assert.ok(studentPage.includes("sampleRate: 44100"));
       assert.ok(studentPage.includes("suppressLocalAudioPlayback: true"));
 
-      // Verify BiquadFilter high-pass at 85Hz
-      assert.ok(teacherPage.includes("highPass.frequency.value = 85"));
+      // Verify BiquadFilter high-pass (70Hz on teacherPage, 85Hz on studentPage)
+      assert.ok(teacherPage.includes("highPass.frequency.value = 70"));
       assert.ok(studentPage.includes("highPass.frequency.value = 85"));
     });
   });

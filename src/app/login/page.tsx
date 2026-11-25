@@ -42,9 +42,19 @@ export default function LoginPage() {
 
     if (!username.trim() || !password) {
       const missingField = !username.trim() ? "username" : "password";
-      setError("Please enter both username and password.");
+      setError(
+        role === "student"
+          ? "Please enter both Student Number and password."
+          : "Please enter both username and password."
+      );
       setErrorField(missingField);
-      setFieldErrorHint(missingField === "username" ? "Check your username" : "Incorrect password");
+      setFieldErrorHint(
+        missingField === "username"
+          ? role === "student"
+            ? "Check your Student Number"
+            : "Check your username or Student Number"
+          : "Incorrect password"
+      );
       triggerShake();
       return;
     }
@@ -76,7 +86,7 @@ export default function LoginPage() {
 
         let hint = "";
         if (respField === "username") {
-          hint = "Check your username";
+          hint = role === "student" ? "Check your Student Number" : "Check your username or Student Number";
         } else if (respField === "password") {
           hint = "Incorrect password";
         } else if (respField === "role") {
@@ -150,10 +160,10 @@ export default function LoginPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          {/* Username */}
+          {/* Username / Student Number */}
           <div>
             <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Username
+              {role === "student" ? "Student Number" : "Username / Student Number"}
             </label>
             <div className="relative">
               <User
@@ -169,7 +179,11 @@ export default function LoginPage() {
                   setUsername(e.target.value);
                   clearFieldError("username");
                 }}
-                placeholder="Enter your username"
+                placeholder={
+                  role === "student"
+                    ? "Enter your Student Number (e.g. 20260001)"
+                    : "Enter username or Student Number"
+                }
                 className={`h-11 w-full rounded-lg pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 ${
                   errorField === "username"
                     ? "border border-red-400 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -179,7 +193,7 @@ export default function LoginPage() {
             </div>
             {errorField === "username" && (
               <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 animate-fadeInDown">
-                <span>{fieldErrorHint || "Check your username"}</span>
+                <span>{fieldErrorHint || "Check your username or Student Number"}</span>
               </p>
             )}
           </div>

@@ -506,14 +506,15 @@ export function computeLocalPhilIriEvaluation({
   const wordsDecoded = Math.max(0, wordsTotal - miscueTotal);
   const accuracy = Math.max(0, Math.min(100, Math.round((wordsDecoded / wordsTotal) * 100)));
 
-  const durationMinutes = Math.max(1, durationSec) / 60;
-  const wpm = Math.max(0, Math.round(wordsDecoded / durationMinutes));
+  const safeDurationSec = Math.max(1, durationSec || 60);
+  const durationMinutes = safeDurationSec / 60;
+  const wpm = Math.max(0, Math.min(300, Math.round(wordsDecoded / durationMinutes)));
 
   const decodedForEval = accuracy > 0 ? Math.max(1, wordsDecoded) : wordsDecoded;
   const evaluation = evaluateReadingPerformance(accuracy, null, wordsTotal, decodedForEval);
 
   // Build miscue items for the passage words so word-by-word reader is immediately clickable
-  const pace = (durationSec || 60) / wordsTotal;
+  const pace = safeDurationSec / wordsTotal;
   const miscueItems = words.map((w, idx) => {
     // If miscues were registered, assign miscue tags across words
     let type: "match" | "mispronunciation" | "substitution" | "omission" | "insertion" | "repetition" | "reversal" = "match";
@@ -549,6 +550,6 @@ export function computeLocalPhilIriEvaluation({
     miscueItems,
     wordsAttempted: wordsTotal,
     wordsTotal,
-    durationSec,
+    durationSec: safeDurationSec,
   };
 }

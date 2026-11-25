@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { X, UserPlus, AlertCircle, Loader2, KeyRound } from "lucide-react";
+import { X, UserPlus, AlertCircle, Loader2, KeyRound, CheckCircle2, Copy, Check } from "lucide-react";
 import { parseJsonResponse } from "@/lib/safeFetch";
 
 interface TeacherOption {
@@ -28,8 +28,15 @@ export default function AddLearnerModal({
   gradeSectionsMap,
   availableSections = [],
 }: Props) {
-  const [lrn, setLrn] = useState("");
   const [name, setName] = useState("");
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    name: string;
+    studentNumber: string;
+    defaultPassword: string;
+    gradeLevel: number;
+    section: string;
+  } | null>(null);
+  const [copiedNumber, setCopiedNumber] = useState(false);
   const [gradeLevel, setGradeLevel] = useState("7");
   const [section, setSection] = useState(() => {
     if (gradeSectionsMap) {
@@ -111,10 +118,6 @@ export default function AddLearnerModal({
     e.preventDefault();
     setError("");
 
-    if (!lrn.trim()) {
-      setError("Please provide a valid Learner Reference Number (LRN).");
-      return;
-    }
     if (!name.trim()) {
       setError("Please provide the learner's complete name.");
       return;
@@ -132,7 +135,6 @@ export default function AddLearnerModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lrn: lrn.trim(),
           name: name.trim(),
           gradeLevel: Number(gradeLevel) || 7,
           section: finalSection,
@@ -157,8 +159,15 @@ export default function AddLearnerModal({
         throw new Error(json.error || "Failed to enroll learner.");
       }
 
-      // Reset and close
-      setLrn("");
+      // Reset form fields and show generated Student Number confirmation
+      setCreatedCredentials({
+        name: json.data?.name || name.trim(),
+        studentNumber: json.data?.studentNumber || json.data?.username || "",
+        defaultPassword: json.data?.defaultPassword || "",
+        gradeLevel: json.data?.gradeLevel || Number(gradeLevel) || 7,
+        section: json.data?.section || finalSection,
+      });
+      setCopiedNumber(false);
       setName("");
       setGuardian("");
       setContact("");
@@ -170,7 +179,6 @@ export default function AddLearnerModal({
       setIsCustomSection(false);
       setCustomSectionText("");
       onCreated();
-      onClose();
     } catch (err: any) {
       setError(err.message || "Failed to enroll learner.");
     } finally {
@@ -178,9 +186,15 @@ export default function AddLearnerModal({
     }
   };
 
+  const handleCloseModal = () => {
+    setCreatedCredentials(null);
+    setError("");
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={handleCloseModal} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 bg-slate-50/80 px-6 py-4">
@@ -189,22 +203,84 @@ export default function AddLearnerModal({
               <UserPlus className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-gray-900">Enroll New Learner</h3>
+              <h3 className="font-bold text-gray-900">
+                {createdCredentials ? "Learner Enrolled" : "Enroll New Learner"}
+              </h3>
               <p className="text-xs text-gray-500">
-                Register a student into the ARAL system and assign to a teacher
+                {createdCredentials
+                  ? "System-generated login credentials are ready"
+                  : "Register a student into the ARAL system and assign to a teacher"}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseModal}
             className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Form */}
+        {createdCredentials ? (
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <h4 className="text-base font-bold text-gray-900">{createdCredentials.name}</h4>
+              <p className="text-xs text-gray-500">
+                Grade {createdCredentials.gradeLevel} &bull; {createdCredentials.section}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-gray-600">Assigned Student Number (Login ID):</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-extrabold text-rose-700">
+                    {createdCredentials.studentNumber}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(createdCredentials.studentNumber).catch(() => {});
+                      setCopiedNumber(true);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
+                  >
+                    {copiedNumber ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                    <span>{copiedNumber ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
+                <span className="font-semibold text-gray-600">Default Password:</span>
+                <span className="font-mono font-bold text-gray-900">
+                  {createdCredentials.defaultPassword}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setCreatedCredentials(null)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Enroll Another
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+        /* Form */
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {error && (
             <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
@@ -213,40 +289,25 @@ export default function AddLearnerModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                LRN <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={lrn}
-                onChange={(e) => setLrn(e.target.value)}
-                placeholder="e.g. 102948"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Full Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Juan dela Cruz"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Full Name <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Juan dela Cruz"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+            />
           </div>
 
           {/* Default Credentials Info Box */}
           <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/80 p-3 text-xs text-sky-900">
             <KeyRound className="h-4 w-4 shrink-0 mt-0.5 text-sky-600" />
             <div className="leading-relaxed">
-              <span className="font-semibold">Student Account Credentials:</span> A student user account will be automatically created with <strong>Username: LRN</strong> and <strong>Default Password: Student&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
+              <span className="font-semibold">Automatic Student Number &amp; Account:</span> The system will automatically assign a sequential <strong>Student Number</strong> (e.g., <em>20260001</em>) as login ID with <strong>Default Password: Student&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
             </div>
           </div>
 
@@ -480,14 +541,14 @@ export default function AddLearnerModal({
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCloseModal}
               className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading || !lrn.trim() || !name.trim() || !(isCustomSection ? customSectionText.trim() : section.trim())}
+              disabled={loading || !name.trim() || !(isCustomSection ? customSectionText.trim() : section.trim())}
               className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -495,6 +556,7 @@ export default function AddLearnerModal({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

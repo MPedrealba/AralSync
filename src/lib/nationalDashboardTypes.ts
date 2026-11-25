@@ -113,6 +113,7 @@ export interface NationalDashboardData {
   period: SyPeriodKey;
   periodLabel: string;
   generatedAt: string;
+  teacherSubject?: string;
   /** All grades with assessments in the selected period (grade-filter independent). */
   grades: number[];
   rma: RmaPayload;

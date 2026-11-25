@@ -21,7 +21,7 @@ interface PreviewRow {
   status: RowStatus;
   issues: string[];
   data: {
-    lrn: string;
+    studentNumber: string;
     name: string;
     gradeLevel: number | null;
     section: string;
@@ -43,6 +43,13 @@ interface ImportResult {
   created: number;
   skippedDuplicates: number;
   failed: { row: number; reason: string }[];
+  createdLearners?: {
+    studentNumber: string;
+    name: string;
+    gradeLevel: number | null;
+    section: string;
+    defaultPassword: string;
+  }[];
 }
 
 const statusBadge: Record<RowStatus, { label: string; cls: string }> = {
@@ -232,7 +239,7 @@ export default function CoordinatorImportLearnersModal({
               <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/80 p-3 text-xs text-sky-900">
                 <KeyRound className="h-4 w-4 shrink-0 mt-0.5 text-sky-600" />
                 <div className="leading-relaxed">
-                  <span className="font-semibold">Automatic Student Accounts:</span> All imported learners automatically receive user accounts with <strong>Username: LRN</strong> and <strong>Default Password: Learner&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
+                  <span className="font-semibold">Automatic Student Accounts:</span> All imported learners automatically receive system-generated sequential <strong>Student Numbers</strong> (e.g., <em>20260001</em>) as Login ID and <strong>Default Password: Learner&apos;s surname</strong> (lowercase, e.g., <em>delacruz</em> or <em>santos</em>).
                 </div>
               </div>
 
@@ -240,7 +247,7 @@ export default function CoordinatorImportLearnersModal({
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Need the template?</p>
                   <p className="text-xs text-gray-500">
-                    Pre-formatted columns: LRN, Name, Grade, Section, Guardian, Contact.
+                    Pre-formatted columns: Name, Grade Level, Section, Guardian Name, Contact Number, Address.
                   </p>
                 </div>
                 <button
@@ -269,7 +276,7 @@ export default function CoordinatorImportLearnersModal({
                 </div>
                 <div className="rounded-lg border border-amber-100 bg-amber-50 p-2.5 text-center">
                   <p className="text-lg font-bold text-amber-700">{preview.counts.duplicate}</p>
-                  <p className="text-[11px] text-amber-600">Existing LRN</p>
+                  <p className="text-[11px] text-amber-600">Existing ID</p>
                 </div>
                 <div className="rounded-lg border border-red-100 bg-red-50 p-2.5 text-center">
                   <p className="text-lg font-bold text-red-700">{preview.counts.invalid}</p>
@@ -291,7 +298,7 @@ export default function CoordinatorImportLearnersModal({
                     <tr>
                       <th className="px-3 py-2">Row</th>
                       <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">LRN</th>
+                      <th className="px-3 py-2">Student No.</th>
                       <th className="px-3 py-2">Name</th>
                       <th className="px-3 py-2">Grade/Sec</th>
                     </tr>
@@ -307,7 +314,9 @@ export default function CoordinatorImportLearnersModal({
                               {badge.label}
                             </span>
                           </td>
-                          <td className="px-3 py-2 font-mono text-gray-700">{s.data?.lrn || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-gray-700">
+                            {s.data?.studentNumber ? s.data.studentNumber : <span className="text-gray-400 italic">Auto-assigned</span>}
+                          </td>
                           <td className="px-3 py-2 font-medium text-gray-900">{s.data?.name || "—"}</td>
                           <td className="px-3 py-2 text-gray-600">
                             {s.data?.gradeLevel ? `G${s.data.gradeLevel}` : "—"} {s.data?.section || ""}
@@ -330,11 +339,33 @@ export default function CoordinatorImportLearnersModal({
               <h3 className="text-lg font-bold text-gray-900">Import Complete</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Successfully enrolled <strong>{result.created}</strong> new learners.
-                {result.skippedDuplicates > 0 && ` (${result.skippedDuplicates} duplicate LRNs skipped)`}
+                {result.skippedDuplicates > 0 && ` (${result.skippedDuplicates} duplicate Student Numbers skipped)`}
               </p>
               <p className="mt-2 text-xs text-gray-500">
-                Student portal accounts have been created with <strong>Username: LRN</strong> and <strong>Default Password: Student&apos;s surname</strong>.
+                Student portal accounts have been created with sequential <strong>Student Numbers</strong> and <strong>Default Password: Student&apos;s surname</strong>.
               </p>
+              {result.createdLearners && result.createdLearners.length > 0 && (
+                <div className="mt-4 max-h-48 overflow-y-auto rounded-xl border border-gray-200 text-left text-xs">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2">Student No.</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Default Password</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {result.createdLearners.slice(0, 50).map((item) => (
+                        <tr key={item.studentNumber}>
+                          <td className="px-3 py-1.5 font-mono font-semibold text-rose-700">{item.studentNumber}</td>
+                          <td className="px-3 py-1.5 text-gray-800">{item.name}</td>
+                          <td className="px-3 py-1.5 font-mono text-gray-600">{item.defaultPassword}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

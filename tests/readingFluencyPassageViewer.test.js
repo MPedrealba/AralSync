@@ -50,10 +50,9 @@ describe('Reading Fluency Passage Viewer, Dual Selectors & Edit Mode Suite', () 
       assert.ok(content.includes('passageText.split'), 'Must split passageText into paragraphs');
     });
 
-    test('connects active recording mode to LiveReadingCaptionViewer', () => {
-      assert.ok(content.includes('<LiveReadingCaptionViewer'), 'Must mount LiveReadingCaptionViewer when recording');
-      assert.ok(content.includes('activeWordIndex={liveActiveWordIndex}'), 'Must pass activeWordIndex for real-time word highlighting');
-      assert.ok(content.includes('spokenWordCount={liveSpokenWordCount}'), 'Must pass spokenWordCount');
+    test('renders clean natural passage typography during recording without live tracking word pills', () => {
+      assert.ok(content.includes('Recording oral reading...'), 'Must show recording status indicator');
+      assert.ok(content.includes('cleanPassage.split'), 'Must render clean passage paragraphs while reading');
     });
 
     test('renders editing mode with textarea and toggle button', () => {

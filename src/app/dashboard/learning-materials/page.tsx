@@ -60,10 +60,45 @@ export default function TeacherLearningMaterialsPage() {
   const [materials, setMaterials] = useState<LearningMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [assignedSubject, setAssignedSubject] = useState<string>("All");
+  const [authLoaded, setAuthLoaded] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [selectedGrade, setSelectedGrade] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedSessions, setExpandedSessions] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        const json = await parseJsonResponse(res);
+        if (!mounted) return;
+        const rawAssigned = json?.data?.assignedSubject || "All";
+        const mapped = ["Reading", "English", "Filipino", "English & Filipino"].includes(rawAssigned)
+          ? "Reading"
+          : ["Math", "Science"].includes(rawAssigned)
+          ? rawAssigned
+          : "All";
+        setAssignedSubject(mapped);
+        if (mapped !== "All") {
+          setSelectedSubject(mapped);
+        }
+      } catch {
+        // fallback handled cleanly by API scoping
+      } finally {
+        if (mounted) setAuthLoaded(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const visibleSubjectOptions = useMemo(() => {
+    if (assignedSubject === "All") return SUBJECT_OPTIONS;
+    return SUBJECT_OPTIONS.filter((opt) => opt.value === assignedSubject);
+  }, [assignedSubject]);
 
   const fetchMaterials = async () => {
     setLoading(true);
@@ -93,8 +128,9 @@ export default function TeacherLearningMaterialsPage() {
   };
 
   useEffect(() => {
+    if (!authLoaded) return;
     fetchMaterials();
-  }, [selectedSubject, selectedGrade]);
+  }, [authLoaded, selectedSubject, selectedGrade]);
 
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -197,7 +233,7 @@ export default function TeacherLearningMaterialsPage() {
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
                 <Filter className="h-3 w-3" /> Subject:
               </span>
-              {SUBJECT_OPTIONS.map((opt) => {
+              {visibleSubjectOptions.map((opt) => {
                 const isSelected = selectedSubject === opt.value;
                 return (
                   <button

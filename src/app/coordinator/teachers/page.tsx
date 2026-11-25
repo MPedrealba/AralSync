@@ -26,7 +26,7 @@ interface AssignedStudent {
   id: string;
   studentId: string | null;
   name: string;
-  lrn: string;
+  studentNumber: string;
   gradeLevel: number;
   section: string;
   riskLevel: string;
@@ -152,7 +152,7 @@ export default function CoordinatorTeachersPage() {
     return selectedTeacherForModal.students.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
-        s.lrn.toLowerCase().includes(q) ||
+        (s.studentNumber || "").toLowerCase().includes(q) ||
         s.section.toLowerCase().includes(q) ||
         s.readingLevel.toLowerCase().includes(q)
     );
@@ -545,7 +545,7 @@ export default function CoordinatorTeachersPage() {
                             </div>
                             <div>
                               <p className="font-bold text-xs text-slate-900">{st.name}</p>
-                              <p className="font-mono text-[10px] text-slate-400">LRN: {st.lrn}</p>
+                              <p className="font-mono text-[10px] text-slate-400">Student No: {st.studentNumber}</p>
                             </div>
                           </div>
 

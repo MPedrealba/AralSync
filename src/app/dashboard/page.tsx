@@ -347,7 +347,7 @@ export default function DashboardPage() {
                           {alert.name}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-500 font-mono">
-                          LRN: {alert.lrn}
+                          Student No: {alert.studentNumber}
                         </p>
                       </div>
                       <span

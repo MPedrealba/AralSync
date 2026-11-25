@@ -63,7 +63,7 @@ interface StudentSubmission {
   id: string; // Intervention doc _id
   studentId: string;
   studentName: string;
-  studentLrn: string;
+  studentNumber: string;
   section: string;
   status: "Not Started" | "In Progress" | "Submitted" | "Reviewed" | "Completed" | string;
   submissionText?: string;
@@ -79,7 +79,7 @@ interface LearnerOption {
   id: string;
   studentId?: string;
   name: string;
-  lrn: string;
+  studentNumber: string;
   section: string;
 }
 
@@ -825,8 +825,8 @@ export default function InterventionsPage() {
       if (rosterSearch.trim()) {
         const q = rosterSearch.toLowerCase();
         const matchName = (sub.studentName || "").toLowerCase().includes(q);
-        const matchLrn = (sub.studentLrn || "").toLowerCase().includes(q);
-        if (!matchName && !matchLrn) return false;
+        const matchStudentNumber = (sub.studentNumber || "").toLowerCase().includes(q);
+        if (!matchName && !matchStudentNumber) return false;
       }
       return true;
     });
@@ -1602,7 +1602,7 @@ export default function InterventionsPage() {
                         type="text"
                         value={rosterSearch}
                         onChange={(e) => setRosterSearch(e.target.value)}
-                        placeholder="Search student or LRN..."
+                        placeholder="Search student or Student No..."
                         className="w-full h-9 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-medium text-slate-700 outline-none focus:border-red-800 focus:ring-1 focus:ring-red-800"
                       />
                     </div>
@@ -1701,7 +1701,7 @@ export default function InterventionsPage() {
                                   {sub.studentName}
                                 </h4>
                                 <p className="text-[11px] text-slate-500 truncate">
-                                  {sub.studentLrn ? `LRN: ${sub.studentLrn}` : sub.section || "Learner"}
+                                  {sub.studentNumber ? `Student No: ${sub.studentNumber}` : sub.section || "Learner"}
                                 </p>
                               </div>
                             </div>
@@ -1767,7 +1767,7 @@ export default function InterventionsPage() {
                               </span>
                             </div>
                             <p className="text-xs text-slate-500">
-                              LRN: {activeSubmission.studentLrn || "N/A"}
+                              Student No: {activeSubmission.studentNumber || "N/A"}
                               {activeSubmission.section ? ` • Section ${activeSubmission.section}` : ""}
                             </p>
                           </div>

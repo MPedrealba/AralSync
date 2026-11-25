@@ -6,31 +6,41 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const connectDB = require('./db');
 const User = require('../models/User');
 const LearnerRecord = require('../models/LearnerRecord');
+const {
+  allocateStudentNumbers,
+  setStudentNumberCounter,
+} = require('../models/Counter');
 const Assessment = require('../models/Assessment');
 const Intervention = require('../models/Intervention');
 const ReadingPassage = require('../models/ReadingPassage');
 const Recommendation = require('../models/Recommendation');
+const NotificationAck = require('../models/NotificationAck');
+
+const STUDENT_COUNT = 110;
+const ACADEMIC_YEAR = 2026;
 
 const FIRST_NAMES_MALE = [
   'Angelo', 'Christian', 'Daniel', 'Ethan', 'Gabriel', 'Ian', 'Joshua', 'Kevin',
   'Lance', 'Marco', 'Nathan', 'Paolo', 'Rafael', 'Sean', 'Tristan', 'Vince',
   'Adrian', 'Benedict', 'Carlo', 'Diego', 'Emil', 'Francis', 'Gerald', 'Harvey',
-  'Jerome', 'Kurt', 'Lorenzo', 'Mark', 'Nico', 'Patrick'
+  'Jerome', 'Kurt', 'Lorenzo', 'Mark', 'Nico', 'Patrick', 'Juan', 'Jose',
 ];
 
 const FIRST_NAMES_FEMALE = [
   'Alyssa', 'Beatrice', 'Chloe', 'Danielle', 'Ella', 'Faith', 'Giselle', 'Hannah',
   'Isabella', 'Jasmine', 'Katrina', 'Lianne', 'Maria', 'Nicole', 'Patricia', 'Rhea',
   'Sofia', 'Trina', 'Vanessa', 'Ysabelle', 'Angel', 'Bianca', 'Clarisse', 'Diana',
-  'Erika', 'Francesca', 'Grace', 'Hazel', 'Janine', 'Kristine'
+  'Erika', 'Francesca', 'Grace', 'Hazel', 'Janine', 'Kristine', 'Ana', 'Rosa',
 ];
 
 const LAST_NAMES = [
   'Santos', 'Reyes', 'Cruz', 'Bautista', 'Ocampo', 'Garcia', 'Mendoza', 'Torres',
   'Tomas', 'Andrada', 'Castillo', 'Flores', 'Villanueva', 'Ramos', 'Castro', 'Rivera',
   'Aquino', 'Navarro', 'Salazar', 'Mercado', 'Dela Cruz', 'Pascual', 'Soriano', 'Aguilar',
-  'Dizon', 'Valenzuela', 'Vergara', 'Cabrera', 'Bernardo', 'De Leon', 'Miranda', 'Espiritu'
+  'Dizon', 'Valenzuela', 'Vergara', 'Cabrera', 'Bernardo', 'De Leon', 'Miranda', 'Espiritu',
 ];
+
+const GUARDIAN_FIRST_NAMES = ['Maria', 'Jose', 'Luz', 'Ramon', 'Teresa', 'Eduardo', 'Gloria', 'Liza'];
 
 const SECTIONS_BY_GRADE = {
   7: ['Rosal', 'Sampaguita', 'Camia', 'Daisy'],
@@ -39,194 +49,347 @@ const SECTIONS_BY_GRADE = {
   10: ['Acacia', 'Molave', 'Narra', 'Kamagong'],
 };
 
-function getRandomItem(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function seed100Students() {
+function daysAgo(days) {
+  return new Date(Date.now() - days * 86400000);
+}
+
+/**
+ * CJS equivalent of extractSurnamePassword(fullName, fallbackStudentNumber)
+ * in src/lib/nameUtils.ts so seeded passwords match login self-healing & reset logic.
+ */
+function extractSurnamePasswordCjs(fullName, fallbackStudentNumber) {
+  const safeFallback = String(fallbackStudentNumber || '').trim().toLowerCase();
+  const trimmed = String(fullName || '').trim();
+  if (!trimmed) return safeFallback;
+
+  let surname = '';
+  if (trimmed.includes(',')) {
+    surname = trimmed.split(',')[0].trim();
+  } else {
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) {
+      surname = parts[0];
+    } else {
+      const compoundPrefixes = ['dela', 'delos', 'de', 'del', 'san', 'santa'];
+      const penultimate = parts[parts.length - 2].toLowerCase();
+      surname = compoundPrefixes.includes(penultimate)
+        ? parts.slice(-2).join('')
+        : parts[parts.length - 1];
+    }
+  }
+  const clean = surname.toLowerCase().replace(/[^a-z0-9]/gi, '');
+  return clean || safeFallback;
+}
+
+function evaluateGstLocal(score, gradeLevel) {
+  const isGradeReady = score >= 28;
+  const gstStatus = isGradeReady ? 'Grade-Ready' : 'Needs Individualized Assessment';
+  let recommendedStartingLevel = gradeLevel;
+  if (!isGradeReady) {
+    const deficitOffset = score < 14 ? 3 : 2;
+    recommendedStartingLevel = Math.max(4, gradeLevel - deficitOffset);
+  }
+  return {
+    isGradeReady,
+    gstStatus,
+    recommendedStartingLevel,
+    needsIndividualAssessment: !isGradeReady,
+  };
+}
+
+async function seed110StudentsReset() {
   await connectDB();
   console.log('Connected to MongoDB Atlas.');
 
   try {
-    // 1. Fetch teachers
-    const teachers = await User.find({ role: 'teacher' }).lean();
-    if (!teachers || teachers.length === 0) {
-      console.error('No teachers found! Please run database/seedUsers.js first.');
+    // 1. Clean-reset existing student records & student activity data FIRST
+    const staffUsers = await User.find({ role: { $ne: 'student' } }).lean();
+    const teachers = staffUsers.filter((u) => u.role === 'teacher');
+    if (teachers.length === 0) {
+      console.error('No teacher accounts found! Run database/seedUsers.js first.');
       process.exit(1);
     }
-    const readingTeacher = teachers.find((t) => t.assignedSubject === 'Reading') || teachers[0];
-    const mathTeacher = teachers.find((t) => t.assignedSubject === 'Math' || t.assignedSubject === 'All') || teachers[0];
 
-    // 2. Fetch KS3 Reading Passages
-    const ks3Passages = await ReadingPassage.find({ keyStage: 'KS3' }).lean();
-    console.log(`Found ${ks3Passages.length} KS3 Reading Passages in database.`);
+    console.log('Clearing old student Users, LearnerRecords, Assessments, and Interventions...');
+    const oldStudentUsers = await User.find({ role: 'student' }, { _id: 1 }).lean();
+    const oldStudentIds = oldStudentUsers.map((u) => u._id);
 
-    // 3. Fetch ARAL Recommendations for interventions
-    const recs = await Recommendation.find({ keyStage: 'KS3' }).lean();
+    await Promise.all([
+      User.deleteMany({ role: 'student' }),
+      LearnerRecord.deleteMany({}),
+      Assessment.deleteMany({}),
+      Intervention.deleteMany({}),
+      oldStudentIds.length > 0
+        ? NotificationAck.deleteMany({ userId: { $in: oldStudentIds } })
+        : Promise.resolve(),
+      setStudentNumberCounter(0, ACADEMIC_YEAR),
+    ]);
 
-    // 4. Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash('password123', salt);
+    // 2. Cleanly migrate LearnerRecord indexes after empty collection reset
+    try {
+      await LearnerRecord.collection.dropIndex('lrn_1');
+      console.log('Dropped legacy lrn_1 unique index from learnerrecords.');
+    } catch (err) {
+      if (err && err.codeName !== 'IndexNotFound' && err.code !== 27) {
+        console.warn('Note dropping lrn_1 index:', err.message);
+      }
+    }
+    await LearnerRecord.syncIndexes();
+    console.log('Synchronized LearnerRecord indexes (studentNumber unique).');
 
-    console.log('Generating 100 Key Stage 3 students (student11 through student110)...');
+    const readingTeachers = teachers.filter(
+      (t) => t.specialization === 'reading' || ['Reading', 'English', 'Filipino', 'English & Filipino', 'All'].includes(t.assignedSubject)
+    );
+    const mathTeachers = teachers.filter((t) => ['Math', 'All'].includes(t.assignedSubject));
+    const scienceTeachers = teachers.filter((t) => ['Science', 'All'].includes(t.assignedSubject));
 
-    const createdUsers = [];
-    const createdRecords = [];
-    const createdAssessments = [];
-    const createdInterventions = [];
+    const fallbackTeacher = teachers[0];
+    const effectiveReadingTeachers = readingTeachers.length > 0 ? readingTeachers : [fallbackTeacher];
+    const effectiveMathTeachers = mathTeachers.length > 0 ? mathTeachers : [fallbackTeacher];
+    const effectiveScienceTeachers = scienceTeachers.length > 0 ? scienceTeachers : [fallbackTeacher];
 
-    // Distribution profile: 40% Low Risk, 35% Moderate Risk, 25% High Risk
-    for (let i = 11; i <= 110; i++) {
-      const username = `student${i}`;
-      const lrn = `136860100${i.toString().padStart(3, '0')}`;
+    // 3. Fetch KS3 Reading Passages & ARAL Recommendations
+    const ks3Passages = await ReadingPassage.find({}).lean();
+    const recs = await Recommendation.find({}).lean();
+    console.log(`Found ${ks3Passages.length} ReadingPassages and ${recs.length} Recommendations.`);
 
-      const isMale = i % 2 === 0;
+    // 4. Atomically allocate 110 sequential Student Numbers (20260001 .. 20260110)
+    const studentNumbers = await allocateStudentNumbers(STUDENT_COUNT, ACADEMIC_YEAR);
+    console.log(`Allocated ${studentNumbers.length} Student Numbers: ${studentNumbers[0]} .. ${studentNumbers[studentNumbers.length - 1]}`);
+
+    // Pre-cache bcrypt hashes per surname for fast seeding
+    const passwordHashCache = new Map();
+    async function getHashedPassword(plain) {
+      if (!passwordHashCache.has(plain)) {
+        passwordHashCache.set(plain, await bcrypt.hash(plain, 10));
+      }
+      return passwordHashCache.get(plain);
+    }
+
+    const userDocs = [];
+    const recordDocs = [];
+    const assessmentDocs = [];
+    const interventionDocs = [];
+
+    for (let idx = 0; idx < STUDENT_COUNT; idx++) {
+      const studentNumber = studentNumbers[idx];
+      const userId = new mongoose.Types.ObjectId();
+
+      const isMale = idx % 2 === 0;
       const firstName = isMale
-        ? FIRST_NAMES_MALE[(i - 11) % FIRST_NAMES_MALE.length]
-        : FIRST_NAMES_FEMALE[(i - 11) % FIRST_NAMES_FEMALE.length];
-      const lastName = LAST_NAMES[(i * 3) % LAST_NAMES.length];
+        ? FIRST_NAMES_MALE[idx % FIRST_NAMES_MALE.length]
+        : FIRST_NAMES_FEMALE[idx % FIRST_NAMES_FEMALE.length];
+      const lastName = LAST_NAMES[(idx * 7 + Math.floor(idx / 4)) % LAST_NAMES.length];
       const fullName = `${firstName} ${lastName}`;
 
-      // Distribute evenly across KS3: Grades 7, 8, 9, 10
-      const grade = 7 + ((i - 11) % 4);
+      const grade = 7 + (idx % 4);
       const possibleSections = SECTIONS_BY_GRADE[grade];
-      const section = possibleSections[(i - 11) % possibleSections.length];
+      const section = possibleSections[Math.floor(idx / 4) % possibleSections.length];
 
-      // Assign teacher (alternating)
-      const assignedTeacher = (i % 2 === 0) ? readingTeacher : mathTeacher;
+      const readingTeacher = effectiveReadingTeachers[idx % effectiveReadingTeachers.length];
+      const mathTeacher = effectiveMathTeachers[idx % effectiveMathTeachers.length];
+      const scienceTeacher = effectiveScienceTeachers[idx % effectiveScienceTeachers.length];
+      const primaryTeacher = readingTeacher;
 
-      // Determine learner performance profile
-      const roll = (i * 17) % 100;
-      let riskLevel = 'Low Risk';
-      let masteryStatus = 'Proficient';
-      let readingLevel = 'Independent';
-      let oralAccuracy = getRandomInt(97, 100);
-      let wcpm = getRandomInt(125, 160);
-      let wer = getRandomInt(0, 3);
-      let compScore = getRandomInt(80, 100);
-      let compLevel = 'Independent';
-      let mathScore = getRandomInt(85, 100);
+      const defaultPasswordPlain = extractSurnamePasswordCjs(fullName, studentNumber);
+      const passwordHash = await getHashedPassword(defaultPasswordPlain);
 
-      if (roll < 25) {
-        // High Risk / Frustration
-        riskLevel = 'High Risk';
-        masteryStatus = 'Beginning';
-        readingLevel = 'Frustration';
-        oralAccuracy = getRandomInt(80, 89);
-        wcpm = getRandomInt(55, 80);
-        wer = getRandomInt(11, 20);
-        compScore = getRandomInt(35, 55);
-        compLevel = 'Frustration';
-        mathScore = getRandomInt(40, 58);
-      } else if (roll < 60) {
-        // Moderate Risk / Instructional
-        riskLevel = 'Moderate Risk';
-        masteryStatus = 'Developing';
-        readingLevel = 'Instructional';
-        oralAccuracy = getRandomInt(90, 96);
-        wcpm = getRandomInt(85, 120);
-        wer = getRandomInt(4, 9);
-        compScore = getRandomInt(60, 78);
-        compLevel = 'Instructional';
-        mathScore = getRandomInt(60, 78);
+      userDocs.push({
+        _id: userId,
+        username: studentNumber,
+        password: passwordHash,
+        name: fullName,
+        role: 'student',
+        active: true,
+        mustChangePassword: false,
+        email: `${studentNumber}@student.aralsync.edu`,
+      });
+
+      // Profile tier distribution (~35% Low, ~35% Moderate, ~22% High, ~8% Pending)
+      const roll = (idx * 19 + 11) % 100;
+      const isPending = roll >= 92;
+
+      let riskLevel = 'Pending Assessment';
+      let masteryStatus = 'Beginning';
+      let readingLevel = 'Not Assessed';
+      let oralAccuracy = null;
+      let wcpm = null;
+      let wer = null;
+      let compScore = null;
+      let compLevel = 'Not Assessed';
+      let gstScore = null;
+      let mathPreScore = null;
+      let mathPostScore = null;
+      let scienceScore = null;
+
+      if (!isPending) {
+        if (roll < 22) {
+          riskLevel = 'High Risk';
+          masteryStatus = 'Beginning';
+          readingLevel = roll < 5 ? 'Non-Reader' : 'Frustration';
+          oralAccuracy = roll < 5 ? getRandomInt(68, 79) : getRandomInt(80, 88);
+          wcpm = roll < 5 ? getRandomInt(38, 55) : getRandomInt(58, 82);
+          wer = 100 - oralAccuracy;
+          compScore = getRandomInt(30, 56);
+          compLevel = 'Frustration';
+          gstScore = getRandomInt(10, 21);
+          mathPreScore = getRandomInt(32, 48);
+          mathPostScore = Math.min(72, mathPreScore + getRandomInt(4, 15));
+          scienceScore = getRandomInt(38, 58);
+        } else if (roll < 57) {
+          riskLevel = 'Moderate Risk';
+          masteryStatus = roll < 42 ? 'Developing' : 'Approaching';
+          readingLevel = 'Instructional';
+          oralAccuracy = getRandomInt(90, 96);
+          wcpm = getRandomInt(86, 118);
+          wer = 100 - oralAccuracy;
+          compScore = getRandomInt(60, 78);
+          compLevel = 'Instructional';
+          gstScore = getRandomInt(22, 27);
+          mathPreScore = getRandomInt(52, 68);
+          mathPostScore = Math.min(86, mathPreScore + getRandomInt(6, 16));
+          scienceScore = getRandomInt(60, 76);
+        } else {
+          riskLevel = 'Low Risk';
+          masteryStatus = roll < 75 ? 'Approaching' : 'Proficient';
+          readingLevel = 'Independent';
+          oralAccuracy = getRandomInt(97, 100);
+          wcpm = getRandomInt(122, 158);
+          wer = 100 - oralAccuracy;
+          compScore = getRandomInt(82, 100);
+          compLevel = 'Independent';
+          gstScore = getRandomInt(28, 39);
+          mathPreScore = getRandomInt(72, 86);
+          mathPostScore = Math.min(100, mathPreScore + getRandomInt(4, 14));
+          scienceScore = getRandomInt(80, 98);
+        }
       }
 
-      // 1. Create or Find User
-      let user = await User.findOne({ username });
-      if (!user) {
-        user = await User.create({
-          username,
-          password: passwordHash,
-          name: fullName,
-          role: 'student',
-          email: `${username}@student.deped.gov.ph`,
-          mustChangePassword: false,
-        });
-      }
-      createdUsers.push(user);
+      const gstEval = gstScore !== null ? evaluateGstLocal(gstScore, grade) : null;
+      const filReadingMap = {
+        Independent: 'Malaya',
+        Instructional: 'Pampagkatuto',
+        Frustration: 'Pagkabigo',
+        'Non-Reader': 'Hindi Makabasa',
+        'Not Assessed': 'Hindi Pa Naitatasa',
+      };
+      const filGstMap = {
+        'Grade-Ready': 'Handa sa Baitang',
+        'Needs Individualized Assessment': 'Nangangailangan ng Karagdagang Pagtataya',
+      };
 
-      // 2. Create LearnerRecord if not already existing
       const birthYear = 2012 - (grade - 7);
-      const birthMonth = String(getRandomInt(1, 12)).padStart(2, '0');
-      const birthDay = String(getRandomInt(1, 28)).padStart(2, '0');
-      const guardianName = `${getRandomItem(['Maria', 'Jose', 'Luz', 'Ramon', 'Teresa', 'Eduardo'])} ${lastName}`;
+      const birthMonth = String(((idx * 3) % 12) + 1).padStart(2, '0');
+      const birthDay = String(((idx * 5) % 28) + 1).padStart(2, '0');
+      const guardianName = `${GUARDIAN_FIRST_NAMES[idx % GUARDIAN_FIRST_NAMES.length]} ${lastName}`;
 
-      let learnerRecord = await LearnerRecord.findOne({ studentId: user._id });
-      if (!learnerRecord) {
-        learnerRecord = await LearnerRecord.create({
-          studentId: user._id,
-          lrn,
-          gradeLevel: grade,
-          section,
-          birthDate: `${birthYear}-${birthMonth}-${birthDay}`,
-          riskLevel,
-          masteryStatus,
-          guardian: guardianName,
-          contact: `09${getRandomInt(100000000, 999999999)}`,
-          address: `Block ${getRandomInt(1, 40)}, Lot ${getRandomInt(1, 30)}, Brgy. San Isidro, General Trias`,
-          readingLevel,
-          oralReadingAccuracy: oralAccuracy,
-          oralReadingWpm: wcpm,
-          oralReadingWer: wer,
-          oralReadingLevel: readingLevel,
-          comprehensionScore: compScore,
-          comprehensionLevel: compLevel,
-          combinedReadingLevel: readingLevel,
-          philIriStatus: 'approved',
-          assignedTeacherId: assignedTeacher._id,
-          assignedTeacherName: assignedTeacher.name,
-        });
-      }
-      createdRecords.push(learnerRecord);
+      let readingAssessmentId = null;
+      let readingAssessmentDate = null;
 
-      // 3. Create OMR Math Assessment if not exists
-      const existingMath = await Assessment.findOne({ studentId: user._id, type: 'OMR' });
-      if (!existingMath) {
-        const mathTotalItems = 25;
-        const mathCorrectItems = Math.round((mathScore / 100) * mathTotalItems);
-        const mathAssessment = await Assessment.create({
-          studentId: user._id,
+      if (!isPending) {
+        const mathComp =
+          grade === 7
+            ? 'Number Sense & Algebra'
+            : grade === 8
+            ? 'Linear Equations & Systems'
+            : grade === 9
+            ? 'Quadratic Equations'
+            : 'Polynomials & Statistics';
+
+        assessmentDocs.push({
+          studentId: userId,
           type: 'OMR',
           subject: 'Math',
-          title: `Grade ${grade} Mathematics Diagnostics (Term 1)`,
-          score: mathScore,
-          totalItems: mathTotalItems,
-          scoredItems: mathCorrectItems,
-          mcTotal: mathTotalItems,
+          title: `Grade ${grade} Mathematics Pre-Test`,
+          score: mathPreScore,
+          totalItems: 25,
+          scoredItems: Math.round((mathPreScore / 100) * 25),
+          mcTotal: 25,
           gradingStatus: 'complete',
-          assessmentCategory: 'quiz',
-          competency: grade === 7 ? 'Number Sense & Algebra' : grade === 8 ? 'Linear Equations & Systems' : grade === 9 ? 'Quadratic Equations' : 'Polynomials & Statistics',
+          assessmentCategory: 'pre-test',
+          competency: mathComp,
+          masteryLevel: mathPreScore >= 80 ? 'Proficient' : mathPreScore >= 60 ? 'Developing' : 'Beginning',
+          status: 'approved',
+          date: daysAgo(getRandomInt(28, 45)),
+        });
+
+        assessmentDocs.push({
+          studentId: userId,
+          type: 'OMR',
+          subject: 'Math',
+          title: `Grade ${grade} Mathematics Post-Test`,
+          score: mathPostScore,
+          totalItems: 25,
+          scoredItems: Math.round((mathPostScore / 100) * 25),
+          mcTotal: 25,
+          gradingStatus: 'complete',
+          assessmentCategory: 'post-test',
+          competency: mathComp,
           masteryLevel: masteryStatus,
           status: 'approved',
-          createdAt: new Date(Date.now() - getRandomInt(2, 30) * 86400000),
+          date: daysAgo(getRandomInt(3, 18)),
         });
-        createdAssessments.push(mathAssessment);
-      }
 
-      // 4. Create Phil-IRI Oral Reading Assessment linked to KS3 Passage
-      const existingReading = await Assessment.findOne({ studentId: user._id, type: 'READING_FLUENCY' });
-      if (!existingReading) {
-        const matchingPassages = ks3Passages.filter((p) => p.gradeLevel === grade);
-        const passage = (matchingPassages.length > 0 ? getRandomItem(matchingPassages) : (ks3Passages[0] || null));
+        assessmentDocs.push({
+          studentId: userId,
+          type: 'OMR',
+          subject: 'Science',
+          title: `Grade ${grade} Science Diagnostic Quiz`,
+          score: scienceScore,
+          totalItems: 20,
+          scoredItems: Math.round((scienceScore / 100) * 20),
+          mcTotal: 20,
+          gradingStatus: 'complete',
+          assessmentCategory: 'quiz',
+          competency: grade === 7 ? 'Matter & Living Systems' : grade === 8 ? 'Force, Motion & Earth' : 'Chemical Reactions & Genetics',
+          masteryLevel: scienceScore >= 85 ? 'Proficient' : scienceScore >= 70 ? 'Approaching' : scienceScore >= 55 ? 'Developing' : 'Beginning',
+          status: 'approved',
+          date: daysAgo(getRandomInt(5, 25)),
+        });
+
+        assessmentDocs.push({
+          studentId: userId,
+          type: 'OMR',
+          subject: 'Reading',
+          title: `Phil-IRI Stage 1 GST — Grade ${grade}`,
+          score: Math.round((gstScore / 40) * 100),
+          totalItems: 40,
+          scoredItems: gstScore,
+          mcTotal: 40,
+          gstRawScore: gstScore,
+          gstStage: 1,
+          gradingStatus: 'complete',
+          assessmentCategory: 'gst',
+          competency: 'Group Screening Test (GST)',
+          masteryLevel: gstEval.isGradeReady ? 'Independent' : 'Instructional',
+          status: 'approved',
+          date: daysAgo(getRandomInt(25, 42)),
+        });
+
+        const passage = ks3Passages.length > 0 ? ks3Passages[idx % ks3Passages.length] : null;
         const passageTitle = passage ? passage.title : `ARAL KS3 Grade ${grade} Reading Benchmark`;
-        const passageWordCount = passage && passage.text ? passage.text.split(/\s+/).length : 120;
+        const passageWordCount = passage && passage.text ? passage.text.split(/\s+/).filter(Boolean).length : 135;
         const miscues = Math.max(0, Math.round(passageWordCount * (wer / 100)));
 
-        const readingAssessment = await Assessment.create({
-          studentId: user._id,
+        readingAssessmentId = new mongoose.Types.ObjectId();
+        readingAssessmentDate = daysAgo(getRandomInt(1, 20));
+
+        assessmentDocs.push({
+          _id: readingAssessmentId,
+          studentId: userId,
           type: 'READING_FLUENCY',
-          subject: 'Reading',
+          subject: idx % 3 === 0 ? 'Filipino' : 'Reading',
           title: `Phil-IRI Oral Fluency — ${passageTitle}`,
           score: oralAccuracy,
           accuracy: oralAccuracy,
           wpm: wcpm,
-          wer: wer,
-          durationSec: Math.round((passageWordCount / wcpm) * 60),
-          speechDurationSec: Math.round((passageWordCount / wcpm) * 52),
+          wer,
+          durationSec: Math.min(60, Math.max(25, Math.round((passageWordCount / wcpm) * 60))),
+          speechDurationSec: Math.min(55, Math.max(20, Math.round((passageWordCount / wcpm) * 50))),
           wordsAttempted: passageWordCount,
           miscueTotal: miscues,
           miscueBreakdown: {
@@ -234,68 +397,188 @@ async function seed100Students() {
             substitutions: Math.round(miscues * 0.3),
             omissions: Math.round(miscues * 0.2),
             insertions: Math.round(miscues * 0.1),
-            repetitions: 1,
+            repetitions: riskLevel === 'High Risk' ? 2 : 1,
             reversals: 0,
           },
-          hesitations: getRandomInt(1, 5),
-          longestPause: getRandomInt(1, 3),
-          passageTitle: passageTitle,
+          hesitations: riskLevel === 'High Risk' ? getRandomInt(3, 6) : getRandomInt(0, 2),
+          longestPause: riskLevel === 'High Risk' ? getRandomInt(2, 4) : 1,
+          passageTitle,
+          comprehensionScore: compScore,
+          comprehensionLevel: compLevel,
           masteryLevel: readingLevel,
           combinedLevel: readingLevel,
           status: 'approved',
-          createdAt: new Date(Date.now() - getRandomInt(1, 20) * 86400000),
+          date: readingAssessmentDate,
         });
-        createdAssessments.push(readingAssessment);
 
-        // Update learnerRecord with reading assessment link
-        if (learnerRecord && !learnerRecord.lastReadingAssessmentId) {
-          learnerRecord.lastReadingAssessmentId = readingAssessment._id;
-          learnerRecord.lastReadingAssessmentDate = readingAssessment.createdAt;
-          await learnerRecord.save();
-        }
-      }
+        assessmentDocs.push({
+          studentId: userId,
+          type: 'COMPREHENSION',
+          subject: 'Reading',
+          title: `Silent Reading Comprehension — ${passageTitle}`,
+          score: compScore,
+          comprehensionScore: compScore,
+          comprehensionLevel: compLevel,
+          masteryLevel: compLevel,
+          passageTitle,
+          competency: 'Reading Comprehension',
+          status: 'approved',
+          date: readingAssessmentDate,
+        });
 
-      // 5. Create ARAL Intervention for High and Moderate Risk learners
-      if (riskLevel === 'High Risk' || riskLevel === 'Moderate Risk') {
-        const existingIntervention = await Intervention.findOne({ studentId: user._id });
-        if (!existingIntervention) {
-          const matchingRec = recs.length > 0 ? getRandomItem(recs) : null;
-          const intervention = await Intervention.create({
-            studentId: user._id,
-            title: riskLevel === 'High Risk'
-              ? `Intensive ARAL KS3 Reading Recovery: Fluency & Decoding (Grade ${grade})`
-              : `Targeted ARAL KS3 Guided Comprehension & Fluency (Grade ${grade})`,
+        if (riskLevel === 'High Risk' || riskLevel === 'Moderate Risk') {
+          const rec = recs.length > 0 ? recs[idx % recs.length] : null;
+          const intStatus = ['In Progress', 'Submitted', 'Not Started', 'Completed'][idx % 4];
+          interventionDocs.push({
+            studentId: userId,
+            title:
+              riskLevel === 'High Risk'
+                ? `Intensive ARAL KS3 Reading Recovery: Fluency & Decoding (Grade ${grade})`
+                : `Targeted ARAL KS3 Guided Comprehension & Vocabulary (Grade ${grade})`,
             category: 'Reading Recovery',
-            type: 'Module',
-            status: getRandomItem(['In Progress', 'Submitted', 'Not Started']),
+            type: idx % 2 === 0 ? 'Module' : 'Worksheet',
+            status: intStatus,
             weakness: 'Reading Comprehension & Oral Fluency',
             keyStage: 'KS3',
-            workbookUrl: matchingRec ? matchingRec.workbookUrl : '/learning-materials/KS3_Reading_Recovery_Module.pdf',
+            recommendationRef: rec ? rec._id : undefined,
+            workbookUrl: rec?.workbookUrl || '/learning-materials/ks3-basic/learner-workbook.pdf',
+            tutorGuideUrl: rec?.tutorGuideUrl || undefined,
             section,
             subject: 'Reading',
-            assignedDate: new Date(Date.now() - getRandomInt(1, 14) * 86400000),
-            dueDate: new Date(Date.now() + getRandomInt(7, 21) * 86400000),
-            instructions: 'Read the assigned ARAL Key Stage 3 workbook chapter, practice oral reading with proper phrasing, and answer the comprehension exercises.',
+            assignedBy: readingTeacher._id,
+            assignedDate: daysAgo(getRandomInt(2, 14)),
+            dueDate: new Date(Date.now() + getRandomInt(5, 21) * 86400000),
+            instructions:
+              'Complete the assigned ARAL Key Stage 3 reading practice, review tricky words, and answer the comprehension check questions.',
+            reviewed: intStatus === 'Completed',
+            gradeScore: intStatus === 'Completed' ? getRandomInt(78, 95) : null,
           });
-          createdInterventions.push(intervention);
+
+          if (mathPreScore < 60) {
+            interventionDocs.push({
+              studentId: userId,
+              title: `ARAL Mathematics Remediation: ${mathComp} (Grade ${grade})`,
+              category: 'Mathematics Recovery',
+              type: 'Activity',
+              status: idx % 2 === 0 ? 'In Progress' : 'Not Started',
+              weakness: mathComp,
+              keyStage: 'KS3',
+              section,
+              subject: 'Math',
+              assignedBy: mathTeacher._id,
+              assignedDate: daysAgo(getRandomInt(1, 10)),
+              dueDate: new Date(Date.now() + getRandomInt(7, 21) * 86400000),
+              instructions: 'Work through the guided step-by-step practice set and verify solutions with your math teacher.',
+            });
+          }
         }
       }
+
+      recordDocs.push({
+        studentId: userId,
+        studentNumber,
+        gradeLevel: grade,
+        section,
+        birthDate: `${birthYear}-${birthMonth}-${birthDay}`,
+        riskLevel,
+        masteryStatus,
+        guardian: guardianName,
+        contact: `09${String(170000000 + idx * 123457).slice(0, 9)}`,
+        address: `Block ${(idx % 25) + 1}, Lot ${(idx % 18) + 1}, Brgy. San Isidro`,
+        gstScore,
+        gstStatus: gstEval ? gstEval.gstStatus : 'Unassessed',
+        recommendedStartingLevel: gstEval ? gstEval.recommendedStartingLevel : null,
+        needsIndividualAssessment: gstEval ? gstEval.needsIndividualAssessment : false,
+        readingLevel,
+        oralReadingAccuracy: oralAccuracy,
+        oralReadingWpm: wcpm,
+        oralReadingWer: wer,
+        oralReadingLevel: readingLevel,
+        comprehensionScore: compScore,
+        comprehensionLevel: compLevel,
+        combinedReadingLevel: readingLevel,
+        philIriStatus: isPending ? 'unassessed' : 'approved',
+        lastReadingAssessmentId: readingAssessmentId,
+        lastReadingAssessmentDate: readingAssessmentDate,
+        philIriEnglish: {
+          gstScore,
+          gstStatus: gstEval ? gstEval.gstStatus : 'Unassessed',
+          recommendedStartingLevel: gstEval ? gstEval.recommendedStartingLevel : null,
+          readingLevel,
+          oralAccuracy,
+          wpm: wcpm,
+          oralWer: wer,
+          oralLevel: readingLevel === 'Not Assessed' ? null : readingLevel,
+          comprehensionScore: compScore,
+          comprehensionLevel: compLevel === 'Not Assessed' ? null : compLevel,
+          combinedLevel: readingLevel,
+          status: isPending ? 'unassessed' : 'approved',
+          needsIndividualAssessment: gstEval ? gstEval.needsIndividualAssessment : false,
+        },
+        philIriFilipino: {
+          gstScore: gstScore !== null ? Math.max(0, Math.min(40, gstScore + ((idx % 3) - 1))) : null,
+          gstStatus: gstEval ? filGstMap[gstEval.gstStatus] : 'Hindi Pa Naitatasa',
+          recommendedStartingLevel: gstEval ? gstEval.recommendedStartingLevel : null,
+          readingLevel: filReadingMap[readingLevel],
+          oralAccuracy: oralAccuracy !== null ? Math.max(60, Math.min(100, oralAccuracy - (idx % 2))) : null,
+          wpm: wcpm !== null ? Math.max(35, wcpm - (idx % 6)) : null,
+          oralWer: wer !== null ? Math.min(40, wer + (idx % 2)) : null,
+          oralLevel: readingLevel === 'Not Assessed' ? null : filReadingMap[readingLevel],
+          comprehensionScore: compScore,
+          comprehensionLevel: compLevel === 'Not Assessed' ? null : filReadingMap[compLevel],
+          combinedLevel: filReadingMap[readingLevel],
+          status: isPending ? 'unassessed' : 'approved',
+          needsIndividualAssessment: gstEval ? gstEval.needsIndividualAssessment : false,
+        },
+        assignedTeacherId: primaryTeacher._id,
+        assignedTeacherName: primaryTeacher.name,
+        assignedTeachers: {
+          reading: readingTeacher._id,
+          english: readingTeacher._id,
+          filipino: readingTeacher._id,
+          math: mathTeacher._id,
+          science: scienceTeacher._id,
+        },
+        readingTeacherName: readingTeacher.name,
+        englishTeacherName: readingTeacher.name,
+        filipinoTeacherName: readingTeacher.name,
+        mathTeacherName: mathTeacher.name,
+        scienceTeacherName: scienceTeacher.name,
+      });
     }
 
-    console.log(`Successfully created or verified:`);
-    console.log(`- ${createdUsers.length} Users`);
-    console.log(`- ${createdRecords.length} LearnerRecords`);
-    console.log(`- ${createdAssessments.length} Assessments`);
-    console.log(`- ${createdInterventions.length} Interventions`);
+    // 5. Fast bulk insert via insertMany
+    console.log('Bulk inserting into MongoDB Atlas...');
+    await Promise.all([
+      User.insertMany(userDocs, { ordered: false }),
+      LearnerRecord.insertMany(recordDocs, { ordered: false }),
+    ]);
+
+    if (assessmentDocs.length > 0) {
+      await Assessment.insertMany(assessmentDocs, { ordered: false });
+    }
+    if (interventionDocs.length > 0) {
+      await Intervention.insertMany(interventionDocs, { ordered: false });
+    }
 
     const totalStudents = await User.countDocuments({ role: 'student' });
-    console.log(`Total active students now in database: ${totalStudents}`);
+    const totalRecords = await LearnerRecord.countDocuments({});
+    console.log('\nClean reset & Student Number seeding complete:');
+    console.log(`- Preserved ${staffUsers.length} Staff/Faculty accounts (${teachers.length} teachers)`);
+    console.log(`- Created ${userDocs.length} Student Users (${studentNumbers[0]} .. ${studentNumbers[studentNumbers.length - 1]})`);
+    console.log(`- Created ${recordDocs.length} LearnerRecords (total active: ${totalRecords})`);
+    console.log(`- Created ${assessmentDocs.length} Assessments (OMR Math/Science + GST + Oral Reading + Comprehension)`);
+    console.log(`- Created ${interventionDocs.length} Interventions`);
+    console.log(`- Total active students in database: ${totalStudents}`);
+    console.log(`- Next auto-assigned Student Number on enrollment: ${ACADEMIC_YEAR}${String(STUDENT_COUNT + 1).padStart(4, '0')}`);
+    console.log(`- Sample Login: Student No. = "${studentNumbers[0]}" (${userDocs[0].name}) | Password = "${extractSurnamePasswordCjs(userDocs[0].name, studentNumbers[0])}"`);
   } catch (error) {
-    console.error('Error seeding 100 students:', error);
+    console.error('Error seeding 110 students:', error);
+    process.exitCode = 1;
   } finally {
     await mongoose.disconnect();
     console.log('MongoDB connection closed.');
   }
 }
 
-seed100Students();
+seed110StudentsReset();

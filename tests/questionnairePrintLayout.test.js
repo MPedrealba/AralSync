@@ -28,9 +28,9 @@ describe('Questionnaire Print Layout, Page-Breaks & 4-Part Booklet Formatting Su
     assert.ok(routeContent.includes('selection-d'), 'Part IV must map to selection-d');
   });
 
-  test('Page 1 cover page includes all 5 learner info header fields (Name, LRN, Section, Date, Score)', () => {
+  test('Page 1 cover page includes all 5 learner info header fields (Name, Student No., Section, Date, Score)', () => {
     assert.ok(pageContent.includes('NAME:'), 'Must include NAME: field');
-    assert.ok(pageContent.includes('LRN:'), 'Must include LRN: field');
+    assert.ok(pageContent.includes('STUDENT NO:'), 'Must include STUDENT NO: field');
     assert.ok(pageContent.includes('SECTION:'), 'Must include SECTION: field');
     assert.ok(pageContent.includes('DATE:'), 'Must include DATE: field');
     assert.ok(pageContent.includes('SCORE:'), 'Must include SCORE: field');

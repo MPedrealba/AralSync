@@ -33,7 +33,7 @@ export async function GET(
     }
 
     const docs = await Intervention.find(query)
-      .populate('studentId', 'name username email lrn section gradeLevel')
+      .populate('studentId', 'name username email section gradeLevel')
       .sort({ createdAt: 1 })
       .lean();
 
@@ -56,7 +56,7 @@ export async function GET(
       pageEnd: first.pageEnd || null,
     };
 
-    // Get learner records to supplement section/LRN if missing on User
+    // Get learner records to supplement section/Student Number if missing on User
     const studentUserIds = docs.map((d: any) => d.studentId?._id || d.studentId).filter(Boolean);
     const learnerRecords = await LearnerRecord.find({
       studentId: { $in: studentUserIds },
@@ -78,7 +78,7 @@ export async function GET(
         id: d._id.toString(),
         studentId: sIdStr,
         studentName: studentObj?.name || lr?.name || 'Learner',
-        studentLrn: lr?.lrn || studentObj?.lrn || studentObj?.username || '',
+        studentNumber: lr?.studentNumber || studentObj?.username || '',
         section: d.section || lr?.section || studentObj?.section || '',
         status: d.status || 'Not Started',
         submissionText: d.submissionText || '',

@@ -21,7 +21,7 @@ interface AssessmentRow {
 interface LearnerRow {
   id: string;
   name: string;
-  lrn: string;
+  studentNumber: string;
   grade: string;
   gradeNum: number;
   section: string;
@@ -187,7 +187,7 @@ export default function CoordinatorLearnerRecordsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or LRN..."
+              placeholder="Search by name or Student No..."
               className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
             />
           </div>
@@ -219,7 +219,7 @@ export default function CoordinatorLearnerRecordsPage() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Learner</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">LRN</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Student No.</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Grade</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Section</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Mastery</th>
@@ -239,7 +239,7 @@ export default function CoordinatorLearnerRecordsPage() {
                           <span className="text-sm font-medium text-gray-800">{l.name}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3.5 text-sm text-gray-500">{l.lrn}</td>
+                      <td className="px-6 py-3.5 text-sm font-mono text-gray-500">{l.studentNumber}</td>
                       <td className="px-6 py-3.5 text-sm text-gray-600">{l.grade}</td>
                       <td className="px-6 py-3.5 text-sm text-gray-600">{l.section}</td>
                       <td className="px-6 py-3.5">
@@ -281,7 +281,7 @@ export default function CoordinatorLearnerRecordsPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">{selected.name}</h2>
-                  <p className="text-xs text-gray-500">LRN {selected.lrn} · {selected.grade} · {selected.section}</p>
+                  <p className="text-xs text-gray-500">Student No. {selected.studentNumber} · {selected.grade} · {selected.section}</p>
                 </div>
               </div>
               <button onClick={() => setSelected(null)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">

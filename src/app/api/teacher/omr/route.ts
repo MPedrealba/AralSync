@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
       $or: [
         { studentId: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : studentId },
         { _id: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : null },
-        { lrn: studentId },
+        { studentNumber: studentId },
       ].filter((q) => q._id !== null),
     };
 
@@ -436,7 +436,7 @@ export async function PUT(req: NextRequest) {
         $or: [
           { studentId: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : actualStudentId },
           { _id: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : null },
-          { lrn: actualStudentId },
+          { studentNumber: actualStudentId },
         ].filter((q) => q._id !== null),
       };
 

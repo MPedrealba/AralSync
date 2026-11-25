@@ -7,13 +7,14 @@ import User from '../../../../../models/User';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import { logAudit } from '@/lib/audit';
 import { extractSurnamePassword } from '@/lib/nameUtils';
+import { allocateNextStudentNumber, peekNextStudentNumber } from '@/lib/studentNumber';
 
 /**
  * GET /api/coordinator/learners
  * Returns all learners with their current assigned teacher details,
  * total learner count, and unassigned count.
  * Supports filtering by grade, section, status (all | assigned | unassigned),
- * teacherId, and search query (name, LRN).
+ * teacherId, and search query (name, Student Number).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -185,7 +186,7 @@ export async function GET(req: NextRequest) {
           studentId: student._id ? student._id.toString() : null,
           name: student.name || 'Unknown Learner',
           username: student.username || '',
-          lrn: r.lrn || '',
+          studentNumber: r.studentNumber || student.username || '',
           gradeLevel: r.gradeLevel ?? 7,
           section: r.section || 'Unassigned',
           riskLevel: r.riskLevel || 'Low Risk',
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest) {
         if (!search) return true;
         return (
           l.name.toLowerCase().includes(search) ||
-          l.lrn.toLowerCase().includes(search) ||
+          l.studentNumber.toLowerCase().includes(search) ||
           l.section.toLowerCase().includes(search) ||
           (l.assignedTeacherName && l.assignedTeacherName.toLowerCase().includes(search))
         );
@@ -227,6 +228,8 @@ export async function GET(req: NextRequest) {
       return a.name.localeCompare(b.name);
     });
 
+    const nextStudentNumber = await peekNextStudentNumber();
+
     return NextResponse.json({
       success: true,
       data: formatted,
@@ -235,6 +238,7 @@ export async function GET(req: NextRequest) {
       allGrades,
       allSections,
       gradeSectionsMap,
+      nextStudentNumber,
     });
   } catch (error: any) {
     if (error instanceof AuthError) return authErrorResponse(error);
@@ -255,10 +259,10 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const {
-      lrn,
       name,
       gradeLevel,
       section,
+      birthDate,
       guardian,
       contact,
       address,
@@ -270,31 +274,22 @@ export async function POST(req: NextRequest) {
       scienceTeacherId,
     } = body;
 
-    const trimmedLrn = (lrn || '').toString().trim();
     const trimmedName = (name || '').toString().trim();
 
-    if (!trimmedLrn || !trimmedName) {
+    if (!trimmedName) {
       return NextResponse.json(
-        { error: 'LRN and Learner Name are required.' },
+        { error: 'Learner Name is required.' },
         { status: 400 }
       );
     }
 
-    // Check duplicate LRN
-    const existingRecord = await LearnerRecord.findOne({ lrn: trimmedLrn });
-    if (existingRecord) {
-      return NextResponse.json(
-        { error: `A learner with LRN "${trimmedLrn}" already exists in the system.` },
-        { status: 400 }
-      );
-    }
-
-    const existingUser = await User.findOne({ username: trimmedLrn });
-    if (existingUser) {
-      return NextResponse.json(
-        { error: `A user account with username "${trimmedLrn}" already exists.` },
-        { status: 400 }
-      );
+    // System-assign the next sequential Student Number (e.g. 20260001)
+    let assignedStudentNumber = await allocateNextStudentNumber();
+    while (
+      (await LearnerRecord.findOne({ studentNumber: assignedStudentNumber })) ||
+      (await User.findOne({ username: assignedStudentNumber }))
+    ) {
+      assignedStudentNumber = await allocateNextStudentNumber();
     }
 
     // If teacher ID provided, resolve teacher name
@@ -324,11 +319,11 @@ export async function POST(req: NextRequest) {
       scienceTeacherDoc = await User.findById(resolvedScienceId);
     }
 
-    // Create student user account (Username: LRN, Default Password: Student Surname)
-    const defaultPassword = extractSurnamePassword(trimmedName, trimmedLrn);
+    // Create student user account (Username: Student Number, Default Password: Student Surname)
+    const defaultPassword = extractSurnamePassword(trimmedName, assignedStudentNumber);
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
     const userDoc = await User.create({
-      username: trimmedLrn,
+      username: assignedStudentNumber,
       password: hashedPassword,
       name: trimmedName,
       role: 'student',
@@ -338,27 +333,34 @@ export async function POST(req: NextRequest) {
 
     const parsedGrade = Number(gradeLevel) || 7;
 
-    const record = await LearnerRecord.create({
-      studentId: userDoc._id,
-      lrn: trimmedLrn,
-      gradeLevel: parsedGrade,
-      section: (section || 'Rosal').trim(),
-      guardian: guardian ? guardian.trim() : undefined,
-      contact: contact ? contact.trim() : undefined,
-      address: address ? address.trim() : undefined,
-      riskLevel: riskLevel || 'Pending Assessment',
-      masteryStatus: 'Beginning',
-      assignedTeacherId: assignedTeacherDoc ? assignedTeacherDoc._id : (readingTeacherDoc?._id || mathTeacherDoc?._id || scienceTeacherDoc?._id || null),
-      assignedTeacherName: assignedTeacherDoc ? assignedTeacherDoc.name : (readingTeacherDoc?.name || mathTeacherDoc?.name || scienceTeacherDoc?.name || null),
-      assignedTeachers: {
-        reading: readingTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc._id : null),
-        math: mathTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc._id : null),
-        science: scienceTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc._id : null),
-      },
-      readingTeacherName: readingTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc.name : null),
-      mathTeacherName: mathTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc.name : null),
-      scienceTeacherName: scienceTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc.name : null),
-    });
+    let record: any = null;
+    try {
+      record = await LearnerRecord.create({
+        studentId: userDoc._id,
+        studentNumber: assignedStudentNumber,
+        gradeLevel: parsedGrade,
+        section: (section || 'Rosal').trim(),
+        birthDate: birthDate ? String(birthDate).trim() : undefined,
+        guardian: guardian ? guardian.trim() : undefined,
+        contact: contact ? contact.trim() : undefined,
+        address: address ? address.trim() : undefined,
+        riskLevel: riskLevel || 'Pending Assessment',
+        masteryStatus: 'Beginning',
+        assignedTeacherId: assignedTeacherDoc ? assignedTeacherDoc._id : (readingTeacherDoc?._id || mathTeacherDoc?._id || scienceTeacherDoc?._id || null),
+        assignedTeacherName: assignedTeacherDoc ? assignedTeacherDoc.name : (readingTeacherDoc?.name || mathTeacherDoc?.name || scienceTeacherDoc?.name || null),
+        assignedTeachers: {
+          reading: readingTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc._id : null),
+          math: mathTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc._id : null),
+          science: scienceTeacherDoc?._id || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc._id : null),
+        },
+        readingTeacherName: readingTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Reading' ? assignedTeacherDoc.name : null),
+        mathTeacherName: mathTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Math' ? assignedTeacherDoc.name : null),
+        scienceTeacherName: scienceTeacherDoc?.name || (assignedTeacherDoc?.assignedSubject === 'Science' ? assignedTeacherDoc.name : null),
+      });
+    } catch (createErr) {
+      await User.findByIdAndDelete(userDoc._id).catch(() => {});
+      throw createErr;
+    }
 
     await logAudit({
       actorId: actor.id,
@@ -368,7 +370,7 @@ export async function POST(req: NextRequest) {
       targetType: 'LearnerRecord',
       targetId: record._id.toString(),
       meta: {
-        lrn: trimmedLrn,
+        studentNumber: assignedStudentNumber,
         name: trimmedName,
         assignedTeacherId: assignedTeacherDoc?._id?.toString() || null,
         assignedTeacherName: assignedTeacherDoc?.name || null,
@@ -381,7 +383,9 @@ export async function POST(req: NextRequest) {
         data: {
           id: record._id.toString(),
           studentId: userDoc._id.toString(),
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
+          username: userDoc.username,
+          defaultPassword,
           name: userDoc.name,
           gradeLevel: record.gradeLevel,
           section: record.section,

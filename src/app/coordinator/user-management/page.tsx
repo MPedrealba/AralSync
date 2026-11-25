@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import PrincipalHeader from "@/components/PrincipalHeader";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { extractSurnamePassword } from "@/lib/nameUtils";
 import {
   UserPlus,
   Pencil,
@@ -40,7 +41,7 @@ interface UserRow {
   lastLogin: string;
   avatar: string;
   // Student metadata
-  lrn?: string;
+  studentNumber?: string;
   gradeLevel?: number | null;
   section?: string | null;
   assignedTeacherName?: string | null;
@@ -292,12 +293,16 @@ export default function CoordinatorUserManagementPage() {
       const res = await fetch("/api/coordinator/user-management", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: resettingStudent.id, resetToLrn: true }),
+        body: JSON.stringify({ id: resettingStudent.id, resetToStudentNumber: true }),
       });
       const json = await parseJsonResponse(res);
       if (json.success) {
+        const defaultPass = extractSurnamePassword(
+          resettingStudent.name || "",
+          resettingStudent.studentNumber || resettingStudent.username
+        );
         setFeedback({
-          text: `Successfully reset password for ${resettingStudent.name} back to default LRN (${resettingStudent.lrn || resettingStudent.username}).`,
+          text: `Successfully reset password for ${resettingStudent.name} (${resettingStudent.studentNumber || resettingStudent.username}) back to default surname password (${defaultPass}).`,
           type: "success",
         });
         setResettingStudent(null);
@@ -371,7 +376,7 @@ export default function CoordinatorUserManagementPage() {
         !q ||
         u.name.toLowerCase().includes(q) ||
         u.username.toLowerCase().includes(q) ||
-        (u.lrn && u.lrn.toLowerCase().includes(q)) ||
+        (u.studentNumber && u.studentNumber.toLowerCase().includes(q)) ||
         (u.section && u.section.toLowerCase().includes(q)) ||
         (u.assignedTeacherName && u.assignedTeacherName.toLowerCase().includes(q));
 
@@ -554,7 +559,7 @@ export default function CoordinatorUserManagementPage() {
               placeholder={
                 activeTab === "faculty"
                   ? "Search faculty by name, username, or subject..."
-                  : "Search students by name, LRN, section, or teacher..."
+                  : "Search students by name, Student Number, section, or teacher..."
               }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -788,7 +793,7 @@ export default function CoordinatorUserManagementPage() {
 
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-slate-400 hidden sm:inline">
-                  Default student credentials: username & password = LRN
+                  Default student credentials: Login = Student Number &bull; Password = Surname
                 </span>
                 <button
                   type="button"
@@ -805,7 +810,7 @@ export default function CoordinatorUserManagementPage() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="px-6 py-3.5">Learner Name & LRN</th>
+                    <th className="px-6 py-3.5">Learner Name &amp; Student No.</th>
                     <th className="px-6 py-3.5">Cohort</th>
                     <th className="px-6 py-3.5">Assigned Teacher</th>
                     <th className="px-6 py-3.5">Portal Status</th>
@@ -833,7 +838,7 @@ export default function CoordinatorUserManagementPage() {
                   ) : (
                     filteredStudents.map((u) => (
                       <tr key={u.id} className="transition-colors hover:bg-slate-50/70">
-                        {/* Name & LRN */}
+                        {/* Name & Student Number */}
                         <td className="px-6 py-3.5">
                           <div className="flex items-center gap-3">
                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
@@ -841,7 +846,7 @@ export default function CoordinatorUserManagementPage() {
                             </div>
                             <div>
                               <p className="font-bold text-slate-900">{u.name}</p>
-                              <p className="font-mono text-[11px] text-slate-400">LRN: {u.lrn || u.username}</p>
+                              <p className="font-mono text-[11px] text-slate-400">Student No: {u.studentNumber || u.username}</p>
                             </div>
                           </div>
                         </td>
@@ -885,15 +890,15 @@ export default function CoordinatorUserManagementPage() {
                         {/* Actions */}
                         <td className="px-6 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Reset Password to LRN */}
+                            {/* Reset Password to Default */}
                             <button
                               type="button"
                               onClick={() => setResettingStudent(u)}
                               className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50/70 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
-                              title="Reset Password to LRN"
+                              title="Reset Password to Default (Surname)"
                             >
                               <KeyRound className="h-3 w-3 text-amber-700" />
-                              <span>Reset to LRN</span>
+                              <span>Reset Password</span>
                             </button>
 
                             {/* Disable / Enable Toggle */}
@@ -912,7 +917,7 @@ export default function CoordinatorUserManagementPage() {
 
                             {/* Hub Link */}
                             <Link
-                              href={`/coordinator/learners?search=${u.lrn || u.username}`}
+                              href={`/coordinator/learners?search=${u.studentNumber || u.username}`}
                               className="rounded-xl border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
                               title="View & Reassign in Learner Hub"
                             >
@@ -1245,13 +1250,20 @@ export default function CoordinatorUserManagementPage() {
 
               <p className="text-xs text-slate-600 leading-relaxed">
                 Are you sure you want to reset the password for{" "}
-                <span className="font-bold text-slate-900">{resettingStudent.name}</span> back to their default
-                LRN:
+                <span className="font-bold text-slate-900">{resettingStudent.name}</span>{" "}
+                (Student No:{" "}
+                <span className="font-mono font-semibold text-slate-800">
+                  {resettingStudent.studentNumber || resettingStudent.username}
+                </span>
+                ) back to their default surname password:
               </p>
 
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-center">
                 <span className="font-mono text-sm font-extrabold text-amber-900">
-                  {resettingStudent.lrn || resettingStudent.username}
+                  {extractSurnamePassword(
+                    resettingStudent.name || "",
+                    resettingStudent.studentNumber || resettingStudent.username
+                  )}
                 </span>
               </div>
 
@@ -1270,7 +1282,7 @@ export default function CoordinatorUserManagementPage() {
                   className="inline-flex items-center gap-1.5 rounded-xl bg-amber-700 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-800 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {resettingBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span>Reset to LRN</span>
+                  <span>Reset Password</span>
                 </button>
               </div>
             </div>

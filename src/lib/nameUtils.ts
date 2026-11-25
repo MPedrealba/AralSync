@@ -9,12 +9,12 @@
  * - DepEd SF1 format ("Lastname, Firstname Middlename" e.g. "Dela Cruz, Juan M." -> "delacruz")
  * - Standard format ("Firstname Middlename Lastname" e.g. "Juan Dela Cruz" -> "delacruz", "Juan Santos" -> "santos")
  * - Common Filipino compound surname prefixes: Dela, Delos, De, Del, San, Santa
- * - Fallbacks to trimmed lowercase LRN if name cannot be extracted or parsed.
+ * - Fallbacks to trimmed lowercase Student Number if name cannot be extracted or parsed.
  */
-export function extractSurnamePassword(fullName: string, fallbackLrn: string): string {
-  const safeLrn = (fallbackLrn || '').toString().trim().toLowerCase();
+export function extractSurnamePassword(fullName: string, fallbackStudentNumber: string): string {
+  const safeFallback = (fallbackStudentNumber || '').toString().trim().toLowerCase();
   const trimmed = (fullName || '').trim();
-  if (!trimmed) return safeLrn;
+  if (!trimmed) return safeFallback;
 
   let surname = '';
   if (trimmed.includes(',')) {
@@ -37,5 +37,5 @@ export function extractSurnamePassword(fullName: string, fallbackLrn: string): s
   }
 
   const clean = surname.toLowerCase().replace(/[^a-z0-9]/gi, '');
-  return clean || safeLrn;
+  return clean || safeFallback;
 }

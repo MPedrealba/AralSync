@@ -32,7 +32,7 @@ interface VerifiedUserInfo {
   role: string;
   section?: string;
   gradeLevel?: number;
-  lrn?: string;
+  studentNumber?: string;
   email?: string | null;
 }
 
@@ -52,7 +52,7 @@ function ForgotPasswordContent() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Student Inputs
-  const [lrn, setLrn] = useState("");
+  const [studentNumber, setStudentNumber] = useState("");
   const [section, setSection] = useState("");
   const [birthDate, setBirthDate] = useState("");
 
@@ -104,8 +104,8 @@ function ForgotPasswordContent() {
     e.preventDefault();
     setErrorMessage("");
 
-    if (!lrn.trim() || !section.trim() || !birthDate) {
-      setErrorMessage("Please complete all student fields (LRN, Section, and Birthdate).");
+    if (!studentNumber.trim() || !section.trim() || !birthDate) {
+      setErrorMessage("Please complete all student fields (Student Number, Section, and Birthdate).");
       return;
     }
 
@@ -117,7 +117,7 @@ function ForgotPasswordContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountType: "student",
-          lrn: lrn.trim(),
+          studentNumber: studentNumber.trim(),
           section: section.trim(),
           birthDate: birthDate.trim(),
         }),
@@ -136,7 +136,7 @@ function ForgotPasswordContent() {
         role: "student",
         section: data.section,
         gradeLevel: data.gradeLevel,
-        lrn: data.lrn,
+        studentNumber: data.studentNumber,
       });
       setStep(2);
     } catch (err: any) {
@@ -319,24 +319,24 @@ function ForgotPasswordContent() {
               <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <p className="text-[11px] leading-relaxed">
                 Verify identity using official school records on file. Enter your{" "}
-                <strong>Learner Reference Number (LRN)</strong>, <strong>Section</strong>, and{" "}
+                <strong>Student Number</strong>, <strong>Section</strong>, and{" "}
                 <strong>Birthdate</strong>.
               </p>
             </div>
 
-            {/* LRN Input */}
+            {/* Student Number Input */}
             <div>
-              <label htmlFor="lrn" className="mb-1 block text-xs font-bold text-slate-700">
-                Learner Reference Number (LRN)
+              <label htmlFor="studentNumber" className="mb-1 block text-xs font-bold text-slate-700">
+                Student Number
               </label>
               <div className="relative">
                 <GraduationCap className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  id="lrn"
+                  id="studentNumber"
                   type="text"
-                  value={lrn}
-                  onChange={(e) => setLrn(e.target.value)}
-                  placeholder="e.g. 102938"
+                  value={studentNumber}
+                  onChange={(e) => setStudentNumber(e.target.value)}
+                  placeholder="e.g. 20260001"
                   required
                   className="h-10.5 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-semibold text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-red-800 focus:ring-2 focus:ring-red-800/10"
                 />
@@ -507,8 +507,8 @@ function ForgotPasswordContent() {
                 <p className="font-extrabold text-sm text-emerald-950">{verifiedUser.name}</p>
                 <p className="text-[11px] font-medium text-emerald-800">
                   @{verifiedUser.username} &bull; {getRoleDisplayName(verifiedUser.role)}
-                  {verifiedUser.section ? ` &bull; ${verifiedUser.section}` : ""}
-                  {verifiedUser.lrn ? ` (LRN: ${verifiedUser.lrn})` : ""}
+                  {verifiedUser.section ? ` • ${verifiedUser.section}` : ""}
+                  {verifiedUser.studentNumber ? ` (Student No: ${verifiedUser.studentNumber})` : ""}
                 </p>
               </div>
             </div>

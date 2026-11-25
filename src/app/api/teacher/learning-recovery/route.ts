@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
           name,
           risk: isHighRisk || hasPhilIriFrustration ? 'High' : 'At Risk',
           grade: `Grade ${record.gradeLevel} — ${record.section}`,
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           reasons: reasons.length > 0 ? reasons : ['Reading performance below proficiency'],
           deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Reading comprehension & fluency deficiencies',
           intervention: suggested
@@ -164,7 +164,7 @@ export async function GET(req: NextRequest) {
           name,
           risk: isHighRisk ? 'High' : 'At Risk',
           grade: `Grade ${record.gradeLevel} — ${record.section}`,
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           reasons: reasons.length > 0 ? reasons : ['Numeracy performance below proficiency'],
           deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Numeracy deficiencies',
           intervention: suggested
@@ -194,7 +194,7 @@ export async function GET(req: NextRequest) {
           name,
           risk: isHighRisk ? 'High' : 'At Risk',
           grade: `Grade ${record.gradeLevel} — ${record.section}`,
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           reasons: reasons.length > 0 ? reasons : ['Science performance below proficiency'],
           deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'Science competency deficiencies',
           intervention: suggested
@@ -226,7 +226,7 @@ export async function GET(req: NextRequest) {
           name,
           risk: isHighRisk ? 'High' : 'At Risk',
           grade: `Grade ${record.gradeLevel} — ${record.section}`,
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           reasons: reasons.length > 0 ? reasons : ['Performance below proficiency'],
           deficiencies: skillByName[sid]?.slice(0, 3).join(', ') || 'See assessment scores',
           intervention: suggested

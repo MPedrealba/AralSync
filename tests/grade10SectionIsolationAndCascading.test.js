@@ -20,12 +20,12 @@ describe('Grade 10 Grade & Section Isolation & Cascading Filter Suite', () => {
 
   test('1. seedUsers.js defines authentic Grade 10 sections (Molave & Acacia)', () => {
     assert.ok(
-      seedSrc.includes("username: 'student9', name: 'Rosa Garcia', grade: 10, section: 'Molave'"),
-      'student9 (Rosa Garcia) must be seeded in section Molave'
+      seedSrc.includes("name: 'Rosa Garcia', grade: 10, section: 'Molave'"),
+      'Rosa Garcia must be seeded in section Molave'
     );
     assert.ok(
-      seedSrc.includes("username: 'student10', name: 'Luis Cruz', grade: 10, section: 'Acacia'"),
-      'student10 (Luis Cruz) must be seeded in section Acacia'
+      seedSrc.includes("name: 'Luis Cruz', grade: 10, section: 'Acacia'"),
+      'Luis Cruz must be seeded in section Acacia'
     );
   });
 

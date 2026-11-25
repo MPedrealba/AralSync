@@ -9,12 +9,59 @@ import User from '../../../../../../models/User';
 import { Types } from 'mongoose';
 import { logAudit } from '@/lib/audit';
 import { evaluateGstScore } from '@/lib/reading';
+import {
+  getTeacherSubject,
+  getSubjectFilter,
+  getInterventionSubjectFilter,
+  type TeacherSubject,
+} from '@/lib/teacherScope';
+
+const READING_SUBJS = new Set(['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino']);
+
+function isTeacherAssignedToRecord(
+  record: any,
+  actor: { id: string; role?: string },
+  teacherSubject: TeacherSubject
+): boolean {
+  if (actor.role === 'admin' || actor.role === 'coordinator') return true;
+  if (record.assignedTeacherId?.toString() === actor.id) return true;
+
+  const assigned = record.assignedTeachers || {};
+  const hasAnySubjectTeacher = Boolean(
+    assigned.reading || assigned.english || assigned.filipino || assigned.math || assigned.science
+  );
+  if (!record.assignedTeacherId && !hasAnySubjectTeacher) return true;
+
+  if (teacherSubject === 'All') {
+    return (
+      assigned.reading?.toString() === actor.id ||
+      assigned.english?.toString() === actor.id ||
+      assigned.filipino?.toString() === actor.id ||
+      assigned.math?.toString() === actor.id ||
+      assigned.science?.toString() === actor.id
+    );
+  }
+  if (teacherSubject === 'Reading' || teacherSubject === 'English' || teacherSubject === 'Filipino') {
+    return (
+      assigned.reading?.toString() === actor.id ||
+      assigned.english?.toString() === actor.id ||
+      assigned.filipino?.toString() === actor.id
+    );
+  }
+  if (teacherSubject === 'Math') {
+    return assigned.math?.toString() === actor.id;
+  }
+  if (teacherSubject === 'Science') {
+    return assigned.science?.toString() === actor.id;
+  }
+  return false;
+}
 
 /**
  * GET /api/teacher/learners/[id]
  * Full profile for one learner: record, mastery, assessments grouped by type,
  * and interventions. Accepts either the LearnerRecord _id, the Mongo ObjectId
- * of the student's User doc, or the LRN string.
+ * of the student's User doc, or the Student Number string.
  */
 export async function GET(
   req: NextRequest,
@@ -34,23 +81,16 @@ export async function GET(
         (await LearnerRecord.findById(id)) ||
         (await LearnerRecord.findOne({ studentId: id }));
     } else {
-      record = await LearnerRecord.findOne({ lrn: id });
+      record = await LearnerRecord.findOne({ studentNumber: id });
     }
 
     if (!record) {
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
     }
 
-    const isAssigned =
-      !record.assignedTeacherId ||
-      record.assignedTeacherId.toString() === actor.id ||
-      record.assignedTeachers?.reading?.toString() === actor.id ||
-      record.assignedTeachers?.math?.toString() === actor.id ||
-      record.assignedTeachers?.science?.toString() === actor.id ||
-      actor.role === 'admin' ||
-      actor.role === 'coordinator';
+    const teacherSubject = await getTeacherSubject(actor);
 
-    if (!isAssigned) {
+    if (!isTeacherAssignedToRecord(record, actor, teacherSubject)) {
       return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
@@ -58,8 +98,8 @@ export async function GET(
 
     const [user, assessments, interventions] = await Promise.all([
       (record as any).populate('studentId', 'name username'),
-      Assessment.find({ studentId }).sort({ date: -1 }),
-      Intervention.find({ studentId }).sort({ assignedDate: -1 }),
+      Assessment.find({ studentId, ...getSubjectFilter(teacherSubject) }).sort({ date: -1 }),
+      Intervention.find({ studentId, ...getInterventionSubjectFilter(teacherSubject) }).sort({ assignedDate: -1 }),
     ]);
 
     const omrAssessments = assessments
@@ -79,7 +119,7 @@ export async function GET(
           id: a._id.toString(),
           date: a.date,
           title: a.title || 'OMR Scan',
-          subject: a.subject || 'Math',
+          subject: a.subject || (teacherSubject !== 'All' ? teacherSubject : 'General'),
           score: a.score,
           mastery: a.masteryLevel,
           category,
@@ -111,9 +151,20 @@ export async function GET(
       prePostGrowth.gainStatus = 'pending_post';
     }
 
-    ['Math', 'Reading', 'Science'].forEach((subj) => {
-      const subPre = omrAssessments.filter((a) => a.subject === subj && a.category === 'pre-test');
-      const subPost = omrAssessments.filter((a) => a.subject === subj && a.category === 'post-test');
+    const growthSubjects: ('Math' | 'Reading' | 'Science')[] =
+      teacherSubject === 'Reading' || teacherSubject === 'English' || teacherSubject === 'Filipino'
+        ? ['Reading']
+        : teacherSubject === 'Math'
+        ? ['Math']
+        : teacherSubject === 'Science'
+        ? ['Science']
+        : ['Math', 'Reading', 'Science'];
+
+    growthSubjects.forEach((subj) => {
+      const matchesSubj = (aSubj: string) =>
+        subj === 'Reading' ? READING_SUBJS.has(aSubj) : aSubj === subj;
+      const subPre = omrAssessments.filter((a) => matchesSubj(a.subject) && a.category === 'pre-test');
+      const subPost = omrAssessments.filter((a) => matchesSubj(a.subject) && a.category === 'post-test');
       const bScore = subPre.length > 0 ? subPre[subPre.length - 1].score : null;
       const pScore = subPost.length > 0 ? subPost[0].score : null;
       const delta = bScore != null && pScore != null ? Math.round(pScore - bScore) : null;
@@ -152,9 +203,10 @@ export async function GET(
 
     const data = {
       id: record._id.toString(),
+      teacherSubject,
       learner: {
         name: (user as any).studentId?.name || 'Unknown',
-        lrn: record.lrn,
+        studentNumber: record.studentNumber || (user as any).studentId?.username || '',
         gradeLevel: record.gradeLevel,
         section: record.section,
         guardian: record.guardian || '',
@@ -224,22 +276,15 @@ export async function PATCH(
         (await LearnerRecord.findById(id)) ||
         (await LearnerRecord.findOne({ studentId: id }));
     } else {
-      record = await LearnerRecord.findOne({ lrn: id });
+      record = await LearnerRecord.findOne({ studentNumber: id });
     }
     if (!record) {
       return NextResponse.json({ error: 'Learner not found' }, { status: 404 });
     }
 
-    const isAuthorized =
-      !record.assignedTeacherId ||
-      record.assignedTeacherId.toString() === actor.id ||
-      record.assignedTeachers?.reading?.toString() === actor.id ||
-      record.assignedTeachers?.math?.toString() === actor.id ||
-      record.assignedTeachers?.science?.toString() === actor.id ||
-      actor.role === 'admin' ||
-      actor.role === 'coordinator';
+    const teacherSubject = await getTeacherSubject(actor);
 
-    if (!isAuthorized) {
+    if (!isTeacherAssignedToRecord(record, actor, teacherSubject)) {
       return NextResponse.json({ error: 'Forbidden: You are not assigned to this learner' }, { status: 403 });
     }
 
@@ -263,7 +308,7 @@ export async function PATCH(
     const recordFields = [
       'gradeLevel',
       'section',
-      'lrn',
+      'studentNumber',
       'guardian',
       'contact',
       'address',
@@ -298,7 +343,7 @@ export async function PATCH(
     if (record.studentId) {
       const userUpdates: Record<string, string> = {};
       if (body.name && body.name.trim()) userUpdates.name = body.name.trim();
-      if (body.lrn && body.lrn.trim()) userUpdates.username = body.lrn.trim();
+      if (body.studentNumber && body.studentNumber.trim()) userUpdates.username = body.studentNumber.trim();
       if (Object.keys(userUpdates).length > 0) {
         await User.findByIdAndUpdate(record.studentId, userUpdates);
       }
@@ -321,7 +366,7 @@ export async function PATCH(
       name: updatedUser?.name || record.name,
       section: record.section,
       gradeLevel: record.gradeLevel,
-      lrn: record.lrn,
+      studentNumber: record.studentNumber,
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);

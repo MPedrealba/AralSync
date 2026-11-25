@@ -60,7 +60,7 @@ interface StudentMatrixRow {
   learnerRecordId: string;
   studentId: string;
   name: string;
-  lrn: string;
+  studentNumber: string;
   riskLevel: string;
   readingLevel: string;
   diagnostics: {
@@ -230,13 +230,13 @@ export default function ClassRecordMatrix({
     loadMatrix();
   }, [loadMatrix]);
 
-  // Filtered rows by search (name or LRN)
+  // Filtered rows by search (name or Student Number)
   const filteredRows = useMemo(() => {
     if (!matrixData?.rows) return [];
     if (!search.trim()) return matrixData.rows;
     const q = search.trim().toLowerCase();
     return matrixData.rows.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.lrn.toLowerCase().includes(q)
+      (r) => r.name.toLowerCase().includes(q) || (r.studentNumber || "").toLowerCase().includes(q)
     );
   }, [matrixData, search]);
 
@@ -307,7 +307,7 @@ export default function ClassRecordMatrix({
           const isMatch =
             (row.studentId && activeCell.student.studentId && row.studentId === activeCell.student.studentId) ||
             (row.learnerRecordId && activeCell.student.learnerRecordId && row.learnerRecordId === activeCell.student.learnerRecordId) ||
-            (row.lrn && activeCell.student.lrn && row.lrn === activeCell.student.lrn);
+            (row.studentNumber && activeCell.student.studentNumber && row.studentNumber === activeCell.student.studentNumber);
 
           if (isMatch) {
             return {
@@ -345,7 +345,7 @@ export default function ClassRecordMatrix({
 
     const headers = [
       "No.",
-      "LRN",
+      "Student No.",
       "Student Full Name",
       "Pre-Test Score",
       "Pre-Test Accuracy (%)",
@@ -385,7 +385,7 @@ export default function ClassRecordMatrix({
 
       return [
         idx + 1,
-        r.lrn,
+        r.studentNumber,
         r.name,
         r.diagnostics.preTest?.score ?? "—",
         r.diagnostics.preTest?.accuracy != null ? `${r.diagnostics.preTest.accuracy}%` : "—",
@@ -582,7 +582,7 @@ export default function ClassRecordMatrix({
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Name or LRN..."
+                placeholder="Name or Student No..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-9.5 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-red-800 focus:ring-2 focus:ring-red-800/10 placeholder:text-slate-400"
@@ -673,7 +673,7 @@ export default function ClassRecordMatrix({
                 <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/90 divide-x divide-slate-200">
                   <th className="px-4 py-3 sticky left-0 z-30 bg-slate-50 min-w-[50px] w-12 text-center">#</th>
                   <th className="px-4 py-3 sticky left-12 z-30 bg-slate-50 min-w-[190px]">Learner Name</th>
-                  <th className="px-3 py-3 min-w-[120px]">LRN</th>
+                  <th className="px-3 py-3 min-w-[120px]">Student No.</th>
 
                   {/* Phil-IRI Diagnostics */}
                   <th className="px-3 py-2.5 min-w-[100px] text-center bg-rose-50/40">Pre-Test</th>
@@ -754,9 +754,9 @@ export default function ClassRecordMatrix({
                         <span className="text-[10px] text-slate-400">{row.readingLevel || "Pending"}</span>
                       </td>
 
-                      {/* LRN */}
+                      {/* Student Number */}
                       <td className="px-3 py-3 font-mono text-[11px] text-slate-600">
-                        {row.lrn}
+                        {row.studentNumber}
                       </td>
 
                       {/* Pre-Test Score & Level */}
@@ -880,7 +880,7 @@ export default function ClassRecordMatrix({
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm">Review &amp; Grade Task</h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    {activeCell.student.name} &bull; LRN: {activeCell.student.lrn}
+                    {activeCell.student.name} &bull; Student No: {activeCell.student.studentNumber}
                   </p>
                 </div>
               </div>

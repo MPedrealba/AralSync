@@ -34,7 +34,7 @@ export interface Learner {
   name: string;
   section?: string;
   gradeLevel?: number;
-  lrn?: string;
+  studentNumber?: string;
 }
 
 export interface AnswerKeyItem {
@@ -222,7 +222,7 @@ export default function BatchWorkstation({
   const [editName, setEditName] = useState("");
   const [editGrade, setEditGrade] = useState("7");
   const [editSection, setEditSection] = useState("");
-  const [editLrn, setEditLrn] = useState("");
+  const [editStudentNumber, setEditStudentNumber] = useState("");
   const [isSavingLearner, setIsSavingLearner] = useState(false);
   const [editError, setEditError] = useState("");
   const [isAiMatching, setIsAiMatching] = useState(false);
@@ -284,7 +284,7 @@ export default function BatchWorkstation({
     setEditName(learner.name || "");
     setEditGrade(String(learner.gradeLevel || "7"));
     setEditSection(learner.section || "");
-    setEditLrn(learner.lrn || "");
+    setEditStudentNumber(learner.studentNumber || "");
     setEditError("");
   };
 
@@ -306,7 +306,7 @@ export default function BatchWorkstation({
           name: editName.trim(),
           gradeLevel: Number(editGrade) || 7,
           section: editSection.trim(),
-          lrn: editLrn.trim() || undefined,
+          studentNumber: editStudentNumber.trim() || undefined,
         }),
       });
 
@@ -318,7 +318,7 @@ export default function BatchWorkstation({
       const updatedName = editName.trim();
       const updatedSection = editSection.trim();
       const updatedGrade = Number(editGrade) || 7;
-      const updatedLrn = editLrn.trim() || editingLearner.lrn;
+      const updatedStudentNumber = editStudentNumber.trim() || editingLearner.studentNumber;
 
       // Update in local students
       setLocalStudents((prev) =>
@@ -329,7 +329,7 @@ export default function BatchWorkstation({
                 name: updatedName,
                 gradeLevel: updatedGrade,
                 section: updatedSection,
-                lrn: updatedLrn,
+                studentNumber: updatedStudentNumber,
               }
             : s
         )
@@ -380,7 +380,7 @@ export default function BatchWorkstation({
           roster: sortedBatchStudents.map((s) => ({
             _id: s._id,
             name: s.name,
-            lrn: s.lrn,
+            studentNumber: s.studentNumber,
             section: s.section,
             gradeLevel: s.gradeLevel,
           })),
@@ -495,7 +495,7 @@ export default function BatchWorkstation({
               roster: sortedBatchStudents.map((s) => ({
                 _id: s._id,
                 name: s.name,
-                lrn: s.lrn,
+                studentNumber: s.studentNumber,
                 section: s.section,
                 gradeLevel: s.gradeLevel,
               })),
@@ -1312,7 +1312,7 @@ export default function BatchWorkstation({
                                   <optgroup label={`Current Section: ${selectedSection !== "all" ? selectedSection : "Section"} (${sortedBatchStudents.length})`}>
                                     {sortedBatchStudents.map((stud) => (
                                       <option key={stud._id} value={stud._id}>
-                                        {stud.name} {stud.lrn ? `(${stud.lrn})` : ""}
+                                        {stud.name} {stud.studentNumber ? `(${stud.studentNumber})` : ""}
                                       </option>
                                     ))}
                                   </optgroup>
@@ -1320,7 +1320,7 @@ export default function BatchWorkstation({
                                     <optgroup label={`Other Sections (${otherStudents.length})`}>
                                       {otherStudents.map((stud) => (
                                         <option key={stud._id} value={stud._id}>
-                                          {stud.name} {stud.section ? `• ${stud.section}` : ""} {stud.lrn ? `(${stud.lrn})` : ""}
+                                          {stud.name} {stud.section ? `• ${stud.section}` : ""} {stud.studentNumber ? `(${stud.studentNumber})` : ""}
                                         </option>
                                       ))}
                                     </optgroup>
@@ -1333,7 +1333,7 @@ export default function BatchWorkstation({
                                     onClick={() => handleOpenEditLearner(assignedStudent)}
                                     disabled={sheet.isExcluded}
                                     className="h-8.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-red-800 transition-colors flex items-center gap-1 text-xs font-semibold shrink-0 shadow-2xs"
-                                    title="Edit student name, grade, section, or LRN"
+                                    title="Edit student name, grade, section, or Student Number"
                                   >
                                     <Edit3 className="h-3.5 w-3.5" />
                                     <span className="hidden xl:inline text-[11px]">Edit</span>
@@ -1601,7 +1601,7 @@ export default function BatchWorkstation({
                     <optgroup label={`Current Section (${sortedBatchStudents.length})`}>
                       {sortedBatchStudents.map((s) => (
                         <option key={s._id} value={s._id}>
-                          {s.name} {s.lrn ? `(${s.lrn})` : ""}
+                          {s.name} {s.studentNumber ? `(${s.studentNumber})` : ""}
                         </option>
                       ))}
                     </optgroup>
@@ -1609,7 +1609,7 @@ export default function BatchWorkstation({
                       <optgroup label={`Other Sections (${otherStudents.length})`}>
                         {otherStudents.map((s) => (
                           <option key={s._id} value={s._id}>
-                            {s.name} {s.section ? `• ${s.section}` : ""} {s.lrn ? `(${s.lrn})` : ""}
+                            {s.name} {s.section ? `• ${s.section}` : ""} {s.studentNumber ? `(${s.studentNumber})` : ""}
                           </option>
                         ))}
                       </optgroup>
@@ -1841,13 +1841,13 @@ export default function BatchWorkstation({
 
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Learner Reference Number (LRN)
+                  Student Number
                 </label>
                 <input
                   type="text"
-                  value={editLrn}
-                  onChange={(e) => setEditLrn(e.target.value)}
-                  placeholder="e.g. 136860100041"
+                  value={editStudentNumber}
+                  onChange={(e) => setEditStudentNumber(e.target.value)}
+                  placeholder="e.g. 20260001"
                   className="w-full h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 outline-none focus:border-red-800"
                 />
               </div>

@@ -63,33 +63,33 @@ describe('Student Surname Password Extraction & Login Verification Suite', () =>
     });
   });
 
-  describe('Edge Cases and LRN Fallbacks', () => {
+  describe('Edge Cases and Student Number Fallbacks', () => {
     it('handles single-word name safely', () => {
-      assert.equal(extractSurnamePassword('Cher', '102948'), 'cher');
+      assert.equal(extractSurnamePassword('Cher', '20260001'), 'cher');
     });
 
-    it('falls back to lowercase LRN when name is blank or missing', () => {
-      assert.equal(extractSurnamePassword('', '102948'), '102948');
-      assert.equal(extractSurnamePassword('   ', '102948'), '102948');
-      assert.equal(extractSurnamePassword(null, 'LRN12345'), 'lrn12345');
-      assert.equal(extractSurnamePassword('!@#$%^', '102948'), '102948');
+    it('falls back to lowercase Student Number when name is blank or missing', () => {
+      assert.equal(extractSurnamePassword('', '20260001'), '20260001');
+      assert.equal(extractSurnamePassword('   ', '20260001'), '20260001');
+      assert.equal(extractSurnamePassword(null, 'SN20260001'), 'sn20260001');
+      assert.equal(extractSurnamePassword('!@#$%^', '20260001'), '20260001');
     });
   });
 
   describe('Student Login Password Verification Resilience', () => {
     it('authenticates when student enters exact lowercase surname', async () => {
-      const defaultPassword = extractSurnamePassword('Juan dela Cruz', '102948');
+      const defaultPassword = extractSurnamePassword('Juan dela Cruz', '20260001');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-      const user = { name: 'Juan dela Cruz', username: '102948', password: hashedPassword };
+      const user = { name: 'Juan dela Cruz', username: '20260001', password: hashedPassword };
 
       const isValid = await verifyLoginPassword('delacruz', user, 'student');
       assert.equal(isValid, true);
     });
 
     it('authenticates when student enters spaced/capitalized surname', async () => {
-      const defaultPassword = extractSurnamePassword('Dela Cruz, Juan M.', '102948');
+      const defaultPassword = extractSurnamePassword('Dela Cruz, Juan M.', '20260001');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-      const user = { name: 'Dela Cruz, Juan M.', username: '102948', password: hashedPassword };
+      const user = { name: 'Dela Cruz, Juan M.', username: '20260001', password: hashedPassword };
 
       assert.equal(await verifyLoginPassword('Dela Cruz', user, 'student'), true);
       assert.equal(await verifyLoginPassword('DELACRUZ', user, 'student'), true);
@@ -102,7 +102,7 @@ describe('Student Surname Password Extraction & Login Verification Suite', () =>
       const seededHash = await bcrypt.hash('password123', 10);
       const user = {
         name: 'Alyssa Cabrera',
-        username: '136860100041',
+        username: '20260041',
         password: seededHash,
       };
 
@@ -121,19 +121,19 @@ describe('Student Surname Password Extraction & Login Verification Suite', () =>
       assert.equal(isValidSecondLogin, true, 'Subsequent login should match upgraded hash directly');
     });
 
-    it('preserves backward compatibility for older student accounts hashed with uppercase LRN', async () => {
-      const oldHashedPassword = await bcrypt.hash('102948ABC', 10);
-      const user = { name: 'Mario Rossi', username: '102948ABC', password: oldHashedPassword };
+    it('preserves backward compatibility for older student accounts hashed with uppercase credentials', async () => {
+      const oldHashedPassword = await bcrypt.hash('20260001ABC', 10);
+      const user = { name: 'Mario Rossi', username: '20260001ABC', password: oldHashedPassword };
 
       // Student enters lowercase or exact
-      assert.equal(await verifyLoginPassword('102948abc', user, 'student'), true);
-      assert.equal(await verifyLoginPassword('102948ABC', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('20260001abc', user, 'student'), true);
+      assert.equal(await verifyLoginPassword('20260001ABC', user, 'student'), true);
     });
 
     it('rejects incorrect passwords for students', async () => {
-      const defaultPassword = extractSurnamePassword('Juan dela Cruz', '102948');
+      const defaultPassword = extractSurnamePassword('Juan dela Cruz', '20260001');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-      const user = { name: 'Juan dela Cruz', username: '102948', password: hashedPassword };
+      const user = { name: 'Juan dela Cruz', username: '20260001', password: hashedPassword };
 
       assert.equal(await verifyLoginPassword('wrongpassword', user, 'student'), false);
       assert.equal(await verifyLoginPassword('santos', user, 'student'), false);

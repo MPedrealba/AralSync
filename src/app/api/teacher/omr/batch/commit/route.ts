@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
         $or: [
           { studentId: mongoose.isValidObjectId(item.studentId) ? new mongoose.Types.ObjectId(item.studentId) : item.studentId },
           { _id: mongoose.isValidObjectId(item.studentId) ? new mongoose.Types.ObjectId(item.studentId) : null },
-          { lrn: item.studentId },
+          { studentNumber: item.studentId },
         ].filter((q) => q._id !== null),
       };
 

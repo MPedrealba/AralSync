@@ -178,7 +178,7 @@ async function buildRecentScans(teacherSubject: TeacherSubject, assignedStudentI
     return {
       date: dateStr,
       title: a.title || 'OMR Scan',
-      subject: a.subject || 'Numeric',
+      subject: a.subject || (teacherSubject !== 'All' ? teacherSubject : 'General'),
       cohort: rec ? `Grade ${rec.gradeLevel} - ${rec.section}` : 'Unknown cohort',
       average: avg != null ? `${avg}%` : '—',
       status: 'Processed',
@@ -285,7 +285,7 @@ export async function GET(req: NextRequest) {
         const isNonReader = filLevel === 'Hindi Makabasa';
         return {
           name: record.studentId?.name || 'Mag-aaral',
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           learnerId: record.studentId?._id ? String(record.studentId._id) : null,
           badge: filLevel,
           badgeStyle: isNonReader
@@ -360,7 +360,7 @@ export async function GET(req: NextRequest) {
     // Format alerts
     const alerts = highRiskLearners.map((record: any) => ({
       name: record.studentId?.name || 'Unknown Student',
-      lrn: record.lrn,
+      studentNumber: record.studentNumber,
       learnerId: record.studentId?._id ? String(record.studentId._id) : null,
       badge: "High Risk",
       badgeStyle: "bg-red-100 text-red-700 border border-red-200",

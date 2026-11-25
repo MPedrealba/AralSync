@@ -90,7 +90,7 @@ export function getInterventionSubjectFilter(teacherSubject: TeacherSubject, req
   const target = teacherSubject !== 'All' ? teacherSubject : requestedSubject;
   if (!target || target === 'All') return {};
 
-  if (target === 'Reading') {
+  if (target === 'Reading' || target === 'English' || target === 'Filipino') {
     return {
       $or: [
         { category: { $regex: /reading|english|filipino|literacy/i } },

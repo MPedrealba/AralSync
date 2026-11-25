@@ -72,7 +72,7 @@ const PhilIriLanguageMetricsSchema = new mongoose.Schema(
 
 const LearnerRecordSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  lrn: { type: String, required: true, unique: true },
+  studentNumber: { type: String, required: true, unique: true },
   gradeLevel: { type: Number },
   section: { type: String },
   birthDate: { type: String }, // Format YYYY-MM-DD for student verification
@@ -151,7 +151,9 @@ LearnerRecordSchema.index({ 'assignedTeachers.science': 1 });
 
 if (
   mongoose.models.LearnerRecord &&
-  (!mongoose.models.LearnerRecord.schema.paths.gstScore ||
+  (!mongoose.models.LearnerRecord.schema.paths.studentNumber ||
+    mongoose.models.LearnerRecord.schema.paths.lrn ||
+    !mongoose.models.LearnerRecord.schema.paths.gstScore ||
     !mongoose.models.LearnerRecord.schema.paths['assignedTeachers.reading'] ||
     !mongoose.models.LearnerRecord.schema.paths.assignedTeacherId ||
     !mongoose.models.LearnerRecord.schema.paths.philIriEnglish ||

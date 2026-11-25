@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 
 /** Canonical fields we can import into a LearnerRecord. */
 export interface ImportedRow {
-  lrn: string;
+  studentNumber: string;
   name: string;
   gradeLevel: number | null;
   section: string;
@@ -40,7 +40,7 @@ export interface ParseResult {
 
 /** Aliases accepted for each canonical field (matched case/space-insensitively). */
 const ALIASES: Record<string, string[]> = {
-  lrn: ['lrn', 'learner reference number', 'lrn no', 'learner reference no', 'student id', 'learner id', 'id'],
+  studentNumber: ['student number', 'student no', 'student no.', 'student id', 'learner id', 'id'],
   name: ['name', 'full name', 'student name', 'learner name', 'complete name', 'name of learner'],
   gradeLevel: ['grade', 'grade level', 'year', 'year level'],
   section: ['section', 'section name', 'class'],
@@ -107,7 +107,7 @@ function normalizeRow(
   };
   const grade = parseGrade(get('gradeLevel'));
   return {
-    lrn: get('lrn'),
+    studentNumber: get('studentNumber'),
     name: get('name'),
     gradeLevel: grade.value,
     section: get('section'),
@@ -124,8 +124,9 @@ function validateRow(
   data: ImportedRow
 ): string[] {
   const issues: string[] = [];
-  if (!data.lrn) issues.push('Missing LRN');
-  else if (data.lrn.length > 12) issues.push('LRN looks too long');
+  if (data.studentNumber && data.studentNumber.length > 20) {
+    issues.push('Student Number looks too long');
+  }
   if (!data.name) issues.push('Missing name');
   const grade = parseGrade(
     (() => {
@@ -139,12 +140,14 @@ function validateRow(
 
 /**
  * Parse a worksheet into normalized + validated rows.
- * `existingLrns` is a normalized set of LRNs already in the DB — used to flag
- * duplicates during preview so the teacher can see them before committing.
+ * `existingStudentNumbers` is a normalized set of Student Numbers already in the DB —
+ * used to flag duplicates during preview when a sheet explicitly provides a Student Number.
+ * Rows without a Student Number are valid and will receive auto-generated sequential
+ * Student Numbers on commit.
  */
 export function parseWorksheet(
   worksheet: XLSX.WorkSheet,
-  existingLrns: Set<string>
+  existingStudentNumbers: Set<string>
 ): ParseResult {
   const raw = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
     header: 1,
@@ -173,6 +176,7 @@ export function parseWorksheet(
   const headerRow = (raw[headerIdx] || []).map((c) => (c == null ? '' : String(c)));
 
   const rows: RowResult[] = [];
+  const seenInFile = new Set<string>();
   for (let i = headerIdx + 1; i < raw.length; i++) {
     const rawRow = raw[i] || [];
     if (rawRow.every((c) => c === '' || c == null)) continue; // skip blank lines
@@ -187,7 +191,15 @@ export function parseWorksheet(
 
     let status: RowStatus = 'new';
     if (issues.length > 0) status = 'invalid';
-    else if (existingLrns.has(norm(data.lrn))) status = 'duplicate';
+    else if (
+      data.studentNumber &&
+      (existingStudentNumbers.has(norm(data.studentNumber)) || seenInFile.has(norm(data.studentNumber)))
+    ) {
+      status = 'duplicate';
+    }
+    if (data.studentNumber) {
+      seenInFile.add(norm(data.studentNumber));
+    }
 
     rows.push({
       row: i + 1,

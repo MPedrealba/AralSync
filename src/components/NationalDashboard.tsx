@@ -232,9 +232,33 @@ export default function NationalDashboard({ role }: NationalDashboardProps) {
     load();
   }, [load]);
 
+  const teacherSubj = data?.teacherSubject || "All";
+  const isReadingTeacher =
+    role === "teacher" && ["Reading", "English", "Filipino"].includes(teacherSubj);
+  const isMathTeacher = role === "teacher" && teacherSubj === "Math";
+  const isScienceTeacher = role === "teacher" && teacherSubj === "Science";
+  const showRma = role !== "teacher" || teacherSubj === "All" || isMathTeacher;
+  const showPhilIri = role !== "teacher" || teacherSubj === "All" || isReadingTeacher;
+
+  const dashboardSubtitle = isReadingTeacher
+    ? "Phil-IRI Reading Dashboard"
+    : isMathTeacher
+    ? "RMA Mathematics Dashboard"
+    : isScienceTeacher
+    ? "Science Assessment Overview"
+    : "RMA & Phil-IRI Dashboard";
+
+  const reportFileTag = isReadingTeacher
+    ? "PhilIRI"
+    : isMathTeacher
+    ? "RMA"
+    : isScienceTeacher
+    ? "Science"
+    : "RMA_PhilIRI";
+
   const handlePrint = useReactToPrint({
     contentRef: reportRef,
-    documentTitle: `AralSync_RMA_PhilIRI_${(data?.sy ?? "").replace("/", "-")}_${period}`,
+    documentTitle: `AralSync_${reportFileTag}_${(data?.sy ?? "").replace("/", "-")}_${period}`,
     pageStyle: `
       @page { 
         size: A4 landscape; 
@@ -326,7 +350,7 @@ export default function NationalDashboard({ role }: NationalDashboardProps) {
           <header className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
             <h1 className="text-2xl font-bold text-gray-900">{data.school}</h1>
             <p className="mt-1 text-sm text-gray-500">
-              RMA &amp; Phil-IRI Dashboard · School Year {data.sy} · {data.periodLabel}
+              {dashboardSubtitle} · School Year {data.sy} · {data.periodLabel}
             </p>
             <p className="mt-0.5 text-xs text-gray-400">
               Generated {new Date(data.generatedAt).toLocaleString("en-US")}
@@ -334,13 +358,22 @@ export default function NationalDashboard({ role }: NationalDashboardProps) {
           </header>
 
           {/* ───────────── RMA · Mathematics ───────────── */}
-          <RmaSection rma={data.rma} periodLabel={data.periodLabel} />
+          {showRma && <RmaSection rma={data.rma} periodLabel={data.periodLabel} />}
 
           {/* ───────────── Phil-IRI · Reading ───────────── */}
-          <PhilIriSection philIri={data.philIri} periodLabel={data.periodLabel} />
+          {showPhilIri && <PhilIriSection philIri={data.philIri} periodLabel={data.periodLabel} />}
+
+          {isScienceTeacher && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-6 text-sm text-emerald-900">
+              <p className="font-semibold">Science Teacher Scope Active</p>
+              <p className="mt-1 text-xs text-emerald-800">
+                National RMA (Mathematics) and Phil-IRI (Reading) reports are hidden for your Science-scoped account. Use Skill Gap Analysis, Class Record, or Learning Recovery to review Science diagnostics.
+              </p>
+            </div>
+          )}
 
           <footer className="text-center text-xs text-gray-400">
-            AralSync · RMA (Rapid Mathematics Assessment) &amp; Phil-IRI (Philippine Informal Reading Inventory) · DepEd monitoring dashboard
+            AralSync · {dashboardSubtitle} · DepEd monitoring dashboard
           </footer>
         </div>
       )}

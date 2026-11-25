@@ -355,7 +355,7 @@ export default function FilipinoReadingDashboardPage() {
                       <p className="text-xs font-bold text-slate-900 truncate">
                         {al.name}
                       </p>
-                      <p className="text-[11px] text-slate-500">LRN: {al.lrn}</p>
+                      <p className="text-[11px] text-slate-500">Student No: {al.studentNumber}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span
@@ -364,7 +364,7 @@ export default function FilipinoReadingDashboardPage() {
                         {al.badge}
                       </span>
                       <Link
-                        href={`/dashboard/learners?stream=filipino&lrn=${al.lrn}`}
+                        href={`/dashboard/learners?stream=filipino&studentNumber=${al.studentNumber}`}
                         className="rounded-lg p-1 text-slate-400 hover:text-slate-700 hover:bg-white"
                         title={al.action}
                       >

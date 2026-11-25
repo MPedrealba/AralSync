@@ -214,7 +214,7 @@ export async function PATCH(req: NextRequest) {
         meta: {
           learnerId: record._id.toString(),
           studentName: (record.studentId as any)?.name || 'Unknown',
-          lrn: record.lrn,
+          studentNumber: record.studentNumber,
           teacherId: assignedTeacherId ? assignedTeacherId.toString() : null,
           teacherName: assignedTeacherName || 'Unassigned',
         },

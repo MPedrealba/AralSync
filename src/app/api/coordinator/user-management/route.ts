@@ -5,6 +5,7 @@ import connectDB from '../../../../../database/db';
 import User from '../../../../../models/User';
 import LearnerRecord from '../../../../../models/LearnerRecord';
 import bcrypt from 'bcryptjs';
+import { extractSurnamePassword } from '@/lib/nameUtils';
 
 const ROLES = ['student', 'teacher', 'principal', 'coordinator'];
 
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
         lastLogin: d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
         avatar: avatarOf(u.name),
         // Student metadata
-        lrn: lr?.lrn || u.username,
+        studentNumber: lr?.studentNumber || u.username,
         gradeLevel: lr?.gradeLevel ?? null,
         section: lr?.section || null,
         assignedTeacherName: teacher.name || lr?.assignedTeacherName || null,
@@ -169,7 +170,7 @@ export async function PATCH(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const { id, name, username, email, role, specialization, assignedSubject, active, password, resetToLrn } = body;
+    const { id, name, username, email, role, specialization, assignedSubject, active, password, resetToStudentNumber, resetToDefault } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing user id.' }, { status: 400 });
@@ -221,10 +222,10 @@ export async function PATCH(req: NextRequest) {
     }
     if (typeof active === 'boolean') user.active = active;
 
-    // Reset password to LRN (for students)
-    if (resetToLrn) {
+    // Reset password to default surname (for students)
+    if (resetToStudentNumber || resetToDefault) {
       const lr = await LearnerRecord.findOne({ studentId: user._id });
-      const targetPass = (lr?.lrn || user.username).trim().toUpperCase();
+      const targetPass = extractSurnamePassword(user.name || '', lr?.studentNumber || user.username);
       user.password = await bcrypt.hash(targetPass, 10);
       user.mustChangePassword = true;
     } else if (password && password.trim()) {
