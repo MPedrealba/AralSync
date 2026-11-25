@@ -66,6 +66,7 @@ export interface MiscueItem {
     | "hesitation"
     | "unattempted";
   position: number | null;
+  anchorPosition?: number | null;
   expected: string | null;
   spoken: string | null;
   startTime?: number | null;
@@ -332,57 +333,83 @@ function getMiscueStyle(type: MiscueItem["type"]) {
   switch (type) {
     case "match":
       return {
-        bg: "text-slate-800 hover:bg-slate-100/70 rounded transition-colors px-0.5",
+        bg: "border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold shadow-2xs hover:bg-emerald-100/80",
         label: "Correct",
         badge: "text-emerald-700 bg-emerald-50",
+        symbol: "✓",
+        symbolClass: "text-[10px] text-emerald-600 font-bold",
       };
     case "mispronunciation":
       return {
-        bg: "text-amber-900 underline decoration-amber-400 decoration-wavy rounded-xs px-0.5 hover:bg-amber-50/70 transition-colors",
+        bg: "border-amber-300 bg-amber-100 text-amber-800 font-semibold shadow-2xs hover:bg-amber-200/70",
         label: "Mispronunciation",
         badge: "text-amber-800 bg-amber-50",
+        symbol: "⚡",
+        symbolClass: "text-[10px] text-amber-600 font-bold",
       };
     case "substitution":
       return {
-        bg: "bg-rose-50 text-rose-900 border-b-2 border-rose-400 rounded-xs px-1 hover:bg-rose-100/70 transition-colors",
+        bg: "border-rose-300 bg-rose-100 text-rose-800 font-semibold shadow-2xs hover:bg-rose-200/70",
         label: "Substitution",
         badge: "text-rose-800 bg-rose-50",
+        symbol: "⇄",
+        symbolClass: "text-[10px] text-rose-600 font-bold",
       };
     case "omission":
       return {
-        bg: "line-through text-rose-700 decoration-rose-400 decoration-dashed rounded-xs px-0.5 opacity-80 hover:bg-rose-50/70 transition-colors",
+        bg: "border-dashed border-rose-300 bg-rose-50 text-rose-600 line-through opacity-80 hover:bg-rose-100/70",
         label: "Omission",
         badge: "text-rose-800 bg-rose-50",
+        symbol: "✕",
+        symbolClass: "text-[10px] text-rose-500 font-bold",
+      };
+    case "reversal":
+      return {
+        bg: "border-amber-300 bg-amber-50 text-amber-800 font-semibold shadow-2xs hover:bg-amber-100",
+        label: "Reversal",
+        badge: "text-amber-800 bg-amber-50",
+        symbol: "↺",
+        symbolClass: "text-[10px] text-amber-600 font-bold",
       };
     case "insertion":
       return {
-        bg: "bg-blue-50 text-blue-800 text-xs px-1.5 py-0.5 rounded font-sans italic hover:bg-blue-100/70 transition-colors",
+        bg: "border-blue-200 bg-blue-50 text-blue-800 font-medium",
         label: "Insertion",
         badge: "text-blue-800 bg-blue-50",
+        symbol: "",
+        symbolClass: "",
       };
     case "repetition":
       return {
-        bg: "bg-blue-50 text-blue-800 text-xs px-1.5 py-0.5 rounded font-sans italic hover:bg-blue-100/70 transition-colors",
+        bg: "border-blue-200 bg-blue-50 text-blue-800 font-medium",
         label: "Repetition",
         badge: "text-blue-800 bg-blue-50",
+        symbol: "",
+        symbolClass: "",
       };
     case "hesitation":
       return {
-        bg: "text-purple-700 italic opacity-75 px-0.5 hover:bg-purple-50/70 transition-colors",
+        bg: "border-purple-200 bg-purple-50 text-purple-700 italic",
         label: "Hesitation (Filler)",
         badge: "text-purple-800 bg-purple-50",
+        symbol: "",
+        symbolClass: "",
       };
     case "unattempted":
       return {
-        bg: "text-slate-300 select-none px-0.5 cursor-default",
+        bg: "border-slate-200 bg-white text-slate-400 hover:border-slate-300",
         label: "Unread Suffix",
         badge: "text-slate-500 bg-slate-50",
+        symbol: "",
+        symbolClass: "",
       };
     default:
       return {
-        bg: "text-slate-800",
+        bg: "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
         label: "Unknown",
         badge: "text-slate-600 bg-slate-50",
+        symbol: "",
+        symbolClass: "",
       };
   }
 }
@@ -390,24 +417,23 @@ function getMiscueStyle(type: MiscueItem["type"]) {
 function getPlayingStyle(type: MiscueItem["type"]) {
   switch (type) {
     case "match":
-      return "bg-emerald-100/90 text-emerald-950 ring-2 ring-emerald-500/50 shadow-xs font-semibold rounded-sm";
+      return "border-emerald-600 bg-emerald-600 text-white font-extrabold shadow-md ring-4 ring-emerald-300 scale-105 z-10";
     case "substitution":
-      return "bg-rose-200/95 text-rose-950 ring-2 ring-rose-500/70 shadow-xs font-semibold rounded-sm";
+      return "border-rose-600 bg-rose-600 text-white font-extrabold shadow-md ring-4 ring-rose-300 scale-105 z-10";
     case "mispronunciation":
-      return "bg-amber-200/95 text-amber-950 ring-2 ring-amber-500/70 shadow-xs font-semibold rounded-sm";
+      return "border-amber-500 bg-amber-500 text-white font-extrabold shadow-md ring-4 ring-amber-300 scale-105 z-10";
     case "omission":
-      return "bg-rose-100 text-rose-700 ring-2 ring-rose-400/60 line-through decoration-rose-500 rounded-sm";
+      return "border-dashed border-rose-600 bg-rose-100 text-rose-900 font-extrabold line-through shadow-md ring-4 ring-rose-300 scale-105 z-10";
     case "insertion":
     case "repetition":
-      return "bg-blue-200/95 text-blue-950 ring-2 ring-blue-500/70 shadow-xs rounded-sm font-semibold";
+      return "border-blue-600 bg-blue-600 text-white font-extrabold shadow-md ring-4 ring-blue-300 scale-105 z-10";
     case "reversal":
-      return "bg-purple-200/95 text-purple-950 ring-2 ring-purple-500/70 shadow-xs rounded-sm font-semibold";
     case "hesitation":
-      return "bg-purple-100/90 text-purple-900 ring-1 ring-purple-400/50 rounded-sm italic";
+      return "border-purple-600 bg-purple-600 text-white font-extrabold shadow-md ring-4 ring-purple-300 scale-105 z-10";
     case "unattempted":
-      return "bg-slate-200/70 text-slate-500 rounded-sm";
+      return "border-slate-400 bg-slate-200 text-slate-800 ring-2 ring-slate-300 scale-105 z-10";
     default:
-      return "bg-slate-200/90 text-slate-900 ring-1 ring-slate-400 rounded-sm";
+      return "border-slate-500 bg-slate-600 text-white font-bold shadow-md ring-4 ring-slate-300 scale-105 z-10";
   }
 }
 
@@ -606,10 +632,59 @@ function WordByWordReader({
   readOnly?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackContainerRef = useRef<HTMLDivElement | null>(null);
+  const playingWordRef = useRef<HTMLSpanElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
+
+  // Separate passage words (`expected != null` & `position !== null`) from nearby
+  // insertions/repetitions/hesitations so foreign spoken words never splice inline into passage flow.
+  const { passageEntries, extrasByTargetIdx, extraToAnchorIdx } = useMemo(() => {
+    const entries: Array<{ item: MiscueItem; origIdx: number }> = [];
+    const extrasMap = new Map<number, MiscueItem[]>();
+    const extraAnchorMap = new Map<number, number>();
+    const posToOrigIdx = new Map<number, number>();
+
+    const isPassageItem = (it: MiscueItem) =>
+      it.expected != null &&
+      it.position !== null &&
+      !["insertion", "repetition", "hesitation"].includes(it.type);
+
+    items.forEach((it, origIdx) => {
+      if (isPassageItem(it)) {
+        entries.push({ item: it, origIdx });
+        if (it.position != null) {
+          posToOrigIdx.set(it.position, origIdx);
+        }
+      }
+    });
+
+    let lastPassageOrigIdx: number | null = entries[0]?.origIdx ?? null;
+    items.forEach((it, origIdx) => {
+      if (isPassageItem(it)) {
+        lastPassageOrigIdx = origIdx;
+      } else {
+        const anchorOrigIdx =
+          it.anchorPosition != null && posToOrigIdx.has(it.anchorPosition)
+            ? posToOrigIdx.get(it.anchorPosition)!
+            : lastPassageOrigIdx;
+        if (anchorOrigIdx != null) {
+          const arr = extrasMap.get(anchorOrigIdx) || [];
+          arr.push(it);
+          extrasMap.set(anchorOrigIdx, arr);
+          extraAnchorMap.set(origIdx, anchorOrigIdx);
+        }
+      }
+    });
+
+    return {
+      passageEntries: entries,
+      extrasByTargetIdx: extrasMap,
+      extraToAnchorIdx: extraAnchorMap,
+    };
+  }, [items]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -697,15 +772,20 @@ function WordByWordReader({
     }
   };
 
-  const jumpToWord = (idx: number, autoPlay: boolean = true) => {
+  const jumpToWord = (origIdx: number, autoPlay: boolean = true) => {
     if (!audioRef.current || items.length === 0) return;
-    const item = items[idx];
+    const item = items[origIdx];
     let targetSec: number;
     if (item && item.startTime != null && item.startTime >= 0) {
       targetSec = Math.max(0, item.startTime - 0.15);
     } else {
       const audioDur = audioRef.current.duration || duration || 60;
-      targetSec = Math.max(0, (idx / items.length) * audioDur - 0.35);
+      const entryPos = passageEntries.findIndex((e) => e.origIdx === origIdx);
+      const ratio =
+        entryPos >= 0 && passageEntries.length > 0
+          ? entryPos / passageEntries.length
+          : origIdx / items.length;
+      targetSec = Math.max(0, ratio * audioDur - 0.35);
     }
     audioRef.current.currentTime = targetSec;
     setCurrentTime(targetSec);
@@ -713,14 +793,6 @@ function WordByWordReader({
       audioRef.current.play().catch(() => {});
     }
   };
-
-  const activeItem = activeWordIdx !== null ? items[activeWordIdx] : null;
-  const activeWordTimestamp =
-    activeItem && activeItem.startTime != null
-      ? activeItem.startTime
-      : activeWordIdx !== null && items.length > 0
-      ? Math.max(0, (activeWordIdx / items.length) * (duration || 60) - 0.35)
-      : 0;
 
   // Real-time cursor index of word currently being spoken using speech timestamps
   const currentPlayingWordIdx = useMemo(() => {
@@ -755,12 +827,27 @@ function WordByWordReader({
       return -1;
     }
 
-    // Fallback: flat linear proportion if speech timestamps are absent
-    if (duration > 0) {
-      return Math.floor((currentTime / duration) * items.length);
+    // Fallback: proportional mapping across passage word pills if speech timestamps are absent
+    if (duration > 0 && passageEntries.length > 0) {
+      const entryIdx = Math.min(
+        passageEntries.length - 1,
+        Math.floor((currentTime / duration) * passageEntries.length)
+      );
+      return passageEntries[entryIdx]?.origIdx ?? -1;
     }
     return -1;
-  }, [isPlaying, currentTime, duration, items]);
+  }, [isPlaying, currentTime, duration, items, passageEntries]);
+
+  // Auto-scroll active word into view center during playback
+  useEffect(() => {
+    if (playingWordRef.current && playbackContainerRef.current) {
+      playingWordRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+    }
+  }, [currentPlayingWordIdx]);
 
   return (
     <div className="space-y-3.5">
@@ -779,130 +866,181 @@ function WordByWordReader({
         />
       )}
 
-      {/* ── Clean Book Legend ── */}
-      <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500 border-b border-slate-200/80 pb-2.5">
-        <span className="font-semibold text-slate-400 mr-1">Legend:</span>
-        <span className="inline-flex items-center gap-1.5 text-slate-700">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          Natural: Correct
+      {/* ── Word-Pill Legend ── */}
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium px-1 text-slate-600">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-0.5">Legend:</span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          ✓ Correct
         </span>
-        <span className="inline-flex items-center gap-1.5 text-rose-800">
-          <span className="h-2 w-2 rounded-xs bg-rose-400" />
-          Subtle Tint: Substitution
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          ⚡ Mispronunciation
         </span>
-        <span className="inline-flex items-center gap-1.5 text-rose-700 line-through decoration-rose-400 decoration-dashed">
-          Strikethrough: Omission
+        <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+          ⇄ Substitution
         </span>
-        <span className="inline-flex items-center gap-1.5 text-amber-800 underline decoration-amber-400 decoration-wavy">
-          Wavy: Mispronunciation
+        <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-rose-300 bg-rose-50/60 px-2 py-0.5 text-rose-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+          ✕ Omission
         </span>
-        <span className="inline-flex items-center gap-1 text-blue-800 bg-blue-50 text-[11px] px-1.5 py-0.5 rounded font-sans italic">
-          Badge: Insertion
+        <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700 font-semibold">
+          + Extra
         </span>
       </div>
 
-      {/* ── Passage Reader (Clean Book-Style Typography) ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs">
-        <div className="font-serif text-lg leading-relaxed text-slate-800 flex flex-wrap gap-x-1.5 gap-y-2 items-baseline select-none">
-          {items.map((item, idx) => {
+      {/* ── Clean Word-Pill Reader (matches LiveReadingCaptionViewer layout) ── */}
+      <div
+        ref={playbackContainerRef}
+        className="relative max-h-[380px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-6 shadow-inner"
+      >
+        <div className="flex flex-wrap gap-1.5 items-center font-serif leading-loose select-none">
+          {passageEntries.map(({ item, origIdx }, entryIdx) => {
             const style = getMiscueStyle(item.type);
-            const isSelected = activeWordIdx === idx;
-            const isCurrentlyPlaying = currentPlayingWordIdx === idx;
+            const isSelected = activeWordIdx === origIdx;
+            const attachedExtras = extrasByTargetIdx.get(origIdx) || [];
+            const playingOwnWord = currentPlayingWordIdx === origIdx;
+            const playingExtraIdx =
+              currentPlayingWordIdx !== -1 &&
+              extraToAnchorIdx.get(currentPlayingWordIdx) === origIdx
+                ? currentPlayingWordIdx
+                : -1;
+            const playingItem =
+              playingExtraIdx !== -1
+                ? items[playingExtraIdx]
+                : playingOwnWord
+                ? item
+                : null;
+            const isCurrentlyPlaying = playingOwnWord || playingExtraIdx !== -1;
+
             const wordEstimatedSec =
               item.startTime != null
                 ? item.startTime
-                : items.length > 0
-                ? Math.max(0, (idx / items.length) * (duration || 60) - 0.35)
+                : passageEntries.length > 0
+                ? Math.max(0, (entryIdx / passageEntries.length) * (duration || 60) - 0.35)
                 : 0;
+
+            const extrasSummary = attachedExtras
+              .map((ex) => `${ex.type === "repetition" ? "Repeat" : ex.type === "hesitation" ? "Filler" : "Extra"}: "${ex.spoken}"`)
+              .join(", ");
 
             return (
               <span
-                key={idx}
-                data-word-chip={idx}
+                key={origIdx}
+                ref={isCurrentlyPlaying ? playingWordRef : undefined}
+                data-word-chip={origIdx}
                 onClick={() => {
                   if (readOnly) return;
-                  setActiveWordIdx(isSelected ? null : idx);
+                  setActiveWordIdx(isSelected ? null : origIdx);
                   if (audioUrl) {
-                    jumpToWord(idx, true);
+                    jumpToWord(origIdx, true);
                   }
                 }}
-                className={`relative inline-flex items-center transition-all ${
+                title={
+                  extrasSummary
+                    ? `${style.label}${item.spoken && item.type !== "match" ? ` (Heard: "${item.spoken}")` : ""} • ${extrasSummary}`
+                    : item.spoken && item.type !== "match" && item.type !== "omission"
+                    ? `${style.label}: "${item.expected}" → Heard: "${item.spoken}"`
+                    : style.label
+                }
+                className={`relative inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-sm sm:text-base transition-all ${
                   readOnly ? "cursor-default" : "cursor-pointer"
                 } ${
-                  isCurrentlyPlaying ? getPlayingStyle(item.type) : style.bg
+                  isCurrentlyPlaying && playingItem
+                    ? getPlayingStyle(playingItem.type)
+                    : style.bg
                 } ${
-                  isSelected ? "ring-2 ring-slate-900/40 rounded-sm z-30" : ""
+                  isSelected ? "ring-2 ring-slate-900/60 z-30" : ""
                 }`}
               >
-                <span>{item.expected || item.spoken}</span>
+                <span>{item.expected}</span>
+                {style.symbol && (
+                  <span
+                    className={
+                      isCurrentlyPlaying && (playingItem?.type ?? item.type) !== "omission"
+                        ? "text-[10px] text-white/90 font-bold"
+                        : style.symbolClass
+                    }
+                  >
+                    {style.symbol}
+                  </span>
+                )}
+                {attachedExtras.length > 0 && (
+                  <span
+                    className="ml-0.5 inline-flex items-center rounded bg-blue-100 px-1 py-0.5 text-[10px] font-sans font-bold leading-none text-blue-700"
+                    title={extrasSummary}
+                  >
+                    + Extra
+                  </span>
+                )}
 
                 {/* ── Real-Time Active Playback Miscue Indicator Tooltip ── */}
-                {isCurrentlyPlaying && item.type !== "match" && !isSelected && (
+                {isCurrentlyPlaying && playingItem && playingItem.type !== "match" && !isSelected && (
                   <span
                     aria-live="polite"
-                    className="absolute -top-7 left-1/2 -translate-x-1/2 z-40 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold shadow-md whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-slate-900 text-white animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute -top-8 left-1/2 -translate-x-1/2 z-40 px-2.5 py-0.5 rounded-md text-[11px] font-sans font-semibold shadow-md whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-slate-900 text-white animate-in fade-in zoom-in-95 duration-100"
                   >
-                    {item.type === "substitution" && (
+                    {playingItem.type === "substitution" && (
                       <>
                         <span className="text-rose-400 font-bold">Sub:</span>
-                        <span className="text-rose-200">"{item.spoken}"</span>
-                        {item.expected && (
-                          <span className="text-slate-400 font-normal">→ exp: "{item.expected}"</span>
+                        <span className="text-rose-200">"{playingItem.spoken}"</span>
+                        {playingItem.expected && (
+                          <span className="text-slate-400 font-normal">→ exp: "{playingItem.expected}"</span>
                         )}
                       </>
                     )}
-                    {item.type === "mispronunciation" && (
+                    {playingItem.type === "mispronunciation" && (
                       <>
                         <span className="text-amber-400 font-bold">Mispron:</span>
-                        <span className="text-amber-200">"{item.spoken}"</span>
-                        {item.expected && (
-                          <span className="text-slate-400 font-normal">→ exp: "{item.expected}"</span>
+                        <span className="text-amber-200">"{playingItem.spoken}"</span>
+                        {playingItem.expected && (
+                          <span className="text-slate-400 font-normal">→ exp: "{playingItem.expected}"</span>
                         )}
                       </>
                     )}
-                    {item.type === "omission" && (
+                    {playingItem.type === "omission" && (
                       <>
                         <span className="text-rose-400 font-bold">✕ Omitted</span>
-                        {item.expected && (
-                          <span className="text-slate-300 font-normal">("{item.expected}")</span>
+                        {playingItem.expected && (
+                          <span className="text-slate-300 font-normal">("{playingItem.expected}")</span>
                         )}
                       </>
                     )}
-                    {(item.type === "insertion" || item.type === "repetition") && (
+                    {(playingItem.type === "insertion" || playingItem.type === "repetition") && (
                       <>
                         <span className="text-blue-400 font-bold">
-                          {item.type === "repetition" ? "Repeat:" : "Extra:"}
+                          {playingItem.type === "repetition" ? "Repeat:" : "+ Extra:"}
                         </span>
-                        <span className="text-blue-200">"{item.spoken}"</span>
+                        <span className="text-blue-200">"{playingItem.spoken}"</span>
                       </>
                     )}
-                    {item.type === "reversal" && (
+                    {playingItem.type === "reversal" && (
                       <>
                         <span className="text-purple-400 font-bold">⇄ Reversal:</span>
-                        <span className="text-purple-200">"{item.spoken}"</span>
+                        <span className="text-purple-200">"{playingItem.spoken}"</span>
                       </>
                     )}
-                    {item.type === "hesitation" && (
-                      <span className="text-purple-300 font-medium">Hesitation ("{item.spoken}")</span>
+                    {playingItem.type === "hesitation" && (
+                      <span className="text-purple-300 font-medium">Hesitation ("{playingItem.spoken}")</span>
                     )}
                   </span>
                 )}
-                <span>{item.expected || item.spoken}</span>
 
                 {/* ── Sleek Notion-Style Floating Action Pill ── */}
                 {isSelected && !readOnly && onOverrideWord && (
                   <div
                     role="toolbar"
                     data-floating-pill
-                    data-word-popover={idx}
-                    aria-label={`Action toolbar for word ${idx + 1}`}
+                    data-word-popover={origIdx}
+                    aria-label={`Action toolbar for word ${entryIdx + 1}`}
                     onClick={(e) => e.stopPropagation()}
                     className={`absolute z-50 h-9 flex items-center gap-1 px-1.5 rounded-full bg-slate-900 text-white shadow-xl ring-1 ring-white/10 select-none normal-case tracking-normal font-sans cursor-default animate-in fade-in-50 zoom-in-95 duration-100 whitespace-nowrap ${
-                      idx < 6 ? "top-full mt-2" : "bottom-full mb-2"
+                      entryIdx < 6 ? "top-full mt-2" : "bottom-full mb-2"
                     } ${
-                      (idx % 10) < 2
+                      (entryIdx % 10) < 2
                         ? "left-0"
-                        : (idx % 10) > 8
+                        : (entryIdx % 10) > 8
                         ? "right-0"
                         : "left-1/2 -translate-x-1/2"
                     }`}
@@ -910,22 +1048,34 @@ function WordByWordReader({
                     {/* Caret Arrow */}
                     <div
                       className={`absolute w-2 h-2 bg-slate-900 rotate-45 pointer-events-none ${
-                        idx < 6 ? "-top-1" : "-bottom-1"
+                        entryIdx < 6 ? "-top-1" : "-bottom-1"
                       } ${
-                        (idx % 10) < 2
+                        (entryIdx % 10) < 2
                           ? "left-4"
-                          : (idx % 10) > 8
+                          : (entryIdx % 10) > 8
                           ? "right-4"
                           : "left-1/2 -translate-x-1/2"
                       }`}
                     />
+
+                    {/* Spoken / Extra note pill if deviated or attached extras present */}
+                    {((item.spoken && item.type !== "match" && item.type !== "omission") || attachedExtras.length > 0) && (
+                      <>
+                        <span className="px-2 text-[11px] font-medium text-slate-300 max-w-36 truncate">
+                          {item.spoken && item.type !== "match"
+                            ? `Heard: "${item.spoken}"`
+                            : `+Extra: "${attachedExtras.map((e) => e.spoken).join(", ")}"`}
+                        </span>
+                        <div className="h-4 w-px bg-slate-700 mx-0.5 shrink-0" />
+                      </>
+                    )}
 
                     {/* Left: Single Prominent Mark Correct Button */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOverrideWord(idx, "match");
+                        onOverrideWord(origIdx, "match");
                         setActiveWordIdx(null);
                       }}
                       className="h-7 px-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
@@ -942,7 +1092,7 @@ function WordByWordReader({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOverrideWord(idx, "substitution");
+                        onOverrideWord(origIdx, "substitution");
                         setActiveWordIdx(null);
                       }}
                       className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
@@ -960,7 +1110,7 @@ function WordByWordReader({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOverrideWord(idx, "omission");
+                        onOverrideWord(origIdx, "omission");
                         setActiveWordIdx(null);
                       }}
                       className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
@@ -978,7 +1128,7 @@ function WordByWordReader({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOverrideWord(idx, "mispronunciation");
+                        onOverrideWord(origIdx, "mispronunciation");
                         setActiveWordIdx(null);
                       }}
                       className={`h-7 px-2 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-colors cursor-pointer ${
@@ -1000,7 +1150,7 @@ function WordByWordReader({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            jumpToWord(idx, true);
+                            jumpToWord(origIdx, true);
                           }}
                           className="h-7 px-2 rounded-full hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-mono inline-flex items-center gap-1 transition-colors cursor-pointer"
                           title={`Replay audio at ${fmtAudioTime(wordEstimatedSec)}`}
@@ -1218,7 +1368,15 @@ function NewSessionTab({
   const audioUrlRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const vadRafRef = useRef<number | null>(null);
+  const lastVoiceActivityAtRef = useRef<number>(0);
   const timerRef = useRef<number | null>(null);
+
+  const isVoiceActive = useCallback(() => {
+    if (!analyserRef.current) return true;
+    return Date.now() - lastVoiceActivityAtRef.current <= 1200;
+  }, []);
 
   /* Live Speech Recognition & Karaoke Tracker */
   const cleanPassage = useMemo(() => cleanPassageText(passageText), [passageText]);
@@ -1238,34 +1396,8 @@ function NewSessionTab({
     passageText: cleanPassage,
     language: "auto",
     elapsedSec: recTime,
+    isVoiceActive,
   });
-
-  /* Live real-time Phil-IRI miscue computation during recording */
-  const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
-  const liveMiscueResult = useMemo(() => {
-    if (!isRecording || !liveSpeech || !cleanPassage) return null;
-    // Bounded Phil-IRI window: restrict reference passage strictly to words attempted so far
-    // based on liveActiveWordIndex, preventing unread future paragraphs from being marked as false omissions.
-    const pWords = cleanPassage.split(/\s+/).filter(Boolean);
-    const wordsReached = liveActiveWordIndex >= 0 ? liveActiveWordIndex + 1 : liveSpeech.split(/\s+/).length;
-    const maxBound = Math.min(pWords.length, Math.max(3, wordsReached + 1));
-    const attemptedPassage = pWords.slice(0, maxBound).join(" ");
-    return classifyMiscues(liveSpeech, attemptedPassage);
-  }, [isRecording, liveSpeech, cleanPassage, liveActiveWordIndex]);
-
-  /* Live real-time sync of Phil-IRI 2024 miscue counts into tracker while recording */
-  useEffect(() => {
-    if (isRecording && liveMiscueResult?.counts) {
-      setMiscues({
-        substitutions: liveMiscueResult.counts.substitutions || 0,
-        omissions: liveMiscueResult.counts.omissions || 0,
-        insertions: liveMiscueResult.counts.insertions || 0,
-        repetitions: liveMiscueResult.counts.repetitions || 0,
-        mispronunciations: liveMiscueResult.counts.mispronunciations || 0,
-        reversals: liveMiscueResult.counts.reversals || 0,
-      });
-    }
-  }, [isRecording, liveMiscueResult]);
 
   /* Analysis state */
   const [analyzing, setAnalyzing] = useState(false);
@@ -1293,6 +1425,34 @@ function NewSessionTab({
     mispronunciations: 0,
     reversals: 0,
   });
+
+  /* Live real-time Phil-IRI miscue computation during & immediately after recording (until Analyze runs) */
+  const liveSpeech = `${liveTranscript} ${liveInterimText}`.trim();
+  const liveMiscueResult = useMemo(() => {
+    if ((!isRecording && !audioUrl && !liveFullTranscript) || result) return null;
+    if (!liveSpeech || !cleanPassage || liveActiveWordIndex < 0) return null;
+    // Bounded Phil-IRI window: restrict reference passage strictly to matched attempted words so far
+    const pWords = cleanPassage.split(/\s+/).filter(Boolean);
+    const maxBound = Math.min(pWords.length, liveActiveWordIndex + 1);
+    const attemptedPassage = pWords.slice(0, maxBound).join(" ");
+    return classifyMiscues(liveSpeech, attemptedPassage);
+  }, [isRecording, audioUrl, liveFullTranscript, result, liveSpeech, cleanPassage, liveActiveWordIndex]);
+
+  const postStopLiveMiscues = liveMiscueResult?.items ?? null;
+
+  /* Live real-time sync of Phil-IRI 2024 miscue counts into tracker while recording */
+  useEffect(() => {
+    if (isRecording && liveMiscueResult?.counts) {
+      setMiscues({
+        substitutions: liveMiscueResult.counts.substitutions || 0,
+        omissions: liveMiscueResult.counts.omissions || 0,
+        insertions: liveMiscueResult.counts.insertions || 0,
+        repetitions: liveMiscueResult.counts.repetitions || 0,
+        mispronunciations: liveMiscueResult.counts.mispronunciations || 0,
+        reversals: liveMiscueResult.counts.reversals || 0,
+      });
+    }
+  }, [isRecording, liveMiscueResult]);
 
   const setMiscue = (key: keyof Miscues, value: string | number) => {
     const val = Math.max(0, typeof value === "number" ? value : Number(value) || 0);
@@ -1374,6 +1534,11 @@ function NewSessionTab({
   useEffect(() => {
     return () => {
       stopLiveCaption();
+      if (vadRafRef.current !== null) {
+        window.cancelAnimationFrame(vadRafRef.current);
+        vadRafRef.current = null;
+      }
+      analyserRef.current = null;
       if (timerRef.current) window.clearInterval(timerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
       if (audioContextRef.current) {
@@ -1389,6 +1554,11 @@ function NewSessionTab({
 
   const stopRecording = useCallback(() => {
     stopLiveCaption();
+    if (vadRafRef.current !== null) {
+      window.cancelAnimationFrame(vadRafRef.current);
+      vadRafRef.current = null;
+    }
+    analyserRef.current = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -1427,18 +1597,60 @@ function NewSessionTab({
 
       let recordingStream = stream;
 
-      // 2. Web Audio API Real-Time DSP Filter Chain (filters out fan hum, desk rumble, and hiss)
-      if (noiseCancellation) {
-        try {
-          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioCtxClass) {
-            const ctx = new AudioCtxClass();
-            if (ctx.state === "suspended") {
-              await ctx.resume();
-            }
-            audioContextRef.current = ctx;
-            const source = ctx.createMediaStreamSource(stream);
+      // 2. Web Audio API AnalyserNode VAD gate (always connected) + DSP Filter Chain (when noiseCancellation enabled)
+      try {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          const ctx = new AudioCtxClass();
+          if (ctx.state === "suspended") {
+            await ctx.resume();
+          }
+          audioContextRef.current = ctx;
+          const source = ctx.createMediaStreamSource(stream);
 
+          // RMS voice-activity detector via AnalyserNode
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+
+          const timeDomainBuf = new Uint8Array(analyser.fftSize);
+          const calibStartAt = performance.now();
+          const calibSamples: number[] = [];
+          let noiseFloor = 0.008;
+          lastVoiceActivityAtRef.current = 0;
+
+          if (vadRafRef.current !== null) {
+            window.cancelAnimationFrame(vadRafRef.current);
+            vadRafRef.current = null;
+          }
+          const measureVoiceActivity = () => {
+            const activeAnalyser = analyserRef.current;
+            if (!activeAnalyser) return;
+            activeAnalyser.getByteTimeDomainData(timeDomainBuf);
+            let sumSq = 0;
+            for (let k = 0; k < timeDomainBuf.length; k++) {
+              const norm = (timeDomainBuf[k] - 128) / 128;
+              sumSq += norm * norm;
+            }
+            const rms = Math.sqrt(sumSq / timeDomainBuf.length);
+
+            // Calibrate room noise floor during the first ~300ms (with safe ceiling & minimum floor)
+            if (performance.now() - calibStartAt <= 300) {
+              calibSamples.push(rms);
+              const sorted = [...calibSamples].sort((a, b) => a - b);
+              const floorEst = sorted[Math.floor(sorted.length * 0.4)] ?? rms;
+              noiseFloor = Math.max(0.006, Math.min(0.035, floorEst));
+            }
+
+            if (rms > Math.max(0.015, noiseFloor * 2.2)) {
+              lastVoiceActivityAtRef.current = Date.now();
+            }
+            vadRafRef.current = window.requestAnimationFrame(measureVoiceActivity);
+          };
+          vadRafRef.current = window.requestAnimationFrame(measureVoiceActivity);
+
+          if (noiseCancellation) {
             // High-pass filter (85 Hz): Cuts electric fan hum, AC drone, and desk bumps
             const highPass = ctx.createBiquadFilter();
             highPass.type = "highpass";
@@ -1465,9 +1677,10 @@ function NewSessionTab({
 
             recordingStream = dest.stream;
           }
-        } catch {
-          recordingStream = stream;
         }
+      } catch {
+        analyserRef.current = null;
+        recordingStream = stream;
       }
 
       setCalibratedItems([]);
@@ -1482,6 +1695,11 @@ function NewSessionTab({
         if (e.data.size > 0) chunks.push(e.data);
       };
       mr.onstop = () => {
+        if (vadRafRef.current !== null) {
+          window.cancelAnimationFrame(vadRafRef.current);
+          vadRafRef.current = null;
+        }
+        analyserRef.current = null;
         const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
@@ -1513,6 +1731,18 @@ function NewSessionTab({
         "Microphone access was denied or unavailable. Use the Simulate button to demo."
       );
     }
+  };
+
+  const syncMiscuesFromBreakdown = (breakdown?: Record<string, number> | null) => {
+    if (!breakdown) return;
+    setMiscues({
+      substitutions: Number(breakdown.substitutions) || 0,
+      omissions: Number(breakdown.omissions) || 0,
+      insertions: Number(breakdown.insertions) || 0,
+      repetitions: Number(breakdown.repetitions) || 0,
+      mispronunciations: Number(breakdown.mispronunciations) || 0,
+      reversals: Number(breakdown.reversals) || 0,
+    });
   };
 
   const runAnalysis = async (simulate: boolean) => {
@@ -1578,6 +1808,7 @@ function NewSessionTab({
 
       setResult(mockResult);
       setCalibratedItems(localEval.miscueItems);
+      syncMiscuesFromBreakdown(localEval.miscueBreakdown);
       setOverrideCount(0);
       setActiveWordIdx(null);
       setFinalizeSuccess(false);
@@ -1610,6 +1841,11 @@ function NewSessionTab({
         setResult(json.data);
         const items: MiscueItem[] = json.data.miscueItems || [];
         setCalibratedItems(items);
+        syncMiscuesFromBreakdown(
+          (items.length > 0 ? json.data.miscueBreakdown : null) ||
+            json.data.miscues ||
+            json.data.miscueBreakdown
+        );
         setOverrideCount(0);
         setActiveWordIdx(null);
         setFinalizeSuccess(false);
@@ -1667,6 +1903,7 @@ function NewSessionTab({
 
       setResult(mockResult);
       setCalibratedItems(localEval.miscueItems);
+      syncMiscuesFromBreakdown(localEval.miscueBreakdown);
       setOverrideCount(0);
       setActiveWordIdx(null);
       setFinalizeSuccess(false);
@@ -2197,7 +2434,7 @@ function NewSessionTab({
                 setActiveWordIdx={setActiveWordIdx}
               />
             </div>
-          ) : isRecording ? (
+          ) : isRecording || ((Boolean(audioUrl) || Boolean(liveFullTranscript)) && calibratedItems.length === 0) ? (
             <div className="mt-4">
               <LiveReadingCaptionViewer
                 passageText={cleanPassage}
@@ -2205,10 +2442,10 @@ function NewSessionTab({
                 transcript={liveTranscript}
                 interimText={liveInterimText}
                 spokenWordCount={liveSpokenWordCount}
-                isListening={liveIsListening}
+                isListening={isRecording && liveIsListening}
                 isSupported={liveIsSupported}
                 elapsedSec={recTime}
-                miscueItems={liveMiscueResult?.items}
+                miscueItems={postStopLiveMiscues}
               />
             </div>
           ) : (
@@ -2449,8 +2686,12 @@ function NewSessionTab({
                 ? recTime >= 50
                   ? "Wrapping up 1-minute timed reading..."
                   : "Recording in progress... Tap to stop"
+                : result
+                ? "Analysis complete. Review words or save below."
                 : recTime >= 60
                 ? "Assessment finished (60s). Click Analyze to score."
+                : audioUrl
+                ? "Recording captured. Click Analyze to score."
                 : "Tap mic to begin oral reading"}
             </p>
 

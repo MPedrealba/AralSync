@@ -95,10 +95,10 @@ export default function LiveReadingCaptionViewer({
       ? Math.round((spokenWordCount / elapsedSec) * 60)
       : null;
 
-  // Accurately count words completed
+  // Accurately count passage words completed (only advance from 0 once first passage word matches)
   const wordsReadCount = Math.max(
     0,
-    Math.min(words.length, activeWordIndex >= 0 ? activeWordIndex + 1 : spokenWordCount)
+    Math.min(words.length, activeWordIndex >= 0 ? activeWordIndex + 1 : 0)
   );
 
   return (
@@ -117,12 +117,16 @@ export default function LiveReadingCaptionViewer({
       {/* ── Top Live Indicator Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 via-teal-50/40 to-white px-4 py-3 shadow-xs">
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600" />
-          </span>
+          {isListening ? (
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600" />
+            </span>
+          ) : (
+            <span className="h-3 w-3 rounded-full bg-emerald-500" />
+          )}
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
-            Live Tracking Active
+            {isListening ? "Live Tracking Active" : "Recording Captured — Ready to Analyze"}
           </span>
           <span className="text-slate-300">•</span>
           <span className="text-xs font-semibold text-emerald-800">
@@ -182,8 +186,10 @@ export default function LiveReadingCaptionViewer({
             </span>
           ) : (
             <span className="italic text-slate-500 flex items-center gap-1.5">
-              <Mic className="h-3 w-3 animate-pulse text-emerald-500" />
-              Speak into the microphone to track reading in real-time...
+              <Mic className={`h-3 w-3 text-emerald-500 ${isListening ? "animate-pulse" : ""}`} />
+              {isListening
+                ? "Speak into the microphone to track reading in real-time..."
+                : "Click Analyze Recording below for full Phil-IRI transcription."}
             </span>
           )}
         </div>
@@ -221,7 +227,8 @@ export default function LiveReadingCaptionViewer({
       >
         <div className="flex flex-wrap gap-1.5 items-center font-serif leading-loose select-none">
           {words.map((word, idx) => {
-            const isCompleted = isListening && idx < activeWordIndex;
+            const isCompleted =
+              activeWordIndex >= 0 && (isListening ? idx < activeWordIndex : idx <= activeWordIndex);
             const isActive = isListening && idx === activeWordIndex;
             const miscue = miscueMap.get(idx);
 

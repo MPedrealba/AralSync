@@ -66,10 +66,14 @@ describe('60-Second Phil-IRI Timed Reading & Live Tracking Speech Accuracy Suite
   });
 
   describe('2. Bounded Live Miscue Classifier (Prevents Mass False Omissions)', () => {
-    test('restricts live classifyMiscues reference passage to words reached so far', () => {
+    test('restricts live classifyMiscues reference passage to words reached so far and returns null when < 0', () => {
       assert.ok(
-        pageSource.includes('liveActiveWordIndex >= 0 ? liveActiveWordIndex + 1 : liveSpeech.split(/\\s+/).length'),
-        'Must compute words reached from liveActiveWordIndex'
+        pageSource.includes('if (!liveSpeech || !cleanPassage || liveActiveWordIndex < 0) return null;'),
+        'Must return null when no passage word has matched yet'
+      );
+      assert.ok(
+        pageSource.includes('maxBound = Math.min(pWords.length, liveActiveWordIndex + 1)'),
+        'Must bound maxBound strictly to liveActiveWordIndex + 1'
       );
       assert.ok(
         pageSource.includes('attemptedPassage = pWords.slice(0, maxBound).join(" ")'),
@@ -94,14 +98,14 @@ describe('60-Second Phil-IRI Timed Reading & Live Tracking Speech Accuracy Suite
       );
     });
 
-    test('enforces physiological reading velocity clamp (~3.5 words/sec + 3 words buffer)', () => {
+    test('enforces tight physiological reading velocity clamp (Math.floor(elapsed * 3.0) + 1)', () => {
       assert.ok(
-        liveCaptionSource.includes('Math.floor(elapsed * 3.5) + 3'),
-        'Must clamp forward progress to ~3.5 words/sec'
+        liveCaptionSource.includes('Math.floor(elapsed * 3.0) + 1'),
+        'Must clamp forward progress to 3.0 words/sec + 1'
       );
       assert.ok(
-        liveCaptionSource.includes('pIdx = Math.min(pIdx, maxAllowedIdx);'),
-        'Must clamp pIdx to maxAllowedIdx ceiling'
+        liveCaptionSource.includes('candidateOrigIdx = Math.min(candidateOrigIdx, maxAllowedOrigIdx, perEventMaxJump);'),
+        'Must clamp active word index to maxAllowedOrigIdx and perEventMaxJump'
       );
     });
 
@@ -111,7 +115,7 @@ describe('60-Second Phil-IRI Timed Reading & Live Tracking Speech Accuracy Suite
         'Must define common stopwords set'
       );
       assert.ok(
-        liveCaptionSource.includes('if (isStopword || targetWordNorm.length <= 3)'),
+        liveCaptionSource.includes('const isShortOrStop = STOP_WORDS.has(targetNorm) || targetNorm.length <= 3;'),
         'Must check if lookahead word is a short stopword'
       );
     });

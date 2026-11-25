@@ -249,14 +249,199 @@ export interface MiscueItem {
     | 'reversal'
     | 'hesitation'
     | 'unattempted';
-  /** 0-based index in the passage word list (null for insertions/hesitations). */
+  /** 0-based index in the original passage word list (null for insertions/hesitations). */
   position: number | null;
+  /** Adjacent passage word index for insertions / repetitions / hesitations. */
+  anchorPosition?: number | null;
   /** The passage word at this position (null for insertions / repeats / hesitations). */
   expected: string | null;
   /** The word the reader actually spoke (null for omissions / unattempted). */
   spoken: string | null;
   startTime?: number | null;
   endTime?: number | null;
+}
+
+/**
+ * Align Whisper word-level timestamps to `spoken` normalized tokens sequentially,
+ * handling contractions/digits expansion and slight token-count mismatches without
+ * falling back to shifted raw indices.
+ */
+function alignWordTimestampsToSpoken(
+  spoken: string[],
+  wordTimestamps?: Array<{ word: string; start: number; end: number }>
+): Array<{ word: string; start: number; end: number } | null> | undefined {
+  if (!wordTimestamps || wordTimestamps.length === 0 || spoken.length === 0) {
+    return undefined;
+  }
+
+  // Expand each Whisper timestamp entry using the same word normalizer
+  const expanded: Array<{ word: string; start: number; end: number }> = [];
+  for (const wt of wordTimestamps) {
+    const tokens = normalizeWords(wt.word);
+    if (tokens.length === 0) continue;
+    if (tokens.length === 1) {
+      expanded.push({ word: tokens[0], start: wt.start, end: wt.end });
+    } else {
+      const dur = Math.max(0, wt.end - wt.start);
+      tokens.forEach((t, idx) => {
+        const s = wt.start + (idx / tokens.length) * dur;
+        const e = wt.start + ((idx + 1) / tokens.length) * dur;
+        expanded.push({
+          word: t,
+          start: Math.round(s * 100) / 100,
+          end: Math.round(e * 100) / 100,
+        });
+      });
+    }
+  }
+
+  // Direct 1-to-1 when lengths match
+  if (expanded.length === spoken.length) {
+    return expanded;
+  }
+  if (wordTimestamps.length === spoken.length && expanded.length === 0) {
+    return wordTimestamps;
+  }
+  if (expanded.length === 0) {
+    return undefined;
+  }
+
+  // Sequential DP alignment between `spoken` (M) and `expanded` (E)
+  const m = spoken.length;
+  const eLen = expanded.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array<number>(eLen + 1).fill(0));
+  const dir = Array.from({ length: m + 1 }, () => new Array<number>(eLen + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= eLen; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= eLen; j++) {
+      const s = spoken[i - 1];
+      const w = expanded[j - 1].word;
+      let subCost = 2;
+      if (s === w) {
+        subCost = 0;
+      } else {
+        const dist = charLevenshtein(s, w);
+        if (dist <= 1 || (dist <= 2 && Math.max(s.length, w.length) >= 4)) {
+          subCost = 0.5;
+        }
+      }
+      const diag = dp[i - 1][j - 1] + subCost;
+      const skipSpoken = dp[i - 1][j] + 1;
+      const skipExp = dp[i][j - 1] + 1;
+      const minVal = Math.min(diag, skipSpoken, skipExp);
+      dp[i][j] = minVal;
+      if (minVal === diag && subCost < 2) dir[i][j] = 0;
+      else if (minVal === skipExp) dir[i][j] = 2;
+      else dir[i][j] = 1;
+    }
+  }
+
+  const aligned: Array<{ word: string; start: number; end: number } | null> = new Array(m).fill(null);
+  const matchedExpIdx: Array<number | null> = new Array(m).fill(null);
+  let i = m;
+  let j = eLen;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && dir[i][j] === 0) {
+      aligned[i - 1] = expanded[j - 1];
+      matchedExpIdx[i - 1] = j - 1;
+      i--;
+      j--;
+    } else if (i > 0 && (j === 0 || dir[i][j] === 1)) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+
+  // Fill any unaligned `spoken` tokens strictly from unclaimed `expanded` slots between matched neighbors
+  for (let si = 0; si < m; si++) {
+    if (aligned[si]) continue;
+    let prevExp = -1;
+    for (let p = si - 1; p >= 0; p--) {
+      if (matchedExpIdx[p] !== null) {
+        prevExp = matchedExpIdx[p]!;
+        break;
+      }
+    }
+    let nextExp = eLen;
+    for (let q = si + 1; q < m; q++) {
+      if (matchedExpIdx[q] !== null) {
+        nextExp = matchedExpIdx[q]!;
+        break;
+      }
+    }
+    // Check if there is an unclaimed expanded token in (prevExp, nextExp)
+    let runEnd = si;
+    while (runEnd + 1 < m && !aligned[runEnd + 1]) runEnd++;
+    const unalignedCount = runEnd - si + 1;
+    const availStart = prevExp + 1;
+    const availEnd = nextExp - 1;
+    if (availEnd >= availStart) {
+      const spanStart = expanded[availStart].start;
+      const spanEnd = expanded[availEnd].end;
+      const dur = Math.max(0, spanEnd - spanStart);
+      for (let r = 0; r < unalignedCount; r++) {
+        aligned[si + r] = {
+          word: spoken[si + r],
+          start: Math.round((spanStart + (r / unalignedCount) * dur) * 100) / 100,
+          end: Math.round((spanStart + ((r + 1) / unalignedCount) * dur) * 100) / 100,
+        };
+      }
+    }
+    si = runEnd;
+  }
+
+  return aligned;
+}
+
+/** Collapse normalized sub-tokens sharing the same original passage word index into one item. */
+function collapsePassageSubTokens(subs: MiscueItem[], origIdx: number, origWord: string): MiscueItem {
+  if (subs.length === 1) {
+    return {
+      ...subs[0],
+      position: origIdx,
+      expected: origWord,
+    };
+  }
+  const allMatch = subs.every((s) => s.type === 'match');
+  const allUnattempted = subs.every((s) => s.type === 'unattempted');
+
+  let type: MiscueItem['type'];
+  if (allMatch) {
+    type = 'match';
+  } else if (allUnattempted) {
+    type = 'unattempted';
+  } else if (subs.some((s) => s.type === 'substitution')) {
+    type = 'substitution';
+  } else if (subs.some((s) => s.type === 'reversal')) {
+    type = 'reversal';
+  } else if (subs.some((s) => s.type === 'mispronunciation')) {
+    type = 'mispronunciation';
+  } else {
+    type = 'omission';
+  }
+
+  const spokenJoined =
+    type === 'unattempted'
+      ? null
+      : subs
+          .map((s) => s.spoken)
+          .filter((s): s is string => Boolean(s))
+          .join(' ') || null;
+
+  const starts = subs.map((s) => s.startTime).filter((t): t is number => t != null);
+  const ends = subs.map((s) => s.endTime).filter((t): t is number => t != null);
+
+  return {
+    type,
+    position: origIdx,
+    expected: origWord,
+    spoken: type === 'omission' && subs.every((s) => s.spoken == null) ? null : spokenJoined,
+    startTime: starts.length > 0 ? Math.min(...starts) : null,
+    endTime: ends.length > 0 ? Math.max(...ends) : null,
+  };
 }
 
 /**
@@ -273,8 +458,8 @@ export interface MiscueItem {
  *   • hesitation       — minor filler words ("um", "uh", "ah")
  *   • unattempted      — unread suffix of passage when reader stopped / timed out
  *
- * Returns the per-word detail list, per-category counts, total miscue count,
- * wordsAttempted, and stutter events.
+ * Returns passage-anchored items (1-to-1 with `passage.split(/\s+/).filter(Boolean)`),
+ * per-category counts, total miscue count, wordsAttempted, and stutter events.
  */
 export function classifyMiscues(
   transcript: string,
@@ -290,44 +475,30 @@ export function classifyMiscues(
   hesitations: number;
 } {
   const spoken = normalizeWords(transcript);
-  const expected = normalizeWords(passage);
+  const origWords = passage.split(/\s+/).filter(Boolean);
+  const expectedMeta: Array<{ norm: string; origIdx: number; origWord: string }> = [];
+  for (let origIdx = 0; origIdx < origWords.length; origIdx++) {
+    const origWord = origWords[origIdx];
+    const parts = normalizeWords(origWord);
+    for (const part of parts) {
+      expectedMeta.push({ norm: part, origIdx, origWord });
+    }
+  }
+  const expected = expectedMeta.map((m) => m.norm);
+
+  const uniqueOrigWordCount = new Set(expectedMeta.map((m) => m.origIdx)).size;
   const empty = {
     items: [],
     counts: { mispronunciations: 0, substitutions: 0, omissions: 0, insertions: 0, repetitions: 0, reversals: 0 },
     stutters: 0,
     totalMiscues: 0,
     wordsAttempted: 0,
-    wordsTotal: expected.length,
+    wordsTotal: uniqueOrigWordCount,
     hesitations: 0,
   };
   if (expected.length === 0) return empty;
 
-  // Align or expand word timestamps if needed (e.g. if raw Whisper words have punctuation or contractions)
-  let alignedTimestamps: Array<{ word: string; start: number; end: number }> | undefined = wordTimestamps;
-  if (wordTimestamps && wordTimestamps.length > 0 && wordTimestamps.length !== spoken.length) {
-    const expanded: Array<{ word: string; start: number; end: number }> = [];
-    for (const wt of wordTimestamps) {
-      const tokens = normalizeWords(wt.word);
-      if (tokens.length === 0) continue;
-      if (tokens.length === 1) {
-        expanded.push({ word: tokens[0], start: wt.start, end: wt.end });
-      } else {
-        const dur = Math.max(0, wt.end - wt.start);
-        tokens.forEach((t, idx) => {
-          const s = wt.start + (idx / tokens.length) * dur;
-          const e = wt.start + ((idx + 1) / tokens.length) * dur;
-          expanded.push({
-            word: t,
-            start: Math.round(s * 100) / 100,
-            end: Math.round(e * 100) / 100,
-          });
-        });
-      }
-    }
-    if (expanded.length === spoken.length) {
-      alignedTimestamps = expanded;
-    }
-  }
+  const alignedTimestamps = alignWordTimestampsToSpoken(spoken, wordTimestamps);
 
   // ── Consecutive duplicate runs → stutter events ──
   const runLen = new Array<number>(spoken.length).fill(1);
@@ -378,19 +549,33 @@ export function classifyMiscues(
   }
 
   // ── Backtrack ──
-  const rawItems: MiscueItem[] = [];
+  interface RawInternalItem extends MiscueItem {
+    _origIdx?: number | null;
+    _origWord?: string | null;
+  }
+  const rawItems: RawInternalItem[] = [];
   let i = m;
   let j = n;
   while (i > 0 || j > 0) {
-    const ts = alignedTimestamps?.[i - 1] ?? wordTimestamps?.[i - 1];
+    const ts = i > 0 ? alignedTimestamps?.[i - 1] : null;
     const startTime = ts?.start != null ? ts.start : null;
     const endTime = ts?.end != null ? ts.end : null;
 
     if (i > 0 && j > 0 && dir[i][j] === 0) {
       const sp = spoken[i - 1];
       const ex = expected[j - 1];
+      const meta = expectedMeta[j - 1];
       if (sp === ex) {
-        rawItems.unshift({ type: 'match', position: j - 1, expected: ex, spoken: sp, startTime, endTime });
+        rawItems.unshift({
+          type: 'match',
+          position: j - 1,
+          expected: ex,
+          spoken: sp,
+          startTime,
+          endTime,
+          _origIdx: meta.origIdx,
+          _origWord: meta.origWord,
+        });
       } else {
         const dist = charLevenshtein(sp, ex);
         const near = dist <= 1 || (dist <= 2 && ex.length >= 4);
@@ -401,58 +586,78 @@ export function classifyMiscues(
           spoken: sp,
           startTime,
           endTime,
+          _origIdx: meta.origIdx,
+          _origWord: meta.origWord,
         });
       }
       i--;
       j--;
     } else if (i > 0 && (j === 0 || dir[i][j] === 1)) {
-      rawItems.unshift({ type: 'insertion', position: null, expected: null, spoken: spoken[i - 1], startTime, endTime });
+      rawItems.unshift({
+        type: 'insertion',
+        position: null,
+        expected: null,
+        spoken: spoken[i - 1],
+        startTime,
+        endTime,
+        _origIdx: null,
+        _origWord: null,
+      });
       i--;
     } else {
-      rawItems.unshift({ type: 'omission', position: j - 1, expected: expected[j - 1], spoken: null, startTime: null, endTime: null });
+      const meta = expectedMeta[j - 1];
+      rawItems.unshift({
+        type: 'omission',
+        position: j - 1,
+        expected: expected[j - 1],
+        spoken: null,
+        startTime: null,
+        endTime: null,
+        _origIdx: meta.origIdx,
+        _origWord: meta.origWord,
+      });
       j--;
     }
   }
 
-  // ── Determine Attempted Reading Window ──
-  // Furthest matched or attempted passage word index
-  let lastAttemptedPos = -1;
+  // ── Determine Attempted Reading Window (using original passage word index so split tokens stay unified) ──
+  let lastAttemptedOrigIdx = -1;
   for (const it of rawItems) {
-    if (['match', 'mispronunciation', 'substitution'].includes(it.type) && it.position !== null) {
-      if (it.position > lastAttemptedPos) lastAttemptedPos = it.position;
+    if (['match', 'mispronunciation', 'substitution'].includes(it.type) && it._origIdx != null) {
+      if (it._origIdx > lastAttemptedOrigIdx) lastAttemptedOrigIdx = it._origIdx;
     }
   }
 
   let fillerHesitations = 0;
-  const items: MiscueItem[] = [];
+  const postItems: RawInternalItem[] = [];
 
   for (const it of rawItems) {
     // 1. Partial/timed reading fix: do NOT count unread suffix as omissions
-    if (it.type === 'omission' && it.position !== null && it.position > lastAttemptedPos) {
-      items.push({ ...it, type: 'unattempted', startTime: null, endTime: null });
+    if (it.type === 'omission' && it._origIdx != null && it._origIdx > lastAttemptedOrigIdx) {
+      postItems.push({ ...it, type: 'unattempted', startTime: null, endTime: null });
       continue;
     }
 
     // 2. Filler words: treat as hesitation rather than accuracy insertion miscue
     if (it.type === 'insertion' && it.spoken && FILLER_WORDS.has(it.spoken)) {
       fillerHesitations++;
-      items.push({ ...it, type: 'hesitation' });
+      postItems.push({ ...it, type: 'hesitation' });
       continue;
     }
 
     // 3. Relabel consecutive repetitions
     if (it.type === 'insertion' && it.spoken && repeatedWords.has(it.spoken)) {
-      items.push({ ...it, type: 'repetition' });
+      postItems.push({ ...it, type: 'repetition' });
       continue;
     }
 
-    items.push(it);
+    postItems.push(it);
   }
 
   // ── Reversal pass: adjacent substitutions where swapping spoken words matches ──
-  for (let k = 0; k < items.length - 1; k++) {
-    const a = items[k];
-    const b = items[k + 1];
+  for (let k = 0; k < postItems.length - 1; k++) {
+    const a = postItems[k];
+    const b = postItems[k + 1];
     if (
       a.type === 'substitution' &&
       b.type === 'substitution' &&
@@ -465,6 +670,46 @@ export function classifyMiscues(
     ) {
       a.type = 'reversal';
       b.type = 'reversal';
+    }
+  }
+
+  // ── Collapse sub-tokens back to 1-to-1 original passage words (`position = origIdx`, `expected = origWord`) ──
+  const subsByOrigIdx = new Map<number, { origWord: string; subs: MiscueItem[] }>();
+  for (const it of postItems) {
+    if (it._origIdx != null && it._origWord != null) {
+      const entry = subsByOrigIdx.get(it._origIdx);
+      if (entry) {
+        entry.subs.push(it);
+      } else {
+        subsByOrigIdx.set(it._origIdx, { origWord: it._origWord, subs: [it] });
+      }
+    }
+  }
+
+  const firstOrigIdx = expectedMeta[0]?.origIdx ?? 0;
+  let currentAnchorOrigIdx: number | null = firstOrigIdx;
+  const emittedOrig = new Set<number>();
+  const items: MiscueItem[] = [];
+
+  for (const it of postItems) {
+    if (it._origIdx != null) {
+      currentAnchorOrigIdx = it._origIdx;
+      if (!emittedOrig.has(it._origIdx)) {
+        emittedOrig.add(it._origIdx);
+        const group = subsByOrigIdx.get(it._origIdx)!;
+        items.push(collapsePassageSubTokens(group.subs, it._origIdx, group.origWord));
+      }
+    } else {
+      // Insertion / repetition / hesitation stays in `items` for counts with `position: null` and `anchorPosition`
+      items.push({
+        type: it.type,
+        position: null,
+        anchorPosition: currentAnchorOrigIdx,
+        expected: null,
+        spoken: it.spoken,
+        startTime: it.startTime ?? null,
+        endTime: it.endTime ?? null,
+      });
     }
   }
 
@@ -527,7 +772,7 @@ export function classifyMiscues(
     }
   }
 
-  // ── Tally strictly within attempted text range ──
+  // ── Tally strictly within attempted text range (matching collapsed 1-to-1 items) ──
   const counts = {
     mispronunciations: 0,
     substitutions: 0,
@@ -559,7 +804,15 @@ export function classifyMiscues(
     counts.repetitions +
     counts.reversals;
 
-  const wordsAttempted = lastAttemptedPos >= 0 ? lastAttemptedPos + 1 : (spoken.length > 0 ? Math.min(expected.length, spoken.length) : 0);
+  const passageItems = items.filter((it) => it.expected !== null);
+  const wordsTotal = passageItems.length;
+  const attemptedCount = passageItems.filter((it) => it.type !== 'unattempted').length;
+  const wordsAttempted =
+    lastAttemptedOrigIdx >= 0
+      ? attemptedCount
+      : spoken.length > 0
+      ? Math.min(wordsTotal, spoken.length)
+      : 0;
 
   return {
     items,
@@ -567,7 +820,7 @@ export function classifyMiscues(
     stutters,
     totalMiscues,
     wordsAttempted,
-    wordsTotal: expected.length,
+    wordsTotal,
     hesitations: fillerHesitations,
   };
 }

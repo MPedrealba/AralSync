@@ -267,8 +267,8 @@ describe('Oral Reading Audio Playback Sync & Real-Time Miscue Visual Indicators'
         'page.tsx must define getPlayingStyle'
       );
       assert.ok(
-        pageSource.includes('getPlayingStyle(item.type)'),
-        'WordByWordReader must use getPlayingStyle(item.type) when isCurrentlyPlaying'
+        pageSource.includes('getPlayingStyle(playingItem.type)'),
+        'WordByWordReader must use getPlayingStyle(playingItem.type) when isCurrentlyPlaying'
       );
 
       // Must NOT apply unconditional emerald green to all playing words
@@ -280,23 +280,23 @@ describe('Oral Reading Audio Playback Sync & Real-Time Miscue Visual Indicators'
 
     test('renders live active miscue indicator tooltip showing heard vs expected words', () => {
       assert.ok(
-        pageSource.includes('isCurrentlyPlaying && item.type !== "match" && !isSelected'),
+        pageSource.includes('isCurrentlyPlaying && playingItem && playingItem.type !== "match" && !isSelected'),
         'Must show live miscue indicator tooltip when playing a non-match word'
       );
       assert.ok(
-        pageSource.includes('item.type === "substitution"'),
+        pageSource.includes('playingItem.type === "substitution"'),
         'Tooltip must handle substitution specifically'
       );
       assert.ok(
-        pageSource.includes('item.type === "mispronunciation"'),
+        pageSource.includes('playingItem.type === "mispronunciation"'),
         'Tooltip must handle mispronunciation specifically'
       );
       assert.ok(
-        pageSource.includes('item.type === "omission"'),
+        pageSource.includes('playingItem.type === "omission"'),
         'Tooltip must handle omission specifically'
       );
       assert.ok(
-        pageSource.includes('"{item.spoken}"'),
+        pageSource.includes('"{playingItem.spoken}"'),
         'Tooltip must display what student spoke'
       );
     });

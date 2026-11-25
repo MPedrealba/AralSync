@@ -80,14 +80,15 @@ describe('Reading Fluency Passage Viewer, Dual Selectors & Edit Mode Suite', () 
     });
   });
 
-  describe('4. Clean Book-Style Passage Typography & Notion-Style Floating Action Pill', () => {
-    test('formats passage as clean, elegant book text without emoji badge clutter or native tooltips', () => {
-      assert.ok(content.includes('font-serif text-lg leading-relaxed text-slate-800'), 'Must render clean serif passage typography');
-      assert.ok(content.includes('bg-rose-50 text-rose-900 border-b-2 border-rose-400'), 'Substitutions must have subtle red tint and underline');
-      assert.ok(content.includes('line-through text-rose-700 decoration-rose-400'), 'Omissions must have subtle strikethrough styling');
-      assert.ok(content.includes('text-amber-900 underline decoration-amber-400 decoration-wavy'), 'Mispronunciations must have wavy underline');
-      assert.ok(content.includes('bg-blue-50 text-blue-800 text-xs px-1.5 py-0.5 rounded'), 'Insertions must have subtle blue badge');
-      assert.ok(!content.includes('title={`Word #${idx + 1}'), 'Must remove native title attributes from word elements');
+  describe('4. Clean Word-Pill Passage Reader & Notion-Style Floating Action Pill', () => {
+    test('formats WordByWordReader as clean rounded word-pills matching LiveReadingCaptionViewer', () => {
+      assert.ok(content.includes('max-h-[380px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-6 shadow-inner'), 'Must render scrollable word-pill container');
+      assert.ok(content.includes('flex flex-wrap gap-1.5 items-center font-serif leading-loose select-none'), 'Must use clean word-pill flex wrap layout');
+      assert.ok(content.includes('border-rose-300 bg-rose-100 text-rose-800'), 'Substitutions must render as rose word-pills');
+      assert.ok(content.includes('border-dashed border-rose-300 bg-rose-50 text-rose-600 line-through'), 'Omissions must render as dashed rose strikethrough word-pills');
+      assert.ok(content.includes('border-amber-300 bg-amber-100 text-amber-800'), 'Mispronunciations must render as amber word-pills');
+      assert.ok(content.includes('+ Extra'), 'Insertions/extras must attach compact + Extra badge instead of scrambling inline text');
+      assert.ok(!content.includes('title={`Word #${idx + 1}'), 'Must remove numbered title attributes from word elements');
     });
 
     test('renders sleek 36px-height Notion-style floating action pill anchored above selected word', () => {
