@@ -255,6 +255,8 @@ export interface MiscueItem {
   expected: string | null;
   /** The word the reader actually spoke (null for omissions / unattempted). */
   spoken: string | null;
+  startTime?: number | null;
+  endTime?: number | null;
 }
 
 /**
@@ -276,7 +278,8 @@ export interface MiscueItem {
  */
 export function classifyMiscues(
   transcript: string,
-  passage: string
+  passage: string,
+  wordTimestamps?: Array<{ word: string; start: number; end: number }>
 ): {
   items: MiscueItem[];
   counts: Record<'mispronunciations' | 'substitutions' | 'omissions' | 'insertions' | 'repetitions' | 'reversals', number>;
@@ -298,6 +301,33 @@ export function classifyMiscues(
     hesitations: 0,
   };
   if (expected.length === 0) return empty;
+
+  // Align or expand word timestamps if needed (e.g. if raw Whisper words have punctuation or contractions)
+  let alignedTimestamps: Array<{ word: string; start: number; end: number }> | undefined = wordTimestamps;
+  if (wordTimestamps && wordTimestamps.length > 0 && wordTimestamps.length !== spoken.length) {
+    const expanded: Array<{ word: string; start: number; end: number }> = [];
+    for (const wt of wordTimestamps) {
+      const tokens = normalizeWords(wt.word);
+      if (tokens.length === 0) continue;
+      if (tokens.length === 1) {
+        expanded.push({ word: tokens[0], start: wt.start, end: wt.end });
+      } else {
+        const dur = Math.max(0, wt.end - wt.start);
+        tokens.forEach((t, idx) => {
+          const s = wt.start + (idx / tokens.length) * dur;
+          const e = wt.start + ((idx + 1) / tokens.length) * dur;
+          expanded.push({
+            word: t,
+            start: Math.round(s * 100) / 100,
+            end: Math.round(e * 100) / 100,
+          });
+        });
+      }
+    }
+    if (expanded.length === spoken.length) {
+      alignedTimestamps = expanded;
+    }
+  }
 
   // ── Consecutive duplicate runs → stutter events ──
   const runLen = new Array<number>(spoken.length).fill(1);
@@ -352,11 +382,15 @@ export function classifyMiscues(
   let i = m;
   let j = n;
   while (i > 0 || j > 0) {
+    const ts = alignedTimestamps?.[i - 1] ?? wordTimestamps?.[i - 1];
+    const startTime = ts?.start != null ? ts.start : null;
+    const endTime = ts?.end != null ? ts.end : null;
+
     if (i > 0 && j > 0 && dir[i][j] === 0) {
       const sp = spoken[i - 1];
       const ex = expected[j - 1];
       if (sp === ex) {
-        rawItems.unshift({ type: 'match', position: j - 1, expected: ex, spoken: sp });
+        rawItems.unshift({ type: 'match', position: j - 1, expected: ex, spoken: sp, startTime, endTime });
       } else {
         const dist = charLevenshtein(sp, ex);
         const near = dist <= 1 || (dist <= 2 && ex.length >= 4);
@@ -365,15 +399,17 @@ export function classifyMiscues(
           position: j - 1,
           expected: ex,
           spoken: sp,
+          startTime,
+          endTime,
         });
       }
       i--;
       j--;
     } else if (i > 0 && (j === 0 || dir[i][j] === 1)) {
-      rawItems.unshift({ type: 'insertion', position: null, expected: null, spoken: spoken[i - 1] });
+      rawItems.unshift({ type: 'insertion', position: null, expected: null, spoken: spoken[i - 1], startTime, endTime });
       i--;
     } else {
-      rawItems.unshift({ type: 'omission', position: j - 1, expected: expected[j - 1], spoken: null });
+      rawItems.unshift({ type: 'omission', position: j - 1, expected: expected[j - 1], spoken: null, startTime: null, endTime: null });
       j--;
     }
   }
@@ -393,7 +429,7 @@ export function classifyMiscues(
   for (const it of rawItems) {
     // 1. Partial/timed reading fix: do NOT count unread suffix as omissions
     if (it.type === 'omission' && it.position !== null && it.position > lastAttemptedPos) {
-      items.push({ ...it, type: 'unattempted' });
+      items.push({ ...it, type: 'unattempted', startTime: null, endTime: null });
       continue;
     }
 
@@ -429,6 +465,65 @@ export function classifyMiscues(
     ) {
       a.type = 'reversal';
       b.type = 'reversal';
+    }
+  }
+
+  // ── Interpolate timestamps for omissions using neighboring words ──
+  for (let k = 0; k < items.length; k++) {
+    if (items[k].type === 'omission') {
+      let runEnd = k;
+      while (runEnd + 1 < items.length && items[runEnd + 1].type === 'omission') {
+        runEnd++;
+      }
+      const runLength = runEnd - k + 1;
+
+      let prevEndTime: number | null = null;
+      for (let p = k - 1; p >= 0; p--) {
+        if (items[p].endTime != null) {
+          prevEndTime = items[p].endTime ?? null;
+          break;
+        } else if (items[p].startTime != null) {
+          prevEndTime = items[p].startTime ?? null;
+          break;
+        }
+      }
+
+      let nextStartTime: number | null = null;
+      for (let nIdx = runEnd + 1; nIdx < items.length; nIdx++) {
+        if (items[nIdx].startTime != null) {
+          nextStartTime = items[nIdx].startTime ?? null;
+          break;
+        } else if (items[nIdx].endTime != null) {
+          nextStartTime = items[nIdx].endTime ?? null;
+          break;
+        }
+      }
+
+      if (prevEndTime != null && nextStartTime != null) {
+        const gap = Math.max(0.1, nextStartTime - prevEndTime);
+        for (let r = 0; r < runLength; r++) {
+          const s = prevEndTime + (r / runLength) * gap;
+          const e = prevEndTime + ((r + 1) / runLength) * gap;
+          items[k + r].startTime = Math.round(s * 100) / 100;
+          items[k + r].endTime = Math.round(e * 100) / 100;
+        }
+      } else if (prevEndTime != null) {
+        for (let r = 0; r < runLength; r++) {
+          const s = prevEndTime + r * 0.3;
+          const e = prevEndTime + (r + 1) * 0.3;
+          items[k + r].startTime = Math.round(s * 100) / 100;
+          items[k + r].endTime = Math.round(e * 100) / 100;
+        }
+      } else if (nextStartTime != null) {
+        for (let r = 0; r < runLength; r++) {
+          const s = Math.max(0, nextStartTime - (runLength - r) * 0.3);
+          const e = Math.max(0, nextStartTime - (runLength - r - 1) * 0.3);
+          items[k + r].startTime = Math.round(s * 100) / 100;
+          items[k + r].endTime = Math.round(e * 100) / 100;
+        }
+      }
+
+      k = runEnd;
     }
   }
 
@@ -666,7 +761,11 @@ export function combinedReadingLevelFilipino(
 export async function transcribeGroq(
   file: File,
   passage?: string
-): Promise<{ text: string; segments: { start: number; end: number }[] }> {
+): Promise<{
+  text: string;
+  segments: { start: number; end: number }[];
+  words: Array<{ word: string; start: number; end: number }>;
+}> {
   if (!process.env.GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not configured on the server.');
   }
@@ -674,6 +773,7 @@ export async function transcribeGroq(
   groqForm.append('model', GROQ_MODEL);
   groqForm.append('response_format', 'verbose_json');
   groqForm.append('timestamp_granularities[]', 'segment');
+  groqForm.append('timestamp_granularities[]', 'word');
   groqForm.append('file', file, file.name || 'recording.webm');
   // Calibrate temperature: 0 prevents hallucinations and auto-correction of errors
   groqForm.append('temperature', '0');
@@ -706,6 +806,7 @@ export async function transcribeGroq(
   return {
     text: groqJson?.text || '',
     segments: Array.isArray(groqJson?.segments) ? groqJson.segments : [],
+    words: Array.isArray(groqJson?.words) ? groqJson.words : [],
   };
 }
 
@@ -718,6 +819,8 @@ export function computeFluencyMetrics(opts: {
   file: File | null;
   transcriptInput: string;
   segmentsInput: { start: number; end: number }[];
+  wordsInput?: Array<{ word: string; start: number; end: number }>;
+  wordTimestamps?: Array<{ word: string; start: number; end: number }>;
   passage: string;
   durationSec: number;
   miscues: Record<string, number>;
@@ -728,6 +831,7 @@ export function computeFluencyMetrics(opts: {
 
   let transcript = opts.transcriptInput;
   let segments = opts.segmentsInput;
+  let wordTimestamps = opts.wordTimestamps || opts.wordsInput || [];
   const simulation = simulate;
 
   if (simulate) {
@@ -736,13 +840,19 @@ export function computeFluencyMetrics(opts: {
     const take = Math.max(1, Math.floor(words.length * 0.98));
     transcript = words.slice(0, take).join(' ');
     segments = [];
+    const pace = (durationSec || 60) / Math.max(1, take);
+    wordTimestamps = words.slice(0, take).map((w, idx) => ({
+      word: w,
+      start: Math.round(idx * pace * 100) / 100,
+      end: Math.round(((idx + 1) * pace - 0.05) * 100) / 100,
+    }));
   } else if (file) {
     // transcript/segments populated by caller
   }
 
   // ── Miscue classification (Phil-IRI breakdown) ──
   const classified = transcript
-    ? classifyMiscues(transcript, passage)
+    ? classifyMiscues(transcript, passage, wordTimestamps)
     : {
         items: [] as MiscueItem[],
         counts: {

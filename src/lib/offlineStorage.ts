@@ -513,6 +513,7 @@ export function computeLocalPhilIriEvaluation({
   const evaluation = evaluateReadingPerformance(accuracy, null, wordsTotal, decodedForEval);
 
   // Build miscue items for the passage words so word-by-word reader is immediately clickable
+  const pace = (durationSec || 60) / wordsTotal;
   const miscueItems = words.map((w, idx) => {
     // If miscues were registered, assign miscue tags across words
     let type: "match" | "mispronunciation" | "substitution" | "omission" | "insertion" | "repetition" | "reversal" = "match";
@@ -523,11 +524,16 @@ export function computeLocalPhilIriEvaluation({
       else type = "repetition";
     }
 
+    const startTime = Math.round(idx * pace * 100) / 100;
+    const endTime = Math.round(((idx + 1) * pace - 0.05) * 100) / 100;
+
     return {
       position: idx,
       expected: w,
       spoken: type === "omission" ? null : w,
       type,
+      startTime,
+      endTime,
     };
   });
 

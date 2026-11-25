@@ -152,11 +152,13 @@ export async function POST(req: NextRequest) {
     /* ── Transcription ── */
     let transcriptInput = '';
     let segmentsInput: { start: number; end: number }[] = [];
+    let wordsInput: Array<{ word: string; start: number; end: number }> = [];
     if (!simulate && file) {
       try {
-        const { text, segments } = await transcribeGroq(file, passage);
+        const { text, segments, words } = await transcribeGroq(file, passage);
         transcriptInput = text;
         segmentsInput = segments;
+        wordsInput = words || [];
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Speech-to-text service failed.';
         const code = msg.includes('GROQ_API_KEY') ? 500 : 502;
@@ -195,6 +197,7 @@ export async function POST(req: NextRequest) {
         file,
         transcriptInput,
         segmentsInput,
+        wordsInput,
         passage,
         durationSec,
         miscues,

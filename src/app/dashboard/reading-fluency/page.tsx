@@ -68,6 +68,8 @@ export interface MiscueItem {
   position: number | null;
   expected: string | null;
   spoken: string | null;
+  startTime?: number | null;
+  endTime?: number | null;
 }
 
 export interface MiscueCounts {
@@ -385,6 +387,30 @@ function getMiscueStyle(type: MiscueItem["type"]) {
   }
 }
 
+function getPlayingStyle(type: MiscueItem["type"]) {
+  switch (type) {
+    case "match":
+      return "bg-emerald-100/90 text-emerald-950 ring-2 ring-emerald-500/50 shadow-xs font-semibold rounded-sm";
+    case "substitution":
+      return "bg-rose-200/95 text-rose-950 ring-2 ring-rose-500/70 shadow-xs font-semibold rounded-sm";
+    case "mispronunciation":
+      return "bg-amber-200/95 text-amber-950 ring-2 ring-amber-500/70 shadow-xs font-semibold rounded-sm";
+    case "omission":
+      return "bg-rose-100 text-rose-700 ring-2 ring-rose-400/60 line-through decoration-rose-500 rounded-sm";
+    case "insertion":
+    case "repetition":
+      return "bg-blue-200/95 text-blue-950 ring-2 ring-blue-500/70 shadow-xs rounded-sm font-semibold";
+    case "reversal":
+      return "bg-purple-200/95 text-purple-950 ring-2 ring-purple-500/70 shadow-xs rounded-sm font-semibold";
+    case "hesitation":
+      return "bg-purple-100/90 text-purple-900 ring-1 ring-purple-400/50 rounded-sm italic";
+    case "unattempted":
+      return "bg-slate-200/70 text-slate-500 rounded-sm";
+    default:
+      return "bg-slate-200/90 text-slate-900 ring-1 ring-slate-400 rounded-sm";
+  }
+}
+
 function recalculateCalibration(
   items: MiscueItem[],
   spokenWordsCount?: number | null,
@@ -673,8 +699,14 @@ function WordByWordReader({
 
   const jumpToWord = (idx: number, autoPlay: boolean = true) => {
     if (!audioRef.current || items.length === 0) return;
-    const audioDur = audioRef.current.duration || duration || 60;
-    const targetSec = Math.max(0, (idx / items.length) * audioDur - 0.35);
+    const item = items[idx];
+    let targetSec: number;
+    if (item && item.startTime != null && item.startTime >= 0) {
+      targetSec = Math.max(0, item.startTime - 0.15);
+    } else {
+      const audioDur = audioRef.current.duration || duration || 60;
+      targetSec = Math.max(0, (idx / items.length) * audioDur - 0.35);
+    }
     audioRef.current.currentTime = targetSec;
     setCurrentTime(targetSec);
     if (autoPlay) {
@@ -682,16 +714,53 @@ function WordByWordReader({
     }
   };
 
+  const activeItem = activeWordIdx !== null ? items[activeWordIdx] : null;
   const activeWordTimestamp =
-    activeWordIdx !== null && items.length > 0
+    activeItem && activeItem.startTime != null
+      ? activeItem.startTime
+      : activeWordIdx !== null && items.length > 0
       ? Math.max(0, (activeWordIdx / items.length) * (duration || 60) - 0.35)
       : 0;
 
-  // Real-time cursor index of word currently being spoken
-  const currentPlayingWordIdx =
-    isPlaying && duration > 0 && items.length > 0
-      ? Math.floor((currentTime / duration) * items.length)
-      : -1;
+  // Real-time cursor index of word currently being spoken using speech timestamps
+  const currentPlayingWordIdx = useMemo(() => {
+    if (!isPlaying || items.length === 0) return -1;
+
+    const hasTimestamps = items.some(
+      (it) => it.startTime != null && it.endTime != null
+    );
+
+    if (hasTimestamps) {
+      // 1. Direct window match: currentTime is within [startTime, endTime]
+      const directIdx = items.findIndex((it) => {
+        if (it.startTime == null || it.endTime == null) return false;
+        const s = it.startTime;
+        const e = Math.max(it.endTime, s + 0.15);
+        return currentTime >= s && currentTime <= e;
+      });
+      if (directIdx !== -1) return directIdx;
+
+      // 2. Gap tolerance: if currentTime is in a tiny pause right after a word,
+      // keep that word active for up to 0.25s before moving to idle/next word
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (it.startTime != null && currentTime >= it.startTime) {
+          const e = it.endTime != null ? it.endTime : it.startTime + 0.25;
+          if (currentTime <= e + 0.25) {
+            return i;
+          }
+          break;
+        }
+      }
+      return -1;
+    }
+
+    // Fallback: flat linear proportion if speech timestamps are absent
+    if (duration > 0) {
+      return Math.floor((currentTime / duration) * items.length);
+    }
+    return -1;
+  }, [isPlaying, currentTime, duration, items]);
 
   return (
     <div className="space-y-3.5">
@@ -739,9 +808,12 @@ function WordByWordReader({
             const style = getMiscueStyle(item.type);
             const isSelected = activeWordIdx === idx;
             const isCurrentlyPlaying = currentPlayingWordIdx === idx;
-            const wordEstimatedSec = items.length > 0
-              ? Math.max(0, (idx / items.length) * (duration || 60) - 0.35)
-              : 0;
+            const wordEstimatedSec =
+              item.startTime != null
+                ? item.startTime
+                : items.length > 0
+                ? Math.max(0, (idx / items.length) * (duration || 60) - 0.35)
+                : 0;
 
             return (
               <span
@@ -756,12 +828,65 @@ function WordByWordReader({
                 }}
                 className={`relative inline-flex items-center transition-all ${
                   readOnly ? "cursor-default" : "cursor-pointer"
-                } ${style.bg} ${
-                  isSelected ? "ring-2 ring-slate-900/40 rounded-sm z-30" : ""
                 } ${
-                  isCurrentlyPlaying ? "bg-emerald-100/80 text-emerald-900 rounded-sm" : ""
+                  isCurrentlyPlaying ? getPlayingStyle(item.type) : style.bg
+                } ${
+                  isSelected ? "ring-2 ring-slate-900/40 rounded-sm z-30" : ""
                 }`}
               >
+                <span>{item.expected || item.spoken}</span>
+
+                {/* ── Real-Time Active Playback Miscue Indicator Tooltip ── */}
+                {isCurrentlyPlaying && item.type !== "match" && !isSelected && (
+                  <span
+                    aria-live="polite"
+                    className="absolute -top-7 left-1/2 -translate-x-1/2 z-40 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold shadow-md whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-slate-900 text-white animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    {item.type === "substitution" && (
+                      <>
+                        <span className="text-rose-400 font-bold">Sub:</span>
+                        <span className="text-rose-200">"{item.spoken}"</span>
+                        {item.expected && (
+                          <span className="text-slate-400 font-normal">→ exp: "{item.expected}"</span>
+                        )}
+                      </>
+                    )}
+                    {item.type === "mispronunciation" && (
+                      <>
+                        <span className="text-amber-400 font-bold">Mispron:</span>
+                        <span className="text-amber-200">"{item.spoken}"</span>
+                        {item.expected && (
+                          <span className="text-slate-400 font-normal">→ exp: "{item.expected}"</span>
+                        )}
+                      </>
+                    )}
+                    {item.type === "omission" && (
+                      <>
+                        <span className="text-rose-400 font-bold">✕ Omitted</span>
+                        {item.expected && (
+                          <span className="text-slate-300 font-normal">("{item.expected}")</span>
+                        )}
+                      </>
+                    )}
+                    {(item.type === "insertion" || item.type === "repetition") && (
+                      <>
+                        <span className="text-blue-400 font-bold">
+                          {item.type === "repetition" ? "Repeat:" : "Extra:"}
+                        </span>
+                        <span className="text-blue-200">"{item.spoken}"</span>
+                      </>
+                    )}
+                    {item.type === "reversal" && (
+                      <>
+                        <span className="text-purple-400 font-bold">⇄ Reversal:</span>
+                        <span className="text-purple-200">"{item.spoken}"</span>
+                      </>
+                    )}
+                    {item.type === "hesitation" && (
+                      <span className="text-purple-300 font-medium">Hesitation ("{item.spoken}")</span>
+                    )}
+                  </span>
+                )}
                 <span>{item.expected || item.spoken}</span>
 
                 {/* ── Sleek Notion-Style Floating Action Pill ── */}
