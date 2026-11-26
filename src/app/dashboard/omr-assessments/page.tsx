@@ -1907,6 +1907,7 @@ function AssignOnlineModal({
 const PrintAry = ["A", "B", "C", "D"];
 
 interface GeneratedQuestion {
+  id?: string;
   number: number;
   prompt: string;
   choices: string[];
@@ -1918,6 +1919,10 @@ interface GeneratedQuestion {
   correctAnswer?: string;
   domain?: string;
   cognitiveDomain?: string;
+  passageTitle?: string;
+  passageText?: string;
+  passageImage?: string;
+  partNumber?: string;
 }
 
 function getQuestionDomain(q: GeneratedQuestion): string | null {
@@ -3001,14 +3006,24 @@ function sanitizeDoc(d: any): GeneratedDoc {
       isFilipinoReading ||
       (d.title && /phil-?iri|reading|gst/i.test(d.title)));
 
-  let finalSections = hasPrestructuredSections ? d.sections : sections;
-  if (is4PartReadingDoc && (!finalSections || finalSections.length <= 1)) {
-    finalSections = isFilipinoReading
+  const hasValidAlignedSections =
+    Array.isArray(d.sections) &&
+    d.sections.length > 0 &&
+    d.sections.every((s: any) => Number(s?.startItem) >= 1 && Number(s?.endItem) >= Number(s?.startItem));
+
+  const finalSections =
+    hasPrestructuredSections || hasValidAlignedSections ? d.sections : sections;
+  let resolvedSections = finalSections;
+  if (is4PartReadingDoc && (!resolvedSections || resolvedSections.length <= 1)) {
+    resolvedSections = isFilipinoReading
       ? buildPhilIriFilipinoSections(d.gradeLevel || (d as any).grade || 7)
       : buildPhilIriSections(d.gradeLevel || (d as any).grade || 7);
   }
 
-  const finalQuestions = hasPrestructuredSections || is4PartReadingDoc
+  const preserveQuestionOrder =
+    hasPrestructuredSections || is4PartReadingDoc || (hasValidAlignedSections && Boolean(d.answerKey?.id));
+
+  const finalQuestions = preserveQuestionOrder
     ? rawQuestions.map((q: any, idx: number) => {
         const num = q.number || idx + 1;
         let partNum = q.partNumber;
@@ -3029,7 +3044,7 @@ function sanitizeDoc(d: any): GeneratedDoc {
   return {
     ...d,
     questions: finalQuestions,
-    sections: finalSections,
+    sections: resolvedSections,
     answers: finalQuestions.map((q: any, i: number) => {
       const a = q.correctAnswer || q.correctKey || q.letter || d.answers?.[i] || d.answerLetters?.[i];
       return typeof a === "string" ? a.toUpperCase().trim().slice(0, 1) : "A";
@@ -3490,6 +3505,10 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
                   ...newQ,
                   number: itemNumber,
                   id: `q${itemNumber}`,
+                  ...(q.passageTitle ? { passageTitle: q.passageTitle } : {}),
+                  ...(q.passageText ? { passageText: q.passageText } : {}),
+                  ...(q.passageImage ? { passageImage: q.passageImage } : {}),
+                  ...(q.partNumber ? { partNumber: q.partNumber } : {}),
                 }
               : q
           );
@@ -3500,8 +3519,19 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
             ...prev,
             questions: updatedQuestions,
             answers: updatedAnswers,
+            answerKey: prev.answerKey
+              ? {
+                  ...prev.answerKey,
+                  items: updatedQuestions.length,
+                  sections: prev.sections,
+                  passageImage: prev.passageImage,
+                }
+              : prev.answerKey,
           };
         });
+        if (!doc.answerKey?.id) {
+          setIsSaved(false);
+        }
 
         setSwapToast({
           ok: true,
@@ -3669,9 +3699,55 @@ function GenerateTab({ assignedSubjectProp = "All" }: { assignedSubjectProp?: st
   const [onlineModalExam, setOnlineModalExam] = useState<any | null>(null);
   const isOnlineActive = Boolean(doc?.answerKey?.isOnline);
 
+  const syncDocToAnswerKey = async (currentDoc: GeneratedDoc) => {
+    if (!currentDoc.answerKey?.id) return currentDoc.answerKey;
+    const mappedQuestions = currentDoc.questions.map((q: any, idx: number) => ({
+      ...q,
+      number: q.number || idx + 1,
+    }));
+    const res = await fetch(`/api/teacher/answer-keys/${currentDoc.answerKey.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: currentDoc.title,
+        answers: currentDoc.answers,
+        questions: mappedQuestions,
+        sections: currentDoc.sections || [],
+        passageTitle: currentDoc.passageTitle || "",
+        passageText: currentDoc.passageText || "",
+        passageImage: currentDoc.passageImage || "",
+      }),
+    });
+    const json = await parseJsonResponse(res).catch(() => null);
+    if (res.ok && json?.success && json.data) {
+      return {
+        ...currentDoc.answerKey,
+        title: json.data.title ?? currentDoc.title,
+        sections: json.data.sections ?? currentDoc.sections,
+        passageImage: json.data.passageImage ?? currentDoc.passageImage,
+        isOnline: json.data.isOnline ?? currentDoc.answerKey.isOnline,
+        timeLimitMinutes: json.data.timeLimitMinutes ?? currentDoc.answerKey.timeLimitMinutes,
+        dueDate: json.data.dueDate ?? currentDoc.answerKey.dueDate,
+        targetGrade: json.data.targetGrade ?? currentDoc.answerKey.targetGrade,
+        targetSection: json.data.targetSection ?? currentDoc.answerKey.targetSection,
+      };
+    }
+    return currentDoc.answerKey;
+  };
+
   const handleOpenOnlineModal = async () => {
     if (!doc) return;
     if (doc.answerKey?.id) {
+      try {
+        const syncedKey = await syncDocToAnswerKey(doc);
+        if (syncedKey) {
+          setDoc((prev) => (prev ? { ...prev, answerKey: syncedKey } : prev));
+          setOnlineModalExam(syncedKey);
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to sync questionnaire before opening CBT modal", err);
+      }
       setOnlineModalExam(doc.answerKey);
       return;
     }

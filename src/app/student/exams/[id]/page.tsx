@@ -28,6 +28,10 @@ interface QuestionItem {
   choices: string[];
   mode?: "mc" | "written";
   topic?: string;
+  passageTitle?: string;
+  passageText?: string;
+  passageImage?: string;
+  referenceType?: string;
 }
 
 interface ExamData {
@@ -41,6 +45,7 @@ interface ExamData {
   dueDate: string | null;
   passageTitle: string;
   passageText: string;
+  passageImage?: string;
   sections: any[];
   questions: QuestionItem[];
   totalItems: number;
@@ -85,6 +90,22 @@ export default function StudentExamPlayerPage({
   const [showPassageMobile, setShowPassageMobile] = useState(true);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const passageCardRef = useRef<HTMLDivElement | null>(null);
+
+  const activeQForEffect = exam?.questions?.[currentIndex];
+  const activeNumForEffect = activeQForEffect?.number || currentIndex + 1;
+  const activeSecForEffect = exam?.sections?.find(
+    (s: any) =>
+      activeNumForEffect >= Number(s?.startItem) &&
+      activeNumForEffect <= Number(s?.endItem)
+  );
+  const activeSectionKey = `${activeSecForEffect?.title || activeSecForEffect?.partNumber || ""}|${
+    activeSecForEffect?.passageTitle || activeQForEffect?.passageTitle || exam?.passageTitle || ""
+  }`;
+
+  useEffect(() => {
+    passageCardRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeSectionKey]);
 
   // Load Exam
   useEffect(() => {
@@ -415,6 +436,22 @@ export default function StudentExamPlayerPage({
   if (!exam) return null;
 
   const currentQ = exam.questions[currentIndex] || exam.questions[0];
+  const currentNum = currentQ?.number || currentIndex + 1;
+  const activeSection = (exam.sections || []).find(
+    (s: any) => currentNum >= Number(s?.startItem) && currentNum <= Number(s?.endItem)
+  );
+  const activePassageTitle =
+    activeSection?.passageTitle || currentQ?.passageTitle || exam.passageTitle || "";
+  const activePassageText =
+    activeSection?.passageText || currentQ?.passageText || exam.passageText || "";
+  const activePassageImage =
+    activeSection?.passageImage || currentQ?.passageImage || exam.passageImage || "";
+  const activeInstructions = activeSection?.instructions || "";
+  const activeSectionLabel =
+    activeSection?.title ||
+    (activeSection?.partNumber ? `Part ${activeSection.partNumber}` : "");
+  const hasPassageContext = Boolean(activePassageText || activePassageImage);
+
   const answeredCount = Object.keys(studentAnswers).filter((k) => studentAnswers[Number(k)]).length;
   const progressPct = Math.round((answeredCount / exam.totalItems) * 100);
   const isTimeCritical = secondsRemaining !== null && secondsRemaining <= 300; // Under 5 minutes
@@ -473,40 +510,59 @@ export default function StudentExamPlayerPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column: Reading Passage (if available) */}
-        {exam.passageText && (
-          <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs lg:sticky lg:top-24 max-h-[75vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-                <BookOpen className="h-4 w-4 text-rose-700" />
-                <span>Reading Passage</span>
+        {/* Left Column: Active Reading Passage / Poem / Infographic (for current item) */}
+        {hasPassageContext && (
+          <div
+            ref={passageCardRef}
+            className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs lg:sticky lg:top-24 max-h-[75vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200"
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs min-w-0">
+                <BookOpen className="h-4 w-4 text-rose-700 shrink-0" />
+                <span className="truncate">{activeSectionLabel || "Reading Passage"}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPassageMobile((v) => !v)}
-                className="lg:hidden text-[11px] font-semibold text-blue-600"
+                className="lg:hidden shrink-0 text-[11px] font-semibold text-blue-600"
               >
                 {showPassageMobile ? "Collapse" : "Expand"}
               </button>
             </div>
 
             {showPassageMobile && (
-              <div>
-                {exam.passageTitle && (
-                  <h3 className="text-sm font-bold text-slate-900 mb-2 border-b border-slate-100 pb-1">
-                    {exam.passageTitle}
+              <div className="space-y-3">
+                {activeInstructions && (
+                  <p className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-900 leading-relaxed">
+                    {activeInstructions}
+                  </p>
+                )}
+                {activePassageTitle && (
+                  <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-1.5">
+                    {activePassageTitle}
                   </h3>
                 )}
-                <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line font-serif">
-                  {exam.passageText}
-                </div>
+                {activePassageImage && (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <img
+                      src={activePassageImage}
+                      alt={activePassageTitle || "Reading Reference Infographic"}
+                      className="max-h-[340px] w-full object-contain mx-auto rounded-lg"
+                    />
+                  </div>
+                )}
+                {activePassageText && (
+                  <div className="text-xs sm:text-[13px] text-slate-700 leading-relaxed whitespace-pre-line font-serif">
+                    {activePassageText}
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
         {/* Right Column: Question & Choices */}
-        <div className={exam.passageText ? "lg:col-span-7 space-y-4" : "lg:col-span-12 max-w-3xl mx-auto space-y-4"}>
+        <div className={hasPassageContext ? "lg:col-span-7 space-y-4" : "lg:col-span-12 max-w-3xl mx-auto space-y-4"}>
           {/* Question Bubbles Quick Navigator */}
           <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
             <div className="flex items-center justify-between mb-2">

@@ -4,6 +4,10 @@ import connectDB from '../../../../../../database/db';
 import AnswerKey from '../../../../../../models/AnswerKey';
 import Assessment from '../../../../../../models/Assessment';
 import LearnerRecord from '../../../../../../models/LearnerRecord';
+import {
+  buildPhilIriSections,
+  buildPhilIriFilipinoSections,
+} from '@/lib/questionnaireSections';
 
 export async function GET(
   req: NextRequest,
@@ -76,14 +80,41 @@ export async function GET(
     }
 
     // 4. Sanitize questions for the test-taker (STRIP CORRECT ANSWERS)
-    const rawQuestions: any[] = Array.isArray(key.questions) ? key.questions : [];
+    const rawQuestions: any[] = Array.isArray(key.questions) ? [...key.questions] : [];
+    rawQuestions.sort((a, b) => {
+      const na = Number(a?.number);
+      const nb = Number(b?.number);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return 0;
+    });
+
     const rawAnswers = Array.isArray(key.answers) ? key.answers : (key.answerLetters || []);
     const totalCount = rawQuestions.length || rawAnswers.length || key.items || 0;
+
+    let sections: any[] = Array.isArray(key.sections) ? key.sections : [];
+    const subjectStr = String(key.subject || '');
+    const titleStr = String(key.title || '');
+    const isFilipinoReading =
+      subjectStr === 'Filipino' || Boolean(titleStr && /filipino|sipi|pangkatang/i.test(titleStr));
+    const is4PartReadingDoc =
+      totalCount === 40 &&
+      (subjectStr.toLowerCase().includes('read') ||
+        isFilipinoReading ||
+        /phil-?iri|reading|gst|pre-?test|post-?test/i.test(titleStr));
+
+    if (is4PartReadingDoc && sections.length <= 1) {
+      sections = isFilipinoReading
+        ? buildPhilIriFilipinoSections(key.targetGrade || 7)
+        : buildPhilIriSections(key.targetGrade || 7);
+    }
 
     const sanitizedQuestions = [];
     for (let i = 0; i < totalCount; i++) {
       const q = rawQuestions[i] || {};
-      const num = q.number || i + 1;
+      const num = Number(q.number) || i + 1;
+      const matchedSec = sections.find(
+        (s: any) => num >= Number(s?.startItem) && num <= Number(s?.endItem)
+      );
       const prompt = q.prompt || q.question || `Question ${num}`;
       const choices = Array.isArray(q.choices) && q.choices.length > 0 ? q.choices : [];
       const mode = q.mode || key.modes?.[i] || 'mc';
@@ -93,7 +124,11 @@ export async function GET(
         prompt,
         choices,
         mode,
-        topic: q.topic || key.topic || '',
+        topic: q.topic || matchedSec?.topic || key.topic || '',
+        passageTitle: q.passageTitle || matchedSec?.passageTitle || key.passageTitle || '',
+        passageText: q.passageText || matchedSec?.passageText || key.passageText || '',
+        passageImage: q.passageImage || matchedSec?.passageImage || key.passageImage || '',
+        referenceType: q.referenceType || matchedSec?.referenceType || '',
       });
     }
 
@@ -111,7 +146,8 @@ export async function GET(
         dueDate: key.dueDate || null,
         passageTitle: key.passageTitle || '',
         passageText: key.passageText || '',
-        sections: key.sections || [],
+        passageImage: key.passageImage || '',
+        sections,
         questions: sanitizedQuestions,
         totalItems: sanitizedQuestions.length,
       },

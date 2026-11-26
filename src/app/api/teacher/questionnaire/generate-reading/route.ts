@@ -38,6 +38,98 @@ export {
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 const LETTERS = ['A', 'B', 'C', 'D'];
 
+function doesRecordMatchSelection(
+  record: { passageTitle?: string; topic?: string; title?: string },
+  refTitle: string,
+  letter: string
+): boolean {
+  const haystack = `${record?.passageTitle || ''} ${record?.topic || ''} ${record?.title || ''}`
+    .toLowerCase()
+    .trim();
+  if (!haystack) return false;
+  const cleanRef = (refTitle || '').toLowerCase().trim();
+  const l = letter.toLowerCase();
+  if (cleanRef && (haystack.includes(cleanRef) || cleanRef.includes(haystack))) {
+    return true;
+  }
+  return (
+    haystack.includes(`selection ${l}`) ||
+    haystack.includes(`selection-${l}`) ||
+    haystack.includes(`sipi ${l}`) ||
+    haystack.includes(`sipi-${l}`) ||
+    haystack.includes(`part ${['i', 'ii', 'iii', 'iv'][LETTERS.indexOf(letter)] || l}`)
+  );
+}
+
+function selectQuestionsPerSelectionOrder(opts: {
+  questionPool: any[];
+  selectedIndices: number[];
+  gradeRefs: Record<string, any>;
+  existingPassages?: any[];
+  perSelectionCount?: number;
+  shuffleWithinSelection?: boolean;
+}) {
+  const {
+    questionPool,
+    selectedIndices,
+    gradeRefs,
+    existingPassages = [],
+    perSelectionCount = 10,
+    shuffleWithinSelection = false,
+  } = opts;
+
+  const usedIds = new Set<string>();
+  const finalQuestions: any[] = [];
+  const finalPassages: any[] = [];
+
+  selectedIndices.forEach((sIdx, posIdx) => {
+    const letter = LETTERS[sIdx] || 'A';
+    const refKey = `selection-${letter.toLowerCase()}`;
+    const ref = gradeRefs[refKey] || gradeRefs['selection-a'];
+    const refTitle = ref?.passageTitle || '';
+
+    const matchedPassage =
+      existingPassages.find((p) => doesRecordMatchSelection(p, refTitle, letter)) ||
+      existingPassages[sIdx] ||
+      (ref ? { title: ref.passageTitle, text: ref.passageText } : null);
+
+    if (matchedPassage) {
+      finalPassages.push(matchedPassage);
+    }
+
+    const candidates = questionPool.filter((q, qIdx) => {
+      const uid = String(q?._id || `${qIdx}:${q?.prompt || ''}`);
+      if (usedIds.has(uid)) return false;
+      return doesRecordMatchSelection(
+        { passageTitle: q?.passageTitle, topic: q?.topic },
+        matchedPassage?.title || refTitle,
+        letter
+      );
+    });
+
+    candidates.sort((a, b) => (Number(a?.number) || 0) - (Number(b?.number) || 0));
+    const orderedCandidates = shuffleWithinSelection ? shuffle(candidates) : candidates;
+    let chosen = orderedCandidates.slice(0, perSelectionCount);
+
+    // Fallback positional slice only when metadata labels are absent in legacy DB records
+    if (chosen.length === 0 && questionPool.length >= (sIdx + 1) * perSelectionCount) {
+      chosen = questionPool.slice(sIdx * perSelectionCount, (sIdx + 1) * perSelectionCount);
+    }
+
+    chosen.forEach((q, qIdx) => {
+      const uid = String(q?._id || `${posIdx}-${qIdx}:${q?.prompt || ''}`);
+      usedIds.add(uid);
+      finalQuestions.push({
+        ...q,
+        passageTitle: q?.passageTitle || matchedPassage?.title || refTitle,
+        passageText: q?.passageText || matchedPassage?.text || ref?.passageText || '',
+      });
+    });
+  });
+
+  return { finalQuestions, finalPassages };
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -400,28 +492,21 @@ export async function POST(req: NextRequest) {
       let finalQuestions: any[] = [];
 
       if ((existingQuestions.length >= targetCount || (requestedLetter && existingQuestions.length >= 10)) && existingPassages.length > 0) {
-        // Reuse cached database questions and passages for instant 0-token reuse
-        if (selectedIndices.length < 4 && existingQuestions.length >= 40) {
-          finalQuestions = [];
-          finalPassages = [];
-          for (const sIdx of selectedIndices) {
-            finalQuestions.push(...existingQuestions.slice(sIdx * 10, (sIdx + 1) * 10));
-            if (existingPassages[sIdx]) {
-              finalPassages.push(existingPassages[sIdx]);
-            } else {
-              const ref = gradeRefs[`selection-${LETTERS[sIdx].toLowerCase()}`];
-              finalPassages.push({ title: ref.passageTitle, text: ref.passageText });
-            }
-          }
-        } else if (requestedLetter) {
-          const sliceIdx = requestedLetter === 'B' ? 1 : requestedLetter === 'C' ? 2 : requestedLetter === 'D' ? 3 : 0;
-          if (existingQuestions.length >= 40) {
-            finalQuestions = existingQuestions.slice(sliceIdx * 10, (sliceIdx + 1) * 10);
-          } else {
-            finalQuestions = existingQuestions.slice(0, 10);
-          }
-          finalPassages = existingPassages[sliceIdx] ? [existingPassages[sliceIdx]] : existingPassages;
-        } else {
+        // Reuse cached database questions and passages ordered strictly by selection (A -> B -> C -> D)
+        const indicesToUse = requestedLetter
+          ? [Math.max(0, LETTERS.indexOf(requestedLetter))]
+          : selectedIndices;
+        const ordered = selectQuestionsPerSelectionOrder({
+          questionPool: existingQuestions,
+          selectedIndices: indicesToUse,
+          gradeRefs,
+          existingPassages,
+          perSelectionCount: 10,
+        });
+        finalPassages = ordered.finalPassages;
+        finalQuestions = ordered.finalQuestions.slice(0, targetCount);
+
+        if (finalQuestions.length === 0) {
           finalPassages = existingPassages;
           finalQuestions = existingQuestions.slice(0, targetCount);
         }
@@ -1004,7 +1089,29 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'No reading questions found in curriculum bank.' }, { status: 404 });
       }
 
-      selectedQuestions = shuffle(allQuestions).slice(0, targetCount);
+      const isMultiSectionBank =
+        (targetCount === 40 || selectedIndices.length > 1) &&
+        (assessmentType === 'pre-test' || assessmentType === 'post-test' || selectedIndices.length === 4);
+
+      if (isMultiSectionBank) {
+        const gradePool = allQuestions.filter((q: any) => q?.gradeLevel === gradeLevel);
+        const bankPool = gradePool.length >= targetCount ? gradePool : allQuestions;
+        const ordered = selectQuestionsPerSelectionOrder({
+          questionPool: bankPool,
+          selectedIndices,
+          gradeRefs,
+          perSelectionCount: 10,
+          shuffleWithinSelection: true,
+        });
+        selectedQuestions = ordered.finalQuestions;
+        if (selectedQuestions.length < targetCount) {
+          const usedPrompts = new Set(selectedQuestions.map((q) => q.prompt));
+          const remainder = shuffle(bankPool).filter((q) => !usedPrompts.has(q.prompt));
+          selectedQuestions = [...selectedQuestions, ...remainder].slice(0, targetCount);
+        }
+      } else {
+        selectedQuestions = shuffle(allQuestions).slice(0, targetCount);
+      }
     }
 
     const itemCount = selectedQuestions.length;
