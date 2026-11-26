@@ -7,6 +7,7 @@ import { parseJsonResponse } from "@/lib/safeFetch";
 import { useLiveCaption } from "@/hooks/useLiveCaption";
 import LiveReadingCaptionViewer from "@/components/LiveReadingCaptionViewer";
 import { classifyMiscues } from "@/lib/reading";
+import { convertAudioBlobToNormalizedWav } from "@/lib/audioWav";
 import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 import {
   getCachedPassages,
@@ -241,12 +242,12 @@ export default function ReadingFluencyPage() {
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      // 1. Hardware/Driver-level WebRTC acoustic constraints
+      // 1. Hardware/Driver-level acoustic constraints (noiseSuppression disabled so WebRTC doesn't double-gate quiet syllables)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: noiseCancellation,
-          echoCancellation: noiseCancellation,
-          autoGainControl: true,
+          noiseSuppression: false,
+          echoCancellation: false,
+          autoGainControl: false,
           channelCount: 1,
           sampleRate: 44100,
           suppressLocalAudioPlayback: true,
@@ -255,7 +256,7 @@ export default function ReadingFluencyPage() {
 
       let recordingStream = stream;
 
-      // 2. Web Audio API Real-Time DSP Filter Chain (filters fan hum, desk rumble, electrical hiss)
+      // 2. Web Audio lightweight 85 Hz high-pass filter (when noiseCancellation enabled; no compressor ducking)
       if (noiseCancellation) {
         try {
           const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -269,24 +270,9 @@ export default function ReadingFluencyPage() {
             highPass.type = "highpass";
             highPass.frequency.value = 85;
 
-            // Low-pass filter (8000 Hz): Cuts high-frequency electrical hiss & coil whine
-            const lowPass = ctx.createBiquadFilter();
-            lowPass.type = "lowpass";
-            lowPass.frequency.value = 8000;
-
-            // Vocal Dynamics Compressor: Stabilizes reading loudness & suppresses sudden ambient bursts
-            const compressor = ctx.createDynamicsCompressor();
-            compressor.threshold.value = -24;
-            compressor.knee.value = 30;
-            compressor.ratio.value = 12;
-            compressor.attack.value = 0.003;
-            compressor.release.value = 0.25;
-
             const dest = ctx.createMediaStreamDestination();
             source.connect(highPass);
-            highPass.connect(lowPass);
-            lowPass.connect(compressor);
-            compressor.connect(dest);
+            highPass.connect(dest);
 
             recordingStream = dest.stream;
           }
@@ -426,7 +412,10 @@ export default function ReadingFluencyPage() {
 
     try {
       const fd = new FormData();
-      if (audioBlob) fd.append("file", audioBlob, "recording.webm");
+      if (audioBlob) {
+        const uploadFile = await convertAudioBlobToNormalizedWav(audioBlob);
+        fd.append("file", uploadFile, uploadFile.name);
+      }
       fd.append("passage", passageText);
       fd.append("passageTitle", passageTitle || "Oral Reading Passage");
       fd.append("durationSec", String(Math.max(recTime, 1)));

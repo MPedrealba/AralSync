@@ -33,8 +33,8 @@ describe('Oral Reading Audio Playback Sync & Real-Time Miscue Visual Indicators'
         'transcribeGroq return type must declare words array'
       );
       assert.ok(
-        readingSource.includes("words: Array.isArray(groqJson?.words) ? groqJson.words : []"),
-        'transcribeGroq must extract and return groqJson.words'
+        readingSource.includes("Array.isArray(groqJson?.words) ? groqJson.words : []"),
+        'transcribeGroq must extract groqJson.words cleanly and backfill missing words from segments'
       );
     });
 
@@ -51,16 +51,16 @@ describe('Oral Reading Audio Playback Sync & Real-Time Miscue Visual Indicators'
 
     test('Teacher and Student analyze routes extract words and forward wordsInput to computeFluencyMetrics', () => {
       assert.ok(
-        teacherRouteSource.includes('const { text, segments, words } = await transcribeGroq(file, passage);'),
-        'Teacher route must extract words from transcribeGroq'
+        teacherRouteSource.includes('const { text, segments, words } = await transcribeGroq(file, passage, durationSec);'),
+        'Teacher route must extract words and forward durationSec to transcribeGroq'
       );
       assert.ok(
         teacherRouteSource.includes('wordsInput,'),
         'Teacher route must pass wordsInput to computeFluencyMetrics'
       );
       assert.ok(
-        studentRouteSource.includes('const { text, segments, words } = await transcribeGroq(file, passage);'),
-        'Student route must extract words from transcribeGroq'
+        studentRouteSource.includes('const { text, segments, words } = await transcribeGroq(file, passage, durationSec);'),
+        'Student route must extract words and forward durationSec to transcribeGroq'
       );
       assert.ok(
         studentRouteSource.includes('wordsInput,'),

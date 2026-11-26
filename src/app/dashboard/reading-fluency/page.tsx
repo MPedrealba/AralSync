@@ -48,6 +48,7 @@ import {
   cleanPassageText,
   type CompQuestion,
 } from "@/lib/reading";
+import { convertAudioBlobToNormalizedWav } from "@/lib/audioWav";
 
 const tabs = ["New Session", "Result History"] as const;
 type Tab = (typeof tabs)[number];
@@ -971,10 +972,10 @@ function WordByWordReader({
   const currentPlayingWordIdx = useMemo(() => {
     if (!isPlaying || items.length === 0) return -1;
 
-    // Collect all items with valid startTime
+    // Collect all spoken items with valid startTime (exclude interpolated omissions/unattempted)
     const timedItemsWithIdx: { item: MiscueItem; idx: number }[] = [];
     items.forEach((it, idx) => {
-      if (it.startTime != null && Number.isFinite(it.startTime)) {
+      if (it.type !== "omission" && it.type !== "unattempted" && it.startTime != null && Number.isFinite(it.startTime)) {
         timedItemsWithIdx.push({ item: it, idx });
       }
     });
@@ -1753,10 +1754,10 @@ function NewSessionTab({
     setAudioUrl(null);
     setAudioBlob(null);
     try {
-      // 1. Hardware/Driver-level acoustic constraints calibrated for clean oral reading capture
+      // 1. Hardware/Driver-level acoustic constraints (noiseSuppression disabled so WebRTC doesn't double-gate quiet syllables)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: noiseCancellation,
+          noiseSuppression: false,
           echoCancellation: false,
           autoGainControl: false,
           channelCount: 1,
@@ -1766,7 +1767,7 @@ function NewSessionTab({
 
       let recordingStream = stream;
 
-      // 2. Web Audio DSP Filter Chain (when noiseCancellation enabled)
+      // 2. Web Audio lightweight 85 Hz high-pass filter (when noiseCancellation enabled; no compressor ducking)
       if (noiseCancellation) {
         try {
           const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -1778,28 +1779,14 @@ function NewSessionTab({
             audioContextRef.current = ctx;
             const source = ctx.createMediaStreamSource(stream);
 
-            // High-pass filter (70 Hz): Cuts low rumble and desk bumps
+            // High-pass filter (85 Hz): Cuts low rumble and desk bumps without ducking quiet speech
             const highPass = ctx.createBiquadFilter();
             highPass.type = "highpass";
-            highPass.frequency.value = 70;
-
-            // Gentle vocal dynamics compressor
-            const compressor = ctx.createDynamicsCompressor();
-            compressor.threshold.value = -20;
-            compressor.knee.value = 20;
-            compressor.ratio.value = 3;
-            compressor.attack.value = 0.005;
-            compressor.release.value = 0.15;
-
-            // Post-compressor makeup gain
-            const makeupGain = ctx.createGain();
-            makeupGain.gain.value = 1.5;
+            highPass.frequency.value = 85;
 
             const dest = ctx.createMediaStreamDestination();
             source.connect(highPass);
-            highPass.connect(compressor);
-            compressor.connect(makeupGain);
-            makeupGain.connect(dest);
+            highPass.connect(dest);
 
             recordingStream = dest.stream;
           }
@@ -1848,7 +1835,7 @@ function NewSessionTab({
           audioContextRef.current = null;
         }
       };
-      mr.start(250);
+      mr.start(1000);
       mediaRecorderRef.current = mr;
     } catch {
       setError(
@@ -1948,7 +1935,10 @@ function NewSessionTab({
 
     try {
       const fd = new FormData();
-      if (audioBlob) fd.append("file", audioBlob, "recording.webm");
+      if (audioBlob) {
+        const uploadFile = await convertAudioBlobToNormalizedWav(audioBlob);
+        fd.append("file", uploadFile, uploadFile.name);
+      }
       fd.append("studentId", studentId);
       fd.append("passage", cleanPassage);
       fd.append("passageTitle", passageTitle || "Oral Reading Passage");

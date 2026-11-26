@@ -184,9 +184,11 @@ describe("Oral Reading Workflow Improvements", () => {
       assert.ok(studentPage.includes("sampleRate: 44100"));
       assert.ok(studentPage.includes("suppressLocalAudioPlayback: true"));
 
-      // Verify BiquadFilter high-pass (70Hz on teacherPage, 85Hz on studentPage)
-      assert.ok(teacherPage.includes("highPass.frequency.value = 70"));
+      // Verify BiquadFilter high-pass (85Hz on both teacherPage and studentPage without compressor ducking)
+      assert.ok(teacherPage.includes("highPass.frequency.value = 85"));
       assert.ok(studentPage.includes("highPass.frequency.value = 85"));
+      assert.ok(!teacherPage.includes("createDynamicsCompressor"));
+      assert.ok(!studentPage.includes("createDynamicsCompressor"));
     });
   });
 });

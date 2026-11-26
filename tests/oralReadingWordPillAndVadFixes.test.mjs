@@ -152,10 +152,10 @@ describe('Part 1 & Part 2: Oral Reading Word-Pill UI, 1-to-1 Passage Preservatio
   });
 
   describe('Part 2: Clean Audio Capture, Gentle Vocal Filter Chain & Token Alignment', () => {
-    test('removes AnalyserNode VAD gating from NewSessionTab for clean audio capture and verifies gentle vocal filter chain', () => {
-      assert.ok(pageSrc.includes('highPass.frequency.value = 70'), 'Must configure clean highPass at 70Hz');
-      assert.ok(pageSrc.includes('compressor.threshold.value = -20'), 'Must configure gentle compressor at -20dB');
-      assert.ok(pageSrc.includes('makeupGain.gain.value = 1.5'), 'Must configure post-compressor makeup gain at 1.5x');
+    test('removes AnalyserNode VAD and DynamicsCompressor gating from NewSessionTab, keeping lightweight 85Hz highPass', () => {
+      assert.ok(pageSrc.includes('noiseSuppression: false'), 'Must disable WebRTC noiseSuppression to avoid double-gating');
+      assert.ok(pageSrc.includes('highPass.frequency.value = 85'), 'Must configure lightweight highPass at 85Hz');
+      assert.ok(!pageSrc.includes('createDynamicsCompressor'), 'Must remove DynamicsCompressor ducking from capture chain');
     });
 
     test('useLiveCaption keeps isVoiceActive optional, preserves transcripts across restarts, gates confidence < 0.45, and clamps velocity cleanly', () => {

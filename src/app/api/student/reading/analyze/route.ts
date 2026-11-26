@@ -12,6 +12,8 @@ import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics } from '@/lib/philIriSync';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
+export const maxDuration = 60;
+
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
 /**
@@ -144,7 +146,7 @@ export async function POST(req: NextRequest) {
     let wordsInput: Array<{ word: string; start: number; end: number }> = [];
     if (!simulate && file) {
       try {
-        const { text, segments, words } = await transcribeGroq(file, passage);
+        const { text, segments, words } = await transcribeGroq(file, passage, durationSec);
         transcriptInput = text;
         segmentsInput = segments;
         wordsInput = words || [];

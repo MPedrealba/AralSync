@@ -10,6 +10,7 @@
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3';
+const GROQ_FALLBACK_MODEL = 'whisper-large-v3-turbo';
 
 /** Common filler words treated as hesitations rather than accuracy insertion miscues */
 export const FILLER_WORDS = new Set(['um', 'uh', 'ah', 'er', 'hmm', 'erm', 'uhm']);
@@ -1005,15 +1006,226 @@ export function combinedReadingLevelFilipino(
 }
 
 /**
- * Groq Whisper verbatim transcription → { text, segments }.
+ * Detect obvious Whisper hallucination loops (>5 consecutive repeated n-grams).
+ */
+export function hasWhisperHallucinationLoop(text: string): boolean {
+  const tokens = normalizeWords(text);
+  if (tokens.length < 6) return false;
+
+  const maxN = Math.min(4, Math.floor(tokens.length / 6));
+  for (let n = 1; n <= maxN; n++) {
+    for (let offset = 0; offset < n; offset++) {
+      let prevGram = '';
+      let run = 0;
+      for (let i = offset; i + n <= tokens.length; i += n) {
+        const gram = tokens.slice(i, i + n).join(' ');
+        if (gram === prevGram) {
+          run++;
+          if (run > 5) return true;
+        } else {
+          prevGram = gram;
+          run = 1;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Reconstruct transcript `text` and backfill missing or sparse `words` timestamps
+ * from `segments` proportionally so mid-recording or dropped word arrays still align 1:1.
+ */
+export function normalizeGroqResponse(groqJson: any): {
+  text: string;
+  segments: { start: number; end: number }[];
+  words: Array<{ word: string; start: number; end: number }>;
+} {
+  const rawSegments: Array<{ start?: number; end?: number; text?: string }> =
+    Array.isArray(groqJson?.segments) ? groqJson.segments : [];
+  const rawWords: Array<{ word: string; start: number; end: number }> =
+    Array.isArray(groqJson?.words) ? groqJson.words : [];
+
+  const rawText = typeof groqJson?.text === 'string' ? groqJson.text.trim() : '';
+  const segmentJoinedText = rawSegments
+    .map((s) => (typeof s?.text === 'string' ? s.text.trim() : ''))
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const text =
+    normalizeWords(segmentJoinedText).length > normalizeWords(rawText).length
+      ? segmentJoinedText
+      : rawText || segmentJoinedText;
+
+  const segTokenLists = rawSegments.map((s) =>
+    String(s?.text || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+  const totalSegTokens = segTokenLists.reduce((sum, list) => sum + list.length, 0);
+
+  let words: Array<{ word: string; start: number; end: number }> = rawWords;
+  if (
+    rawSegments.length > 0 &&
+    totalSegTokens > 0 &&
+    (rawWords.length === 0 || rawWords.length < Math.floor(totalSegTokens * 0.85))
+  ) {
+    const filledWords: Array<{ word: string; start: number; end: number }> = [];
+    const usedWordIndices = new Set<number>();
+
+    rawSegments.forEach((seg, sIdx) => {
+      const tokens = segTokenLists[sIdx];
+      if (tokens.length === 0) return;
+
+      const segStart = Number(seg?.start) || 0;
+      const segEnd = Math.max(segStart, Number(seg?.end) || segStart);
+
+      const matchedForSegment: Array<{ word: string; start: number; end: number }> = [];
+      rawWords.forEach((w, wIdx) => {
+        if (usedWordIndices.has(wIdx)) return;
+        const wStart = Number(w?.start);
+        const wEnd = Number(w?.end);
+        const mid =
+          Number.isFinite(wStart) && Number.isFinite(wEnd)
+            ? (wStart + wEnd) / 2
+            : wStart;
+        if (
+          Number.isFinite(mid) &&
+          mid >= segStart - 0.15 &&
+          mid <= segEnd + 0.15
+        ) {
+          usedWordIndices.add(wIdx);
+          matchedForSegment.push(w);
+        }
+      });
+
+      if (matchedForSegment.length >= Math.ceil(tokens.length * 0.85)) {
+        filledWords.push(...matchedForSegment);
+      } else {
+        const dur = Math.max(0.1 * tokens.length, segEnd - segStart);
+        tokens.forEach((tok, idx) => {
+          const wStart = Math.round((segStart + (idx / tokens.length) * dur) * 100) / 100;
+          const wEnd = Math.round((segStart + ((idx + 1) / tokens.length) * dur) * 100) / 100;
+          filledWords.push({ word: tok, start: wStart, end: wEnd });
+        });
+      }
+    });
+
+    if (filledWords.length > rawWords.length) {
+      words = filledWords;
+    }
+  }
+
+  const segments = rawSegments.map((s) => ({
+    start: Number(s?.start) || 0,
+    end: Math.max(Number(s?.start) || 0, Number(s?.end) || 0),
+  }));
+
+  return { text, segments, words };
+}
+
+/**
+ * Determine whether a primary Whisper response looks empty, looped, or suspiciously truncated
+ * relative to the recording duration and warrants a single fallback pass.
+ */
+export function shouldRetryGroqTranscription(
+  primary: {
+    text: string;
+    segments: { start: number; end: number }[];
+    words: Array<{ word: string; start: number; end: number }>;
+  },
+  expectedDurationSec?: number
+): boolean {
+  const spokenCount = normalizeWords(primary.text).length;
+  if (spokenCount === 0 || hasWhisperHallucinationLoop(primary.text)) {
+    return true;
+  }
+
+  const dur = expectedDurationSec ?? 0;
+  if (dur >= 12) {
+    const minExpectedWords = Math.max(6, Math.floor(dur * 0.35));
+    if (spokenCount < minExpectedWords) {
+      return true;
+    }
+
+    if (primary.segments.length > 0) {
+      const lastSegEnd = Math.max(...primary.segments.map((s) => Number(s.end) || 0));
+      if (
+        lastSegEnd > 0 &&
+        dur - lastSegEnd > 10 &&
+        spokenCount < Math.max(12, Math.floor(dur * 0.75))
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Select the cleaner transcription candidate, rejecting hallucination loops and preferring
+ * the pass that captured more valid spoken words.
+ */
+export function pickBetterGroqResult<
+  T extends {
+    text: string;
+    segments: { start: number; end: number }[];
+    words: Array<{ word: string; start: number; end: number }>;
+  }
+>(primary: T, fallback: T): T {
+  const primaryLoop = hasWhisperHallucinationLoop(primary.text);
+  const fallbackLoop = hasWhisperHallucinationLoop(fallback.text);
+
+  if (fallbackLoop && !primaryLoop) return primary;
+  if (primaryLoop && !fallbackLoop) return fallback;
+  if (primaryLoop && fallbackLoop) {
+    return { text: '', segments: [], words: [] } as unknown as T;
+  }
+
+  const primaryWords = normalizeWords(primary.text).length;
+  const fallbackWords = normalizeWords(fallback.text).length;
+  return fallbackWords > primaryWords ? fallback : primary;
+}
+
+async function sendGroqTranscriptionRequest(opts: {
+  file: File;
+  model: string;
+  temperature: string;
+  lang: 'tl' | 'en';
+}): Promise<Response> {
+  const groqForm = new FormData();
+  groqForm.append('model', opts.model);
+  groqForm.append('response_format', 'verbose_json');
+  groqForm.append('timestamp_granularities[]', 'segment');
+  groqForm.append('timestamp_granularities[]', 'word');
+  groqForm.append('file', opts.file, opts.file.name || 'recording.webm');
+  groqForm.append('temperature', opts.temperature);
+  groqForm.append('language', opts.lang);
+  // Never pass passage text in Whisper `prompt`: it causes Whisper to treat
+  // the opening 50 words as already-transcribed prior audio and skip them.
+
+  return fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: groqForm,
+  });
+}
+
+/**
+ * Groq Whisper verbatim transcription → { text, segments, words }.
  * Settings calibrated for verbatim oral reading assessment:
- *   • temperature: 0 to eliminate hallucinations & paraphrasing
+ *   • temperature: 0 on primary whisper-large-v3 pass; NO passage prompt (prevents dropping opening 50 words)
  *   • language: "tl" for Tagalog/Filipino passages, "en" for English
- *   • verbatim system prompt
+ *   • reconstructs missing/sparse word timestamps from segments
+ *   • single safety-net retry with whisper-large-v3-turbo (temperature 0.2) if primary is empty/truncated
  */
 export async function transcribeGroq(
   file: File,
-  passage?: string
+  passage?: string,
+  expectedDurationSec?: number
 ): Promise<{
   text: string;
   segments: { start: number; end: number }[];
@@ -1022,29 +1234,13 @@ export async function transcribeGroq(
   if (!process.env.GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not configured on the server.');
   }
-  const groqForm = new FormData();
-  groqForm.append('model', GROQ_MODEL);
-  groqForm.append('response_format', 'verbose_json');
-  groqForm.append('timestamp_granularities[]', 'segment');
-  groqForm.append('timestamp_granularities[]', 'word');
-  groqForm.append('file', file, file.name || 'recording.webm');
-  // Calibrate temperature: 0 prevents hallucinations and auto-correction of errors
-  groqForm.append('temperature', '0');
 
-  // Detect language: pass "tl" for Filipino/Tagalog, otherwise default to "en"
   const lang = detectPassageLanguage(passage);
-  groqForm.append('language', lang);
-
-  // Prepend clean passage excerpt to Whisper (avoid hallucination-inducing imperative commands)
-  const prompt = cleanPassageText(passage || '').split(/\s+/).slice(0, 50).join(' ').slice(0, 400);
-  if (prompt) {
-    groqForm.append('prompt', prompt);
-  }
-
-  const groqRes = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: groqForm,
+  const groqRes = await sendGroqTranscriptionRequest({
+    file,
+    model: GROQ_MODEL,
+    temperature: '0',
+    lang,
   });
 
   if (!groqRes.ok) {
@@ -1053,12 +1249,34 @@ export async function transcribeGroq(
     throw new Error('Speech-to-text service failed. Try again or use Simulate.');
   }
 
-  const groqJson = await groqRes.json().catch(() => ({}));
-  return {
-    text: groqJson?.text || '',
-    segments: Array.isArray(groqJson?.segments) ? groqJson.segments : [],
-    words: Array.isArray(groqJson?.words) ? groqJson.words : [],
-  };
+  const primaryJson = await groqRes.json().catch(() => ({}));
+  const primaryResult = normalizeGroqResponse(primaryJson);
+
+  if (shouldRetryGroqTranscription(primaryResult, expectedDurationSec)) {
+    try {
+      const retryRes = await sendGroqTranscriptionRequest({
+        file,
+        model: GROQ_FALLBACK_MODEL,
+        temperature: '0.2',
+        lang,
+      });
+      if (retryRes.ok) {
+        const retryJson = await retryRes.json().catch(() => ({}));
+        const fallbackResult = normalizeGroqResponse(retryJson);
+        return pickBetterGroqResult(primaryResult, fallbackResult);
+      }
+      const errText = await retryRes.text().catch(() => '');
+      console.warn('Groq turbo fallback returned non-OK:', retryRes.status, errText);
+    } catch (retryErr) {
+      console.warn('Groq turbo fallback request failed:', (retryErr as Error).message);
+    }
+  }
+
+  if (hasWhisperHallucinationLoop(primaryResult.text)) {
+    return { text: '', segments: [], words: [] };
+  }
+
+  return primaryResult;
 }
 
 /**
