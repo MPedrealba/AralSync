@@ -319,6 +319,7 @@ function OMRWorkstationContent() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
 
   // Map competency to subject (preferring the active answer key's subject if defined)
   const currentSubject =
@@ -612,7 +613,15 @@ function OMRWorkstationContent() {
   };
 
   // ── File Selection & Scanning ──
-  const processUploadedImage = async (rawFile: File) => {
+  const detectIsMobileCamera = () =>
+    typeof window !== "undefined" &&
+    (window.matchMedia("(max-width: 767px)").matches ||
+      window.matchMedia("(pointer: coarse)").matches);
+
+  const processUploadedImage = async (
+    rawFile: File,
+    scanSource: "upload" | "mobile_camera" | "sample" = "upload"
+  ) => {
     const studentToUse = selectedStudentId || (students[0]?._id ?? "");
     if (!studentToUse) {
       setErrorMessage("Please select a student from your assigned roster before scanning.");
@@ -628,7 +637,10 @@ function OMRWorkstationContent() {
 
     let localUrl = "";
     try {
-      const file = await prepareOmrImageFile(rawFile);
+      const file =
+        scanSource === "mobile_camera"
+          ? await prepareOmrImageFile(rawFile, { maxEdge: 1800, quality: 0.90 })
+          : await prepareOmrImageFile(rawFile);
       setSheetFile(file);
       localUrl = URL.createObjectURL(file);
       createdBlobUrlsRef.current.push(localUrl);
@@ -640,6 +652,7 @@ function OMRWorkstationContent() {
       formData.append("competency", competency);
       formData.append("subject", currentSubject);
       formData.append("title", assessmentTitle);
+      formData.append("scanSource", scanSource);
       if (selectedKeyId) formData.append("answerKeyId", selectedKeyId);
 
       const res = await fetch("/api/teacher/omr", {
@@ -716,6 +729,18 @@ function OMRWorkstationContent() {
     e.target.value = "";
   };
 
+  const handleNativeCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (isLikelyImageFile(file)) {
+        processUploadedImage(file, "mobile_camera");
+      } else {
+        setErrorMessage("Please capture a valid photo image (JPG, PNG, WEBP, or mobile photo).");
+      }
+    }
+    e.target.value = "";
+  };
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -778,7 +803,7 @@ function OMRWorkstationContent() {
         canvas.toBlob((blob) => {
           if (blob) {
             const sampleFile = new File([blob], "sample_sheet.png", { type: "image/png" });
-            processUploadedImage(sampleFile);
+            processUploadedImage(sampleFile, "sample");
           } else {
             setIsScanning(false);
             setErrorMessage("Could not generate canvas sample sheet.");
@@ -788,7 +813,7 @@ function OMRWorkstationContent() {
       }
       const blob = await res.blob();
       const sampleFile = new File([blob], "sample_sheet.png", { type: "image/png" });
-      processUploadedImage(sampleFile);
+      processUploadedImage(sampleFile, "sample");
     } catch {
       setErrorMessage("Could not load sample sheet.");
       setIsScanning(false);
@@ -806,9 +831,12 @@ function OMRWorkstationContent() {
   const startCamera = async () => {
     setIsCameraOpen(true);
     setErrorMessage("");
+    const isMobileCamera = detectIsMobileCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: isMobileCamera
+          ? { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1440 } }
+          : { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       mediaStreamRef.current = stream;
       if (videoRef.current) {
@@ -840,6 +868,31 @@ function OMRWorkstationContent() {
 
     const sourceW = video.videoWidth;
     const sourceH = video.videoHeight;
+
+    // On mobile viewports/touch devices, preserve the full uncropped frame so header,
+    // fiducial marks, and black printed sheet border remain completely intact for OpenCV.
+    const isMobileCamera = detectIsMobileCamera();
+    if (isMobileCamera) {
+      const fullCanvas = document.createElement("canvas");
+      fullCanvas.width = sourceW;
+      fullCanvas.height = sourceH;
+      const fullCtx = fullCanvas.getContext("2d");
+      if (!fullCtx) return;
+
+      fullCtx.drawImage(video, 0, 0, sourceW, sourceH);
+
+      const exportFullCanvas = scaleCanvasIfNeeded(fullCanvas, 1800);
+      exportFullCanvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], `camera-omr-${Date.now()}.jpg`, { type: "image/jpeg" });
+          stopCamera();
+          processUploadedImage(file, "mobile_camera");
+        } else {
+          setErrorMessage("Could not capture camera frame. Please try again.");
+        }
+      }, "image/jpeg", 0.90);
+      return;
+    }
 
     // Calculate normalized bounding box corresponding to the green viewfinder guide
     // (inset by ~10% horizontal, ~12% vertical)
@@ -1753,12 +1806,20 @@ function OMRWorkstationContent() {
                   </div>
                 )}
 
-                {/* Upload Input */}
+                {/* Upload & Native Mobile Autofocus Inputs */}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
+                  className="hidden"
+                />
+                <input
+                  ref={nativeCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleNativeCameraChange}
                   className="hidden"
                 />
 
@@ -1772,6 +1833,16 @@ function OMRWorkstationContent() {
                   >
                     <Camera className="h-4 w-4" />
                     <span>Scan with Camera</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => nativeCameraInputRef.current?.click()}
+                    disabled={isScanning}
+                    className="sm:hidden w-full inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-5 text-sm font-semibold text-emerald-800 shadow-xs transition-all hover:bg-emerald-100 active:scale-95 disabled:opacity-50"
+                  >
+                    <Camera className="h-4 w-4" />
+                    <span>Take Photo (Autofocus)</span>
                   </button>
 
                   <button
@@ -2521,12 +2592,12 @@ function OMRWorkstationContent() {
             </div>
 
             <div className="relative h-[72vh] max-h-[640px] w-full aspect-[3/4] sm:aspect-[4/3] bg-black overflow-hidden flex items-center justify-center">
-              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain sm:object-cover" />
 
-              {/* Aspect-Ratio-Locked (Letter/A4 1:1.35) Viewfinder Guide Box */}
+              {/* Aspect-Ratio-Locked (Letter/A4 1:1.35) Viewfinder Guide Box (inset slightly as visual guide on mobile) */}
               <div
                 ref={guideRef}
-                className="pointer-events-none absolute h-[85%] w-auto aspect-[1/1.35] max-w-[85%] flex items-center justify-center"
+                className="pointer-events-none absolute inset-4 sm:inset-auto h-[85%] w-auto aspect-[1/1.35] max-w-[85%] p-2 sm:p-0 flex items-center justify-center"
               >
                 <div className="relative h-full w-full">
                   {/* Top-Left Bracket ⌜ */}
@@ -2545,9 +2616,10 @@ function OMRWorkstationContent() {
             </div>
 
             <div className="flex flex-col gap-2 bg-slate-900 px-5 py-3 border-t border-slate-800">
-              <div className="flex items-center justify-center gap-1.5 py-1 text-emerald-400 text-xs font-semibold">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Align all 4 sheet corners inside the green brackets</span>
+              <div className="flex items-center justify-center gap-1.5 py-1 text-emerald-400 text-xs font-semibold text-center">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="sm:hidden">Keep the entire black sheet border comfortably inside the screen</span>
+                <span className="hidden sm:inline">Align all 4 sheet corners inside the green brackets</span>
               </div>
               <div className="flex items-center justify-between">
                 <button

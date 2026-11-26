@@ -75,7 +75,8 @@ interface OMRSheetResult {
 async function processOMRSheet(
   imageBuffer: ArrayBuffer,
   keyLength: number = 20,
-  keyAnswers?: string[]
+  keyAnswers?: string[],
+  scanSource: string = 'upload'
 ): Promise<OMRSheetResult> {
   const blob = new Blob([imageBuffer], { type: 'image/png' });
   const form = new FormData();
@@ -83,6 +84,9 @@ async function processOMRSheet(
   form.append('num_questions', String(keyLength));
   if (keyAnswers && Array.isArray(keyAnswers) && keyAnswers.length > 0) {
     form.append('answer_key', JSON.stringify(keyAnswers));
+  }
+  if (scanSource === 'mobile_camera') {
+    form.append('scan_source', 'mobile_camera');
   }
 
   let res: Response;
@@ -173,6 +177,7 @@ export async function POST(req: NextRequest) {
       }
     }
     const notes = (formData.get('notes') as string | null) || '';
+    const scanSource = (formData.get('scanSource') as string | null) || 'upload';
 
     if (!file || !studentId || !competency) {
       return NextResponse.json(
@@ -241,7 +246,7 @@ export async function POST(req: NextRequest) {
 
     /* ── Process OMR sheet (simulated or OpenCV) ── */
     const imageBuffer = await file.arrayBuffer();
-    const omrResult = await processOMRSheet(imageBuffer, totalItems, keyAnswers);
+    const omrResult = await processOMRSheet(imageBuffer, totalItems, keyAnswers, scanSource);
     const detectedAnswers = omrResult.answers;
     const warpedImage = omrResult.warpedImage;
     const answersToGrade = verifiedAnswers || detectedAnswers;

@@ -60,6 +60,7 @@ async def omr_detect(
     file: UploadFile = File(...),
     num_questions: int = Form(50),
     answer_key: Optional[str] = Form(None),
+    scan_source: str = Form("standard"),
 ):
     """
     Detect answers from a scanned OMR bubble sheet.
@@ -95,7 +96,7 @@ async def omr_detect(
             except Exception:
                 parsed_key = None
 
-        result = detect_omr_sheet(image_bytes, num_questions, answer_key=parsed_key)
+        result = detect_omr_sheet(image_bytes, num_questions, answer_key=parsed_key, scan_source=scan_source)
         return result
     except HTTPException:
         raise

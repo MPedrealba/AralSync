@@ -197,18 +197,14 @@ def detect_document_contour(img_gray: np.ndarray) -> Optional[np.ndarray]:
 
 # ── Fiducial Mark Detection ────────────────────────────────────────────────────
 
-def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
+def _detect_fiducials_margin(img_gray: np.ndarray, margin_ratio: float = 0.12) -> Optional[np.ndarray]:
     """
-    Detect the 4 printed corner fiducial registration squares.
-    Filters candidate contours by:
-    - Thresholding: Otsu + Adaptive thresholding for varied lighting
-    - Aspect ratio between 0.70 and 1.30 (square-like)
-    - Area between 350px and 30,000px (photo distance & camera resolution)
-    - Solidity / rectangular fill factor > 0.75
-    - Position located in the outer 12% margins of the image width and height
-    Returns ordered coordinates [Top-Left, Top-Right, Bottom-Left, Bottom-Right] or None.
+    Detect the 4 printed corner fiducial registration squares inside the outer `margin_ratio`
+    bands of the image width and height.
     """
     h, w = img_gray.shape
+    low_ratio = margin_ratio
+    high_ratio = 1.0 - margin_ratio
 
     # Apply Otsu + Adaptive thresholding to isolate solid dark geometric shapes
     _, binary_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -246,12 +242,11 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
             cx = float(x + bw / 2.0)
             cy = float(y + bh / 2.0)
 
-            # Position located in the outer 12% margins of the image width and height
             is_in_outer_margin = (
-                (cx < 0.12 * w and cy < 0.12 * h) or  # Top-Left
-                (cx > 0.88 * w and cy < 0.12 * h) or  # Top-Right
-                (cx < 0.12 * w and cy > 0.88 * h) or  # Bottom-Left
-                (cx > 0.88 * w and cy > 0.88 * h)     # Bottom-Right
+                (cx < low_ratio * w and cy < low_ratio * h) or  # Top-Left
+                (cx > high_ratio * w and cy < low_ratio * h) or  # Top-Right
+                (cx < low_ratio * w and cy > high_ratio * h) or  # Bottom-Left
+                (cx > high_ratio * w and cy > high_ratio * h)     # Bottom-Right
             )
             if not is_in_outer_margin:
                 continue
@@ -267,22 +262,22 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
     tl_dist = tr_dist = bl_dist = br_dist = float('inf')
 
     for cx, cy, area, score in candidates:
-        if cx < 0.12 * w and cy < 0.12 * h:
+        if cx < low_ratio * w and cy < low_ratio * h:
             d = cx**2 + cy**2
             if d < tl_dist:
                 tl_dist = d
                 tl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.88 * w and cy < 0.12 * h:
+        elif cx > high_ratio * w and cy < low_ratio * h:
             d = (w - cx)**2 + cy**2
             if d < tr_dist:
                 tr_dist = d
                 tr = np.array([cx, cy], dtype=np.float32)
-        elif cx < 0.12 * w and cy > 0.88 * h:
+        elif cx < low_ratio * w and cy > high_ratio * h:
             d = cx**2 + (h - cy)**2
             if d < bl_dist:
                 bl_dist = d
                 bl = np.array([cx, cy], dtype=np.float32)
-        elif cx > 0.88 * w and cy > 0.88 * h:
+        elif cx > high_ratio * w and cy > high_ratio * h:
             d = (w - cx)**2 + (h - cy)**2
             if d < br_dist:
                 br_dist = d
@@ -311,6 +306,161 @@ def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
         return completed
 
     return None
+
+
+def detect_fiducials(img_gray: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Detect the 4 printed corner fiducial registration squares.
+    Position located in the outer 12% margins of the image width and height.
+    Returns ordered coordinates [Top-Left, Top-Right, Bottom-Left, Bottom-Right] or None.
+    """
+    return _detect_fiducials_margin(img_gray, margin_ratio=0.12)
+
+
+# ── Isolated Mobile Camera Frame Detection & Orientation Helpers ────────────────
+
+def detect_printed_frame(img_gray: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Priority-1 mobile alignment detector: locate the thick printed rectangular
+    border inset from the white paper edge using CLAHE + Gaussian blur + adaptive
+    Gaussian threshold (THRESH_BINARY_INV) + small closing (5x5) and RETR_LIST.
+    Scores quads by dark-ink density along all 4 border strips and clean bright paper interior.
+    """
+    h, w = img_gray.shape[:2]
+    scale_ratio = h / 800.0 if h > 800 else 1.0
+    if scale_ratio > 1.0:
+        resized_w = max(1, int(round(w / scale_ratio)))
+        resized = cv2.resize(img_gray, (resized_w, 800), interpolation=cv2.INTER_AREA)
+    else:
+        resized = img_gray.copy()
+
+    resized_h, resized_w = resized.shape
+    resized_area = float(resized_h * resized_w)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(resized)
+    blurred = cv2.GaussianBlur(enhanced, (5, 5), 0)
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 8
+    )
+    kernel_5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_5, iterations=1)
+
+    cnts, _ = cv2.findContours(closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    cnts_sorted = sorted(cnts, key=cv2.contourArea, reverse=True)
+
+    best_score = -1.0
+    best_ordered: Optional[np.ndarray] = None
+
+    for cnt in cnts_sorted[:24]:
+        hull = cv2.convexHull(cnt)
+        hull_area = float(cv2.contourArea(hull))
+        if hull_area < 0.20 * resized_area or hull_area > 0.92 * resized_area:
+            continue
+
+        peri = cv2.arcLength(hull, True)
+        if peri <= 0:
+            continue
+
+        candidate_quad: Optional[np.ndarray] = None
+        for eps in [0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05]:
+            approx = cv2.approxPolyDP(hull, eps * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                ordered = order_corners(approx.reshape((4, 2)))
+                border_hug = sum(
+                    1 for p in ordered
+                    if p[0] <= 3 or p[0] >= resized_w - 4 or p[1] <= 3 or p[1] >= resized_h - 4
+                )
+                if border_hug >= 3:
+                    continue
+
+                w_top = float(np.linalg.norm(ordered[1] - ordered[0]))
+                w_bot = float(np.linalg.norm(ordered[3] - ordered[2]))
+                h_left = float(np.linalg.norm(ordered[2] - ordered[0]))
+                h_right = float(np.linalg.norm(ordered[3] - ordered[1]))
+                avg_w = max((w_top + w_bot) / 2.0, 1.0)
+                avg_h = max((h_left + h_right) / 2.0, 1.0)
+                aspect = avg_h / avg_w if avg_h >= avg_w else avg_w / avg_h
+                if 1.10 <= aspect <= 1.70:
+                    candidate_quad = ordered
+                    break
+
+        if candidate_quad is None:
+            continue
+
+        # Score candidate border ink coverage & clean white paper interior
+        preview_w, preview_h = 425, 550
+        preview = warp_to_grid(enhanced, candidate_quad, target_w=preview_w, target_h=preview_h)
+
+        # Strip bands right along the 4 edges (dark printed border shows min intensity < 165)
+        top_strip = np.min(preview[0:10, 25 : preview_w - 25], axis=0)
+        bot_strip = np.min(preview[preview_h - 10 : preview_h, 25 : preview_w - 25], axis=0)
+        left_strip = np.min(preview[25 : preview_h - 25, 0:10], axis=1)
+        right_strip = np.min(preview[25 : preview_h - 25, preview_w - 10 : preview_w], axis=1)
+
+        dark_thresh = 170.0
+        cov_top = float(np.mean(top_strip < dark_thresh))
+        cov_bot = float(np.mean(bot_strip < dark_thresh))
+        cov_left = float(np.mean(left_strip < dark_thresh))
+        cov_right = float(np.mean(right_strip < dark_thresh))
+        min_edge_cov = min(cov_top, cov_bot, cov_left, cov_right)
+        mean_edge_cov = (cov_top + cov_bot + cov_left + cov_right) / 4.0
+
+        # Interior brightness must reflect white printed paper rather than dark table/objects
+        interior = preview[30 : preview_h - 30, 30 : preview_w - 30]
+        interior_bright = float(np.percentile(interior, 65))
+        if min_edge_cov < 0.35 or mean_edge_cov < 0.55 or interior_bright < 145.0:
+            continue
+
+        score = mean_edge_cov * 2.0 + min_edge_cov + (hull_area / resized_area)
+        if score > best_score:
+            best_score = score
+            best_ordered = candidate_quad
+
+    if best_ordered is not None:
+        return order_corners(best_ordered * scale_ratio)
+    return None
+
+
+def _correct_180_rotation_if_upside_down(warped_gray: np.ndarray) -> np.ndarray:
+    """
+    Detect if a mobile warped sheet (1275x1650) is upside down (180 degrees)
+    using header/footer ink balance and top vs bottom corner square presence.
+    """
+    h, w = warped_gray.shape[:2]
+
+    def _has_corner_square(patch: np.ndarray) -> bool:
+        if patch.size == 0:
+            return False
+        _, bw = cv2.threshold(patch, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        cnts, _ = cv2.findContours(bw, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts:
+            area = float(cv2.contourArea(c))
+            if not (250 <= area <= 8000):
+                continue
+            _, _, cw, ch = cv2.boundingRect(c)
+            if cw == 0 or ch == 0:
+                continue
+            ar = float(cw) / float(ch)
+            fill = area / float(cw * ch)
+            if 0.65 <= ar <= 1.35 and fill >= 0.70:
+                return True
+        return False
+
+    top_sq = int(_has_corner_square(warped_gray[10:120, 10:120])) + int(
+        _has_corner_square(warped_gray[10:120, max(0, w - 120) : w - 10])
+    )
+    bot_sq = int(_has_corner_square(warped_gray[max(0, h - 120) : h - 10, 10:120])) + int(
+        _has_corner_square(warped_gray[max(0, h - 120) : h - 10, max(0, w - 120) : w - 10])
+    )
+
+    top_hdr = float(np.mean(warped_gray[int(0.025 * h) : int(0.155 * h), int(0.15 * w) : int(0.85 * w)] < 140))
+    bot_ftr = float(np.mean(warped_gray[int(0.845 * h) : int(0.975 * h), int(0.15 * w) : int(0.85 * w)] < 140))
+
+    if (bot_sq >= 1 and top_sq == 0 and bot_ftr >= top_hdr) or (bot_ftr > max(0.05, top_hdr * 1.6)):
+        logger.info("[OMR Mobile] Detected 180-degree upside-down sheet; rotating upright.")
+        return cv2.rotate(warped_gray, cv2.ROTATE_180)
+    return warped_gray
 
 
 # ── Perspective Warp ────────────────────────────────────────────────────────────
@@ -497,7 +647,8 @@ def _micro_center_bubble(img: np.ndarray, cx: int, cy: int, search_px: int = 6) 
 # ── Bubble Grid Detection ───────────────────────────────────────────────────────
 
 def find_bubble_grid(warped_gray: np.ndarray,
-                      num_questions: int = 50) -> list[list[tuple[int, int, int, int]]]:
+                      num_questions: int = 50,
+                      scan_source: str = "standard") -> list[list[tuple[int, int, int, int]]]:
     """
     Angle-Invariant Self-Healing Grid & Fixed Template Sampling.
 
@@ -593,18 +744,41 @@ def find_bubble_grid(warped_gray: np.ndarray,
 
     if is_2col_layout:
         # ── 40-Item 2-Column Grid Calibration (Q1-Q20 in Col 1, Q21-Q40 in Col 2) ──
-        # Column 1 (Q1 to Q20): Options [A, B, C, D] X-centroids at ~ [18%, 23%, 28%, 33%] of warped width
-        # Column 2 (Q21 to Q40): Options [A, B, C, D] X-centroids at ~ [63%, 68%, 73%, 78%] of warped width
+        if scan_source == "mobile_camera":
+            left_border_dark = float(
+                np.mean(warped_gray[int(0.20 * h) : int(0.80 * h), 0 : max(4, int(0.03 * w))] < 150)
+            )
+            locked_frame_40 = is_frame_flush or top_edge < 210.0 or left_border_dark > 0.12
+            col1_40_norm = COL1_40_FLUSH_XS_NORM if locked_frame_40 else COL1_40_FULL_XS_NORM
+            col2_40_norm = COL2_40_FLUSH_XS_NORM if locked_frame_40 else COL2_40_FULL_XS_NORM
+        else:
+            col1_40_norm = COL1_40_FLUSH_XS_NORM
+            col2_40_norm = COL2_40_FLUSH_XS_NORM
+
         bands_specs_40 = [
-            ("Column 1 (Q1 to Q20)", 0.12, 0.48, 20, COL1_40_FLUSH_XS_NORM),
-            ("Column 2 (Q21 to Q40)", 0.55, 0.95, 20, COL2_40_FLUSH_XS_NORM),
+            ("Column 1 (Q1 to Q20)", 0.12, 0.48, 20, col1_40_norm),
+            ("Column 2 (Q21 to Q40)", 0.55, 0.95, 20, col2_40_norm),
         ]
 
         nom_y_top_40 = float(h * ROW_YS_40_NORM[0])
         nom_y_bottom_40 = float(h * ROW_YS_40_NORM[19])
 
         for b_idx, (b_name, x1_ratio, x2_ratio, num_rows, fallback_xs_norm) in enumerate(bands_specs_40):
-            band_pts = [p for p in bubble_anchor_pts if int(x1_ratio * w) <= p[0] <= int(x2_ratio * w) and int(0.20 * h) <= p[1] <= int(0.88 * h)]
+            if scan_source == "mobile_camera":
+                band_pts = [
+                    p
+                    for p in bubble_anchor_pts
+                    if int(x1_ratio * w) <= p[0] <= int(x2_ratio * w)
+                    and int(0.20 * h) <= p[1] <= int(0.88 * h)
+                    and not is_in_question_label_zone(p[0], p[1], w, h, is_2col=True)
+                ]
+            else:
+                band_pts = [
+                    p
+                    for p in bubble_anchor_pts
+                    if int(x1_ratio * w) <= p[0] <= int(x2_ratio * w)
+                    and int(0.20 * h) <= p[1] <= int(0.88 * h)
+                ]
             xs = np.array([p[0] for p in band_pts], dtype=float)
             ys = [p[1] for p in band_pts]
 
@@ -627,14 +801,34 @@ def find_bubble_grid(warped_gray: np.ndarray,
                 opt_xs = nom_xs
 
             # 5-Row Vertical Anchors: Incorporate vertical gap after Items 5, 10, and 15
-            top_cands = [y for y in ys if 0.26 * h <= y <= 0.285 * h]
-            bot_cands = [y for y in ys if 0.805 * h <= y <= 0.835 * h]
-            y_top = float(np.median(top_cands)) if top_cands else nom_y_top_40
-            y_bottom = float(np.median(bot_cands)) if bot_cands else nom_y_bottom_40
+            if scan_source == "mobile_camera":
+                grid_ys = sorted([y for y in ys if 0.255 * h <= y <= 0.86 * h])
+                row_clusters: list[list[float]] = []
+                for gy in grid_ys:
+                    if not row_clusters or abs(gy - float(np.mean(row_clusters[-1]))) > 15.0:
+                        row_clusters.append([float(gy)])
+                    else:
+                        row_clusters[-1].append(float(gy))
+                valid_rows = [rc for rc in row_clusters if len(rc) >= 2]
+                y_top = float(np.median(valid_rows[0])) if len(valid_rows) >= 8 else nom_y_top_40
+                y_bottom = float(np.median(valid_rows[-1])) if len(valid_rows) >= 8 else nom_y_bottom_40
+                max_y_drift = 85.0
+                if (
+                    abs(y_top - nom_y_top_40) > max_y_drift
+                    or abs(y_bottom - nom_y_bottom_40) > max_y_drift
+                    or (y_bottom - y_top) < 0.40 * h
+                ):
+                    y_top = nom_y_top_40
+                    y_bottom = nom_y_bottom_40
+            else:
+                top_cands = [y for y in ys if 0.26 * h <= y <= 0.285 * h]
+                bot_cands = [y for y in ys if 0.805 * h <= y <= 0.835 * h]
+                y_top = float(np.median(top_cands)) if top_cands else nom_y_top_40
+                y_bottom = float(np.median(bot_cands)) if bot_cands else nom_y_bottom_40
 
-            if abs(y_top - nom_y_top_40) > 45 or abs(y_bottom - nom_y_bottom_40) > 45 or (y_bottom <= y_top):
-                y_top = nom_y_top_40
-                y_bottom = nom_y_bottom_40
+                if abs(y_top - nom_y_top_40) > 45 or abs(y_bottom - nom_y_bottom_40) > 45 or (y_bottom <= y_top):
+                    y_top = nom_y_top_40
+                    y_bottom = nom_y_bottom_40
 
             delta_y_40 = (y_bottom - y_top) / 22.0
 
@@ -1062,6 +1256,7 @@ def detect_omr_sheet(
     image_bytes: bytes,
     num_questions: int = 50,
     answer_key: Optional[list[Optional[int]]] = None,
+    scan_source: str = "standard",
 ) -> dict:
     """
     Main entry point: process an OMR bubble sheet image.
@@ -1069,6 +1264,9 @@ def detect_omr_sheet(
     Args:
         image_bytes: Raw image file bytes (PNG, JPEG, etc.)
         num_questions: Expected number of questions on the sheet
+        answer_key: Optional list of option indices
+        scan_source: "mobile_camera" triggers isolated mobile frame/orientation pipeline;
+                     all other values execute the exact existing standard/PC pipeline untouched.
 
     Returns:
         dict with:
@@ -1088,35 +1286,84 @@ def detect_omr_sheet(
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h_orig, w_orig = gray.shape
 
-    # Step 1: Look for the printed outer black rectangle frame first via document contour
-    paper_corners = detect_document_contour(gray)
-    if paper_corners is not None:
-        warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
-    else:
-        # Fallback Margin Fiducial Search
-        fiducial_corners = detect_fiducials(gray)
-        if fiducial_corners is not None and len(fiducial_corners) == 4:
-            logger.info(f"[OMR] 4 fiducials used for perspective warp: {fiducial_corners.tolist()}")
-            warped = warp_to_grid(gray, fiducial_corners, target_w=1275, target_h=1650)
+    if scan_source == "mobile_camera":
+        # Isolated Mobile Camera Pipeline:
+        # 1. Priority 1: Printed black rectangular border via RETR_LIST
+        # 2. Fallback: Document contour -> wider 0.22 margin fiducials
+        # 3. Never silently grade an unwarped/cropped tabletop photo
+        warp_succeeded = False
+        warped = None
+
+        frame_corners = detect_printed_frame(gray)
+        if frame_corners is not None:
+            warped = warp_to_grid(gray, frame_corners, target_w=1275, target_h=1650)
+            warp_succeeded = True
         else:
-            corners = detect_fiducials(gray)
-            if corners is not None:
-                warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
-            elif (h_orig, w_orig) != (1650, 1275):
-                warped = cv2.resize(gray, (1275, 1650))
+            paper_corners = detect_document_contour(gray)
+            if paper_corners is not None:
+                warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
+                warp_succeeded = True
             else:
-                warped = gray.copy()
+                wide_fiducials = _detect_fiducials_margin(gray, margin_ratio=0.22)
+                if wide_fiducials is not None and len(wide_fiducials) == 4:
+                    warped = warp_to_grid(gray, wide_fiducials, target_w=1275, target_h=1650)
+                    warp_succeeded = True
 
-    # Step 1.5: If fiducial marks exist on the warped sheet, refine warp for sub-pixel accuracy
-    refined_corners = detect_fiducials(warped)
-    if refined_corners is not None:
-        warped = warp_to_grid(warped, refined_corners, target_w=1275, target_h=1650)
+        if not warp_succeeded or warped is None:
+            preview_fail = cv2.resize(gray, (1275, 1650))
+            _, fail_buf = cv2.imencode('.jpg', preview_fail, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            fail_warped_base64 = f"data:image/jpeg;base64,{base64.b64encode(fail_buf).decode('ascii')}"
+            return {
+                "success": False,
+                "answers": [],
+                "detected_questions": 0,
+                "warped_image_base64": fail_warped_base64,
+                "errors": [
+                    "Could not detect all 4 corners of the sheet border. Step back slightly so the entire black border frame fits inside the camera view with margin on all 4 sides."
+                ],
+            }
 
-    # Step 2.5: Extract Name & Section Header Crop
-    name_crop_base64 = extract_name_crop(warped)
+        # Guard 180-degree upside-down mobile captures
+        warped = _correct_180_rotation_if_upside_down(warped)
 
-    # Step 3: Find bubble grid
-    grid = find_bubble_grid(warped, num_questions)
+        # Refine warp if 4 corner fiducials exist on the flattened sheet
+        refined_corners = detect_fiducials(warped)
+        if refined_corners is not None:
+            warped = warp_to_grid(warped, refined_corners, target_w=1275, target_h=1650)
+
+        name_crop_base64 = extract_name_crop(warped)
+        grid = find_bubble_grid(warped, num_questions, scan_source="mobile_camera")
+    else:
+        # Strict Isolation Rule: Exact existing Standard/PC pipeline untouched
+        # Step 1: Look for the printed outer black rectangle frame first via document contour
+        paper_corners = detect_document_contour(gray)
+        if paper_corners is not None:
+            warped = warp_to_grid(gray, paper_corners, target_w=1275, target_h=1650)
+        else:
+            # Fallback Margin Fiducial Search
+            fiducial_corners = detect_fiducials(gray)
+            if fiducial_corners is not None and len(fiducial_corners) == 4:
+                logger.info(f"[OMR] 4 fiducials used for perspective warp: {fiducial_corners.tolist()}")
+                warped = warp_to_grid(gray, fiducial_corners, target_w=1275, target_h=1650)
+            else:
+                corners = detect_fiducials(gray)
+                if corners is not None:
+                    warped = warp_to_grid(gray, corners, target_w=1275, target_h=1650)
+                elif (h_orig, w_orig) != (1650, 1275):
+                    warped = cv2.resize(gray, (1275, 1650))
+                else:
+                    warped = gray.copy()
+
+        # Step 1.5: If fiducial marks exist on the warped sheet, refine warp for sub-pixel accuracy
+        refined_corners = detect_fiducials(warped)
+        if refined_corners is not None:
+            warped = warp_to_grid(warped, refined_corners, target_w=1275, target_h=1650)
+
+        # Step 2.5: Extract Name & Section Header Crop
+        name_crop_base64 = extract_name_crop(warped)
+
+        # Step 3: Find bubble grid
+        grid = find_bubble_grid(warped, num_questions)
 
     if not grid:
         _, empty_buf = cv2.imencode('.jpg', warped, [int(cv2.IMWRITE_JPEG_QUALITY), 80])

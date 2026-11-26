@@ -80,9 +80,23 @@ describe('OMR Deployment 500 Fixes & Mobile Camera/Compression Suite', () => {
     assert.ok(scanSrc.includes('prepareOmrImageFile('));
     assert.ok(batchUiSrc.includes('prepareOmrImageFile('));
     assert.ok(scanSrc.includes('accept="image/*"'));
-    assert.ok(scanSrc.includes('muted className="h-full w-full object-cover"'));
+    assert.ok(scanSrc.includes('muted className="h-full w-full object-contain sm:object-cover"'));
     assert.ok(scanSrc.includes('video.videoWidth === 0 || video.videoHeight === 0'));
     assert.ok(scanSrc.includes('scaleCanvasIfNeeded(canvas, 1600)'));
     assert.ok(scanSrc.includes('}, "image/jpeg", 0.85)'));
+    assert.ok(scanSrc.includes('formData.append("scanSource", scanSource);'));
+    assert.ok(scanSrc.includes('prepareOmrImageFile(rawFile, { maxEdge: 1800, quality: 0.90 })'));
+    assert.ok(scanSrc.includes('Take Photo (Autofocus)'));
+    assert.ok(scanSrc.includes('Keep the entire black sheet border comfortably inside the screen'));
+
+    const omrRouteSrc = fs.readFileSync(path.join(root, 'src/app/api/teacher/omr/route.ts'), 'utf8');
+    const pyMainSrc = fs.readFileSync(path.join(root, 'python-service/app/main.py'), 'utf8');
+    const pyOmrSrc = fs.readFileSync(path.join(root, 'python-service/app/omr.py'), 'utf8');
+
+    assert.ok(omrRouteSrc.includes("form.append('scan_source', 'mobile_camera');"));
+    assert.ok(pyMainSrc.includes('scan_source: str = Form("standard")'));
+    assert.ok(pyOmrSrc.includes('def detect_printed_frame('));
+    assert.ok(pyOmrSrc.includes('if scan_source == "mobile_camera":'));
+    assert.ok(pyOmrSrc.includes('Could not detect all 4 corners of the sheet border.'));
   });
 });
