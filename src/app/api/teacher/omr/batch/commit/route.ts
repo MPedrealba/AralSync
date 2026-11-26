@@ -3,11 +3,18 @@ import { NextResponse, NextRequest } from 'next/server';
 import { requireAuth, authErrorResponse, AuthError } from '@/lib/auth';
 import { ok } from '@/lib/api';
 import connectDB from '../../../../../../../database/db';
-import Assessment from '../../../../../../../models/Assessment';
 import AnswerKey from '../../../../../../../models/AnswerKey';
 import LearnerRecord from '../../../../../../../models/LearnerRecord';
 import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics, calculateRiskLevelFromScore } from '@/lib/philIriSync';
+import {
+  normalizeOmrSubject,
+  buildLearnerLookupQuery,
+  findAnswerKeySafely,
+  deriveAssessmentCategory,
+  upsertOmrAssessment,
+  formatOmrRouteError,
+} from '@/lib/omrServerHelpers';
 
 interface BatchAssessmentItem {
   studentId: string;
@@ -28,7 +35,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const {
-      subject = 'Math',
+      subject: rawSubject = 'Math',
       competency = 'Numeracy',
       title = 'Quarterly Diagnostic Exam',
       answerKeyId,
@@ -45,6 +52,8 @@ export async function POST(req: NextRequest) {
       assessments: BatchAssessmentItem[];
     } = body;
 
+    const subject = normalizeOmrSubject(rawSubject);
+
     if (!Array.isArray(assessments) || assessments.length === 0) {
       return NextResponse.json(
         { error: 'No assessment records provided to commit.' },
@@ -55,13 +64,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     /* ── Load Answer Key (if provided) ── */
-    let keyDoc: any = null;
-    if (answerKeyId) {
-      keyDoc = await AnswerKey.findById(answerKeyId).lean();
-    }
-    if (!keyDoc) {
-      keyDoc = await AnswerKey.findOne({ subject }).sort({ created: -1 }).lean();
-    }
+    const keyDoc = await findAnswerKeySafely(answerKeyId, subject);
 
     const keyModes: string[] = keyDoc?.modes ?? [];
     const writtenItems: { index: number; prompt: string; max: number }[] = keyDoc?.writtenItems ?? [];
@@ -81,14 +84,8 @@ export async function POST(req: NextRequest) {
     for (const item of assessments) {
       if (!item.studentId) continue;
 
-      // Locate learner record
-      const learnerQuery: any = {
-        $or: [
-          { studentId: mongoose.isValidObjectId(item.studentId) ? new mongoose.Types.ObjectId(item.studentId) : item.studentId },
-          { _id: mongoose.isValidObjectId(item.studentId) ? new mongoose.Types.ObjectId(item.studentId) : null },
-          { studentNumber: item.studentId },
-        ].filter((q) => q._id !== null),
-      };
+      // Locate learner record safely (no invalid ObjectId casts)
+      const learnerQuery = buildLearnerLookupQuery(item.studentId);
 
       const learner = await LearnerRecord.findOne(learnerQuery);
       if (!learner) {
@@ -143,7 +140,7 @@ export async function POST(req: NextRequest) {
       const gradingStatus = writtenItems.length > 0 && writtenAwarded === 0 ? 'partial' : 'complete';
       const status = gradingStatus === 'complete' ? 'approved' : 'pending';
 
-      const assessmentDoc = await Assessment.create({
+      const assessmentDoc = await upsertOmrAssessment({
         studentId: actualStudentId,
         type: 'OMR',
         subject,
@@ -159,15 +156,7 @@ export async function POST(req: NextRequest) {
         competency,
         masteryLevel: item.masteryLevel,
         answerKeyRef: keyDoc?._id || undefined,
-        assessmentCategory: keyDoc?.assessmentType || keyDoc?.assessmentCategory || (
-          title.toLowerCase().includes('pre-test') || title.toLowerCase().includes('pretest') || title.toLowerCase().includes('baseline')
-            ? 'pre-test'
-            : title.toLowerCase().includes('post-test') || title.toLowerCase().includes('posttest') || title.toLowerCase().includes('endline')
-            ? 'post-test'
-            : title.toLowerCase().includes('exam')
-            ? 'exam'
-            : 'quiz'
-        ),
+        assessmentCategory: deriveAssessmentCategory(keyDoc, title),
         topics: Array.isArray(keyDoc?.topics) && keyDoc.topics.length > 0 ? keyDoc.topics : (keyDoc?.topic ? [keyDoc.topic] : []),
         writtenItems,
         omrSheetUrl: item.omrSheetUrl || null,
@@ -188,8 +177,13 @@ export async function POST(req: NextRequest) {
       ).catch(() => {});
 
       // Phil-IRI reading metrics sync
-      if (subject === 'Reading' && status === 'approved') {
-        await syncLearnerPhilIriMetrics(actualStudentId).catch(() => {});
+      if (
+        ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'].includes(subject) &&
+        status === 'approved'
+      ) {
+        await syncLearnerPhilIriMetrics(actualStudentId).catch((err) =>
+          console.warn('Batch Phil-IRI sync warning:', err)
+        );
       }
     }
 
@@ -217,7 +211,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
-    console.error('Batch OMR Commit Error:', error);
-    return NextResponse.json({ error: 'Failed to commit batch OMR assessments.' }, { status: 500 });
+    return formatOmrRouteError(error, 'Failed to commit batch OMR assessments');
   }
 }

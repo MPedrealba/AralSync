@@ -1,6 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { requireAuth, authErrorResponse, AuthError } from "@/lib/auth";
 
+export const maxDuration = 60;
+
 export interface WrittenAnalysisPayload {
   itemIndex: number;
   transcribedText: string;

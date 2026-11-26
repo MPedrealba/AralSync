@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { parseJsonResponse } from "@/lib/safeFetch";
+import { isLikelyImageFile, isPdfFile, prepareOmrImageFile } from "@/lib/omrImageUtils";
 import {
   Upload,
   FileImage,
@@ -441,11 +442,18 @@ export default function BatchWorkstation({
     setIsScanning(true);
     setErrorMessage("");
     setInfoMessage("");
-    setProgressText(`Processing ${selectedFiles.length} file(s) via OpenCV bubble detection...`);
+    setProgressText(`Optimizing & compressing ${selectedFiles.length} file(s)...`);
 
     try {
+      const preparedFiles = await Promise.all(
+        selectedFiles.map((f) =>
+          isPdfFile(f) ? f : isLikelyImageFile(f) ? prepareOmrImageFile(f) : f
+        )
+      );
+      setProgressText(`Processing ${preparedFiles.length} file(s) via OpenCV bubble detection...`);
+
       const formData = new FormData();
-      selectedFiles.forEach((f) => formData.append("files", f));
+      preparedFiles.forEach((f) => formData.append("files", f));
       formData.append("subject", currentSubject);
       formData.append("competency", competency);
       formData.append("title", assessmentTitle);
@@ -927,7 +935,7 @@ export default function BatchWorkstation({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+              accept="image/*,.pdf,application/pdf"
               multiple
               onChange={(e) => handleFilesChosen(e.target.files)}
               className="hidden"

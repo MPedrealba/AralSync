@@ -7,6 +7,11 @@ import { parseJsonResponse } from "@/lib/safeFetch";
 import BatchWorkstation from "./BatchWorkstation";
 import { enqueueOfflineSubmission } from "@/lib/offlineQueue";
 import {
+  isLikelyImageFile,
+  prepareOmrImageFile,
+  scaleCanvasIfNeeded,
+} from "@/lib/omrImageUtils";
+import {
   getCachedLearners,
   cacheLearners,
   getCachedAnswerKeys,
@@ -607,7 +612,7 @@ function OMRWorkstationContent() {
   };
 
   // ── File Selection & Scanning ──
-  const processUploadedImage = async (file: File) => {
+  const processUploadedImage = async (rawFile: File) => {
     const studentToUse = selectedStudentId || (students[0]?._id ?? "");
     if (!studentToUse) {
       setErrorMessage("Please select a student from your assigned roster before scanning.");
@@ -617,15 +622,18 @@ function OMRWorkstationContent() {
       setSelectedStudentId(students[0]._id);
     }
 
-    setSheetFile(file);
-    const localUrl = URL.createObjectURL(file);
-    createdBlobUrlsRef.current.push(localUrl);
-    setOriginalImage(localUrl);
     setErrorMessage("");
     setInfoMessage("");
     setIsScanning(true);
 
+    let localUrl = "";
     try {
+      const file = await prepareOmrImageFile(rawFile);
+      setSheetFile(file);
+      localUrl = URL.createObjectURL(file);
+      createdBlobUrlsRef.current.push(localUrl);
+      setOriginalImage(localUrl);
+
       const formData = new FormData();
       formData.append("file", file);
       formData.append("studentId", studentToUse);
@@ -676,10 +684,12 @@ function OMRWorkstationContent() {
 
       setInfoMessage("Sheet scanned and initial marks detected. Review and adjust scores below.");
     } catch (err: any) {
-      try {
-        URL.revokeObjectURL(localUrl);
-      } catch {
-        // ignore
+      if (localUrl) {
+        try {
+          URL.revokeObjectURL(localUrl);
+        } catch {
+          // ignore
+        }
       }
       setSheetImage(null);
       setSheetFile(null);
@@ -696,8 +706,12 @@ function OMRWorkstationContent() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      processUploadedImage(file);
+    if (file) {
+      if (isLikelyImageFile(file)) {
+        processUploadedImage(file);
+      } else {
+        setErrorMessage("Please select a valid image file (JPG, PNG, WEBP, or mobile photo).");
+      }
     }
     e.target.value = "";
   };
@@ -706,8 +720,12 @@ function OMRWorkstationContent() {
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
-        processUploadedImage(file);
+      if (file) {
+        if (isLikelyImageFile(file)) {
+          processUploadedImage(file);
+        } else {
+          setErrorMessage("Please drop a valid image file (JPG, PNG, WEBP, or mobile photo).");
+        }
       }
     },
     [selectedStudentId, competency, currentSubject, assessmentTitle, selectedKeyId]
@@ -778,6 +796,13 @@ function OMRWorkstationContent() {
   };
 
   // ── Camera Feed Functions ──
+  useEffect(() => {
+    if (isCameraOpen && videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraOpen]);
+
   const startCamera = async () => {
     setIsCameraOpen(true);
     setErrorMessage("");
@@ -788,6 +813,7 @@ function OMRWorkstationContent() {
       mediaStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
       }
     } catch (e: any) {
       setErrorMessage("Camera access denied or unavailable: " + (e.message || ""));
@@ -807,8 +833,13 @@ function OMRWorkstationContent() {
     if (!videoRef.current) return;
     const video = videoRef.current;
 
-    const sourceW = video.videoWidth || 1280;
-    const sourceH = video.videoHeight || 720;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      setErrorMessage("Camera video is still loading. Please wait a moment before capturing.");
+      return;
+    }
+
+    const sourceW = video.videoWidth;
+    const sourceH = video.videoHeight;
 
     // Calculate normalized bounding box corresponding to the green viewfinder guide
     // (inset by ~10% horizontal, ~12% vertical)
@@ -846,7 +877,7 @@ function OMRWorkstationContent() {
     cropW = Math.max(10, Math.min(cropW, sourceW - cropX));
     cropH = Math.max(10, Math.min(cropH, sourceH - cropY));
 
-    // Crop the canvas directly to this viewfinder bounding rectangle before generating the JPEG blob
+    // Crop the canvas directly to this viewfinder bounding rectangle before scaling/generating blob
     const canvas = document.createElement("canvas");
     canvas.width = cropW;
     canvas.height = cropH;
@@ -865,13 +896,16 @@ function OMRWorkstationContent() {
       cropH
     );
 
-    canvas.toBlob((blob) => {
+    const exportCanvas = scaleCanvasIfNeeded(canvas, 1600);
+    exportCanvas.toBlob((blob) => {
       if (blob) {
         const file = new File([blob], `camera-omr-${Date.now()}.jpg`, { type: "image/jpeg" });
         stopCamera();
         processUploadedImage(file);
+      } else {
+        setErrorMessage("Could not capture camera frame. Please try again.");
       }
-    }, "image/jpeg", 0.95);
+    }, "image/jpeg", 0.85);
   };
 
   // ── Bubble Override Handler ──
@@ -1723,7 +1757,7 @@ function OMRWorkstationContent() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".jpg,.jpeg,.png,.webp"
+                  accept="image/*"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -2487,7 +2521,7 @@ function OMRWorkstationContent() {
             </div>
 
             <div className="relative h-[72vh] max-h-[640px] w-full aspect-[3/4] sm:aspect-[4/3] bg-black overflow-hidden flex items-center justify-center">
-              <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
 
               {/* Aspect-Ratio-Locked (Letter/A4 1:1.35) Viewfinder Guide Box */}
               <div

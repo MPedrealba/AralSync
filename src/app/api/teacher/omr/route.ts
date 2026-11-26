@@ -184,13 +184,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     /* ── Verify student is assigned to this teacher or their cohort ── */
-    const learnerQuery: any = {
-      $or: [
-        { studentId: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : studentId },
-        { _id: mongoose.isValidObjectId(studentId) ? new mongoose.Types.ObjectId(studentId) : null },
-        { studentNumber: studentId },
-      ].filter((q) => q._id !== null),
-    };
+    const learnerQuery = buildLearnerLookupQuery(studentId);
 
     const learner = await LearnerRecord.findOne(learnerQuery);
     if (!learner) {
@@ -239,14 +233,7 @@ export async function POST(req: NextRequest) {
     const actualStudentId = learner.studentId ? learner.studentId.toString() : studentId;
 
     /* ── Load answer key (if provided) ── */
-    let keyDoc: any = null;
-    if (answerKeyId) {
-      keyDoc = await AnswerKey.findById(answerKeyId).lean();
-    }
-    if (!keyDoc) {
-      // Fallback: grab the most recent answer key matching this subject
-      keyDoc = await AnswerKey.findOne({ subject }).sort({ created: -1 }).lean();
-    }
+    const keyDoc = await findAnswerKeySafely(answerKeyId, subject);
 
     const keyAnswers: string[] = extractKeyAnswers(keyDoc);
     const keyModes: string[] = keyDoc?.modes ?? [];
@@ -273,8 +260,12 @@ export async function POST(req: NextRequest) {
       await fs.writeFile(filePath, Buffer.from(imageBuffer));
       omrSheetUrl = `/uploads/omr/${filename}`;
     } catch (saveErr) {
-      console.error('Failed to save OMR sheet image to disk:', saveErr);
-      // Non-fatal fallback: continue scoring even if disk write encounters an issue
+      console.warn('OMR sheet disk write skipped (serverless/read-only fallback):', saveErr);
+      // Store compact preview fallback only if <= 150KB so MongoDB documents stay lean
+      const compactFallback = warpedImage
+        ? toDataUrlFallback(warpedImage, 'image/png', 150 * 1024)
+        : toDataUrlFallback(Buffer.from(imageBuffer), mimeTypeFromExt(safeExt), 150 * 1024);
+      omrSheetUrl = compactFallback;
     }
 
     /* ── Grade MC items only; written items are scored later by teacher ── */
@@ -309,8 +300,8 @@ export async function POST(req: NextRequest) {
     const status = gradingStatus === 'complete' ? 'approved' : 'pending';
     const mastery = masteryLevel(percentage);
 
-    /* ── Save assessment ── */
-    const assessment = await Assessment.create({
+    /* ── Save or update assessment (prevents E11000 on duplicate student + answerKeyRef) ── */
+    const assessment = await upsertOmrAssessment({
       studentId: actualStudentId,
       type: 'OMR',
       subject,
@@ -326,15 +317,7 @@ export async function POST(req: NextRequest) {
       competency,
       masteryLevel: mastery,
       answerKeyRef: keyDoc?._id || undefined,
-      assessmentCategory: keyDoc?.assessmentType || keyDoc?.assessmentCategory || (
-        title.toLowerCase().includes('pre-test') || title.toLowerCase().includes('pretest') || title.toLowerCase().includes('baseline')
-          ? 'pre-test'
-          : title.toLowerCase().includes('post-test') || title.toLowerCase().includes('posttest') || title.toLowerCase().includes('endline')
-          ? 'post-test'
-          : title.toLowerCase().includes('exam')
-          ? 'exam'
-          : 'quiz'
-      ),
+      assessmentCategory: deriveAssessmentCategory(keyDoc, title),
       topics: Array.isArray(keyDoc?.topics) && keyDoc.topics.length > 0 ? keyDoc.topics : (keyDoc?.topic ? [keyDoc.topic] : []),
       writtenItems,
       omrSheetUrl,
@@ -353,8 +336,13 @@ export async function POST(req: NextRequest) {
       ).catch(() => {});
     }
 
-    if (subject === 'Reading' && status === 'approved') {
-      await syncLearnerPhilIriMetrics(actualStudentId);
+    if (
+      ['Reading', 'English', 'Filipino', 'Reading - English', 'Reading - Filipino'].includes(subject) &&
+      status === 'approved'
+    ) {
+      await syncLearnerPhilIriMetrics(actualStudentId).catch((err) =>
+        console.warn('Phil-IRI sync warning:', err)
+      );
     }
 
     await logAudit({
@@ -403,8 +391,7 @@ export async function POST(req: NextRequest) {
         { status: error.status }
       );
     }
-    console.error('OMR Processing Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return formatOmrRouteError(error, 'OMR processing failed');
   }
 }
 
@@ -445,13 +432,7 @@ export async function PUT(req: NextRequest) {
     /* ── Verify student is assigned to this teacher or their cohort ── */
     let actualStudentId = studentId || assessment.studentId;
     if (actualStudentId) {
-      const learnerQuery: any = {
-        $or: [
-          { studentId: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : actualStudentId },
-          { _id: mongoose.isValidObjectId(actualStudentId) ? new mongoose.Types.ObjectId(actualStudentId) : null },
-          { studentNumber: actualStudentId },
-        ].filter((q) => q._id !== null),
-      };
+      const learnerQuery = buildLearnerLookupQuery(actualStudentId);
 
       const learner = await LearnerRecord.findOne(learnerQuery);
       if (!learner) {
@@ -647,7 +628,6 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
-    console.error('OMR Finalize PUT Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return formatOmrRouteError(error, 'Failed to finalize OMR assessment');
   }
 }

@@ -7,6 +7,39 @@ import connectDB from '../../../../../../database/db';
 import AnswerKey from '../../../../../../models/AnswerKey';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { extractKeyAnswers } from '../route';
+import {
+  normalizeOmrSubject,
+  findAnswerKeySafely,
+  toDataUrlFallback,
+  mimeTypeFromExt,
+  formatOmrRouteError,
+} from '@/lib/omrServerHelpers';
+
+export const maxDuration = 60;
+
+async function persistUploadOrDataUrl(opts: {
+  diskWritable: boolean;
+  filePath: string;
+  publicUrl: string;
+  data: Buffer | Uint8Array | string;
+  mimeType: string;
+}): Promise<string> {
+  const rawBuf = typeof opts.data === 'string'
+    ? Buffer.from(opts.data.replace(/^data:[^;]+;base64,/, ''), 'base64')
+    : Buffer.isBuffer(opts.data)
+    ? opts.data
+    : Buffer.from(opts.data);
+
+  if (opts.diskWritable) {
+    try {
+      await fs.writeFile(opts.filePath, rawBuf);
+      return opts.publicUrl;
+    } catch (writeErr) {
+      console.warn('Batch OMR disk write skipped (falling back to data URL):', writeErr);
+    }
+  }
+  return toDataUrlFallback(rawBuf, opts.mimeType) || opts.publicUrl;
+}
 
 const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -156,7 +189,8 @@ export async function POST(req: NextRequest) {
     const teacher = await requireAuth(req, ['teacher']);
     const formData = await req.formData();
 
-    const subject = (formData.get('subject') as string | null) || 'Math';
+    const rawSubject = (formData.get('subject') as string | null) || 'Math';
+    const subject = normalizeOmrSubject(rawSubject);
     const competency = (formData.get('competency') as string | null) || 'Numeracy';
     const title = (formData.get('title') as string | null) || 'Quarterly Diagnostic Exam';
     const answerKeyId = (formData.get('answerKeyId') as string | null) || '';
@@ -181,13 +215,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     /* ── Load Answer Key ── */
-    let keyDoc: any = null;
-    if (answerKeyId) {
-      keyDoc = await AnswerKey.findById(answerKeyId).lean();
-    }
-    if (!keyDoc) {
-      keyDoc = await AnswerKey.findOne({ subject }).sort({ created: -1 }).lean();
-    }
+    const keyDoc = await findAnswerKeySafely(answerKeyId, subject);
 
     const keyAnswers: string[] = extractKeyAnswers(keyDoc);
     const keyModes: string[] = keyDoc?.modes ?? [];
@@ -207,8 +235,14 @@ export async function POST(req: NextRequest) {
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'omr');
     const cropsDir = path.join(uploadDir, 'crops');
-    await fs.mkdir(uploadDir, { recursive: true });
-    await fs.mkdir(cropsDir, { recursive: true });
+    let diskWritable = false;
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+      await fs.mkdir(cropsDir, { recursive: true });
+      diskWritable = true;
+    } catch (mkdirErr) {
+      console.warn('Batch OMR mkdir skipped on read-only filesystem (using data URLs):', mkdirErr);
+    }
 
     const processedSheets: Array<{
       sheetId: string;
@@ -246,25 +280,32 @@ export async function POST(req: NextRequest) {
               typeof a === 'string' ? a : a?.answer_label || null
             );
 
-            // Save page PNG
+            // Save page PNG or fallback to base64 data URL
             const outFilename = `omr-batch-${now}-f${fIdx}-p${pIdx + 1}.png`;
             const outPath = path.join(uploadDir, outFilename);
+            let omrSheetUrl = `/uploads/omr/${outFilename}`;
             if (pageData.png_base64) {
-              const imgBuffer = Buffer.from(pageData.png_base64, 'base64');
-              await fs.writeFile(outPath, imgBuffer);
+              omrSheetUrl = await persistUploadOrDataUrl({
+                diskWritable,
+                filePath: outPath,
+                publicUrl: `/uploads/omr/${outFilename}`,
+                data: pageData.png_base64,
+                mimeType: 'image/png',
+              });
             }
 
-            // Save Name Crop if available
+            // Save Name Crop if available (with data URL fallback on read-only FS)
             let nameCropUrl: string | undefined = undefined;
             if (pageData.name_crop_base64) {
               const cropFilename = `crop-batch-${now}-f${fIdx}-p${pIdx + 1}.jpg`;
               const cropPath = path.join(cropsDir, cropFilename);
-              try {
-                await fs.writeFile(cropPath, Buffer.from(pageData.name_crop_base64, 'base64'));
-                nameCropUrl = `/uploads/omr/crops/${cropFilename}`;
-              } catch (cropErr) {
-                console.warn('Failed saving page name crop:', cropErr);
-              }
+              nameCropUrl = await persistUploadOrDataUrl({
+                diskWritable,
+                filePath: cropPath,
+                publicUrl: `/uploads/omr/crops/${cropFilename}`,
+                data: pageData.name_crop_base64,
+                mimeType: 'image/jpeg',
+              });
             }
 
             // Grade MC
@@ -292,7 +333,7 @@ export async function POST(req: NextRequest) {
               sheetId: `sheet-${now}-${processedSheets.length}`,
               sheetIndex: processedSheets.length,
               originalFilename: `${file.name} (Page ${pIdx + 1})`,
-              omrSheetUrl: `/uploads/omr/${outFilename}`,
+              omrSheetUrl,
               nameCropUrl,
               nameCropBase64: pageData.name_crop_base64 || undefined,
               detectedAnswers: pageAnswers,
@@ -317,22 +358,28 @@ export async function POST(req: NextRequest) {
       const outFilename = `omr-batch-${now}-${processedSheets.length}${safeExt}`;
       const outPath = path.join(uploadDir, outFilename);
 
-      await fs.writeFile(outPath, Buffer.from(imageBuffer));
-      const omrSheetUrl = `/uploads/omr/${outFilename}`;
+      const omrSheetUrl = await persistUploadOrDataUrl({
+        diskWritable,
+        filePath: outPath,
+        publicUrl: `/uploads/omr/${outFilename}`,
+        data: Buffer.from(imageBuffer),
+        mimeType: mimeTypeFromExt(safeExt),
+      });
 
       const detected = await detectSingleSheetAnswers(imageBuffer, totalItems);
 
-      // Save Name Crop if available
+      // Save Name Crop if available (with data URL fallback on read-only FS)
       let nameCropUrl: string | undefined = undefined;
       if (detected.nameCropBase64) {
         const cropFilename = `crop-batch-${now}-${processedSheets.length}.jpg`;
         const cropPath = path.join(cropsDir, cropFilename);
-        try {
-          await fs.writeFile(cropPath, Buffer.from(detected.nameCropBase64, 'base64'));
-          nameCropUrl = `/uploads/omr/crops/${cropFilename}`;
-        } catch (cropErr) {
-          console.warn('Failed saving image name crop:', cropErr);
-        }
+        nameCropUrl = await persistUploadOrDataUrl({
+          diskWritable,
+          filePath: cropPath,
+          publicUrl: `/uploads/omr/crops/${cropFilename}`,
+          data: detected.nameCropBase64,
+          mimeType: 'image/jpeg',
+        });
       }
 
       let mcCorrect = 0;
@@ -399,7 +446,6 @@ export async function POST(req: NextRequest) {
         { status: error.status }
       );
     }
-    console.error('Batch OMR Upload Error:', error);
-    return NextResponse.json({ error: 'Failed to process batch OMR upload.' }, { status: 500 });
+    return formatOmrRouteError(error, 'Failed to process batch OMR upload');
   }
 }
