@@ -13,6 +13,18 @@ import { logAudit } from '@/lib/audit';
 import { syncLearnerPhilIriMetrics, calculateRiskLevelFromScore } from '@/lib/philIriSync';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { getRecommendationsForLearner, Subject } from '@/lib/dynamicRecommendations';
+import {
+  normalizeOmrSubject,
+  buildLearnerLookupQuery,
+  findAnswerKeySafely,
+  deriveAssessmentCategory,
+  upsertOmrAssessment,
+  toDataUrlFallback,
+  mimeTypeFromExt,
+  formatOmrRouteError,
+} from '@/lib/omrServerHelpers';
+
+export const maxDuration = 60;
 
 /* ──────────────────────────────────────────────────────────────
  *  OMR Processing — OpenCV via Python microservice
@@ -147,7 +159,8 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File | null;
     const studentId = formData.get('studentId') as string | null;
     const competency = formData.get('competency') as string | null;
-    const subject = (formData.get('subject') as string | null) || 'Math';
+    const rawSubject = (formData.get('subject') as string | null) || 'Math';
+    const subject = normalizeOmrSubject(rawSubject);
     const title = (formData.get('title') as string | null) || 'Quarterly Diagnostic';
     const answerKeyId = (formData.get('answerKeyId') as string | null) || '';
     const verifiedAnswersRaw = formData.get('verifiedAnswers') as string | null;
