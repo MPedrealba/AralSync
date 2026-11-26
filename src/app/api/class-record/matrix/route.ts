@@ -114,20 +114,45 @@ export async function GET(req: NextRequest) {
     const assignmentColumns = Array.from(assignmentMap.values());
 
     // 3. Fetch Diagnostics (Pre-Test & Post-Test) scoped to subject
-    const assessments = await Assessment.find({
+    const isReadingScope = ['Reading', 'English', 'Filipino', 'All'].includes(subject);
+    let diagnosticFilter: Record<string, any> = {
       studentId: { $in: studentIds },
       assessmentCategory: { $in: ['pre-test', 'post-test'] },
-      ...(subject !== 'All'
-        ? subject === 'Reading'
-          ? {
-              $or: [
-                { subject: new RegExp(`^Reading$`, 'i') },
-                { type: { $in: ['READING_FLUENCY', 'COMPREHENSION'] } },
-              ],
-            }
-          : { subject: new RegExp(`^${subject}$`, 'i') }
-        : {}),
-    }).lean();
+    };
+
+    if (subject === 'Reading' || subject === 'English' || subject === 'Filipino') {
+      diagnosticFilter = {
+        studentId: { $in: studentIds },
+        $or: [
+          {
+            assessmentCategory: { $in: ['pre-test', 'post-test'] },
+            $or: [
+              { subject: /^Reading/i },
+              { subject: new RegExp(`^${subject}$`, 'i') },
+              { type: { $in: ['READING_FLUENCY', 'COMPREHENSION'] } },
+            ],
+          },
+          {
+            type: 'READING_FLUENCY',
+            status: 'approved',
+          },
+        ],
+      };
+    } else if (subject === 'All') {
+      diagnosticFilter = {
+        studentId: { $in: studentIds },
+        $or: [
+          { assessmentCategory: { $in: ['pre-test', 'post-test'] } },
+          { type: 'READING_FLUENCY', status: 'approved' },
+        ],
+      };
+    } else {
+      diagnosticFilter.subject = new RegExp(`^${subject}$`, 'i');
+    }
+
+    const assessments = await Assessment.find(diagnosticFilter)
+      .sort({ date: 1, createdAt: 1 })
+      .lean();
 
     // 4. Construct Pivoted Student Rows
     const rows = learners.map((learner: any) => {
@@ -150,10 +175,73 @@ export async function GET(req: NextRequest) {
         };
       });
 
-      // Student's diagnostic assessments
+      // Student's diagnostic assessments (already sorted oldest-to-newest)
       const studentAss = assessments.filter((a: any) => a.studentId?.toString() === sId);
-      const preTest = studentAss.find((a: any) => a.assessmentCategory === 'pre-test');
-      const postTest = studentAss.find((a: any) => a.assessmentCategory === 'post-test');
+      const approvedFluency = studentAss.filter(
+        (a: any) => a.type === 'READING_FLUENCY' && a.status === 'approved'
+      );
+
+      const explicitPreDocs = studentAss.filter((a: any) => a.assessmentCategory === 'pre-test');
+      const explicitPreWithAcc = explicitPreDocs.find((a: any) => typeof a.accuracy === 'number');
+      const explicitPre = explicitPreWithAcc || explicitPreDocs[0] || null;
+
+      const earliestBaselineFluency = isReadingScope
+        ? approvedFluency.find((a: any) => a.assessmentCategory !== 'post-test') || null
+        : null;
+
+      const preAccSource = explicitPreWithAcc || earliestBaselineFluency;
+
+      const preScore =
+        explicitPre?.score ??
+        (isReadingScope && typeof learner.gstScore === 'number' ? learner.gstScore : null) ??
+        earliestBaselineFluency?.score ??
+        null;
+
+      const preAccuracy =
+        typeof preAccSource?.accuracy === 'number'
+          ? preAccSource.accuracy
+          : isReadingScope && typeof learner.philIriEnglish?.oralAccuracy === 'number'
+          ? learner.philIriEnglish.oralAccuracy
+          : isReadingScope && typeof learner.oralReadingAccuracy === 'number'
+          ? learner.oralReadingAccuracy
+          : null;
+
+      const preWpm =
+        typeof preAccSource?.wpm === 'number'
+          ? preAccSource.wpm
+          : typeof explicitPre?.wpm === 'number'
+          ? explicitPre.wpm
+          : isReadingScope && typeof learner.philIriEnglish?.wpm === 'number'
+          ? learner.philIriEnglish.wpm
+          : isReadingScope && typeof learner.oralReadingWpm === 'number'
+          ? learner.oralReadingWpm
+          : null;
+
+      const preLevel =
+        (explicitPre ? explicitPre.combinedLevel || explicitPre.masteryLevel : null) ||
+        (earliestBaselineFluency
+          ? earliestBaselineFluency.combinedLevel || earliestBaselineFluency.masteryLevel
+          : null) ||
+        (isReadingScope && learner.gstStatus && learner.gstStatus !== 'Unassessed'
+          ? learner.gstStatus
+          : null) ||
+        (isReadingScope && learner.readingLevel && learner.readingLevel !== 'Not Assessed'
+          ? learner.readingLevel
+          : null);
+
+      const preTestPayload =
+        preScore != null || preAccuracy != null || preWpm != null || preLevel != null
+          ? { score: preScore, accuracy: preAccuracy, wpm: preWpm, level: preLevel }
+          : null;
+
+      const explicitPostDocs = studentAss.filter((a: any) => a.assessmentCategory === 'post-test');
+      const explicitPost =
+        explicitPostDocs.length > 0 ? explicitPostDocs[explicitPostDocs.length - 1] : null;
+      const postTestDoc =
+        explicitPost ||
+        (isReadingScope && approvedFluency.length >= 2
+          ? approvedFluency[approvedFluency.length - 1]
+          : null);
 
       return {
         learnerRecordId: learner._id.toString(),
@@ -163,11 +251,14 @@ export async function GET(req: NextRequest) {
         riskLevel: learner.riskLevel || 'Pending Assessment',
         readingLevel: learner.readingLevel || 'Not Assessed',
         diagnostics: {
-          preTest: preTest
-            ? { score: preTest.score, accuracy: preTest.accuracy, wpm: preTest.wpm, level: preTest.combinedLevel || preTest.masteryLevel }
-            : null,
-          postTest: postTest
-            ? { score: postTest.score, accuracy: postTest.accuracy, wpm: postTest.wpm, level: postTest.combinedLevel || postTest.masteryLevel }
+          preTest: preTestPayload,
+          postTest: postTestDoc
+            ? {
+                score: postTestDoc.score,
+                accuracy: postTestDoc.accuracy,
+                wpm: postTestDoc.wpm,
+                level: postTestDoc.combinedLevel || postTestDoc.masteryLevel,
+              }
             : null,
         },
         interventions: studentInvMap,

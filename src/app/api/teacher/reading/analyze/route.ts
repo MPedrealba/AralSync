@@ -115,6 +115,10 @@ export async function POST(req: NextRequest) {
       (formData.get('passageTitle') as string | null) || 'Oral Reading Passage';
     const durationSec = Number(formData.get('durationSec')) || 60;
     const simulate = formData.get('simulate') === '1';
+    const rawCat = String(formData.get('assessmentCategory') || '').trim();
+    const assessmentCategory = ['pre-test', 'post-test', 'quiz'].includes(rawCat)
+      ? rawCat
+      : 'pre-test';
 
     /* Optional miscue counts (manual Phil-IRI mode). */
     let miscues: Record<string, number> = {
@@ -240,6 +244,7 @@ export async function POST(req: NextRequest) {
       studentId,
       type: 'READING_FLUENCY',
       subject: 'Reading',
+      assessmentCategory,
       title: passageTitle,
       score: accuracy,
       wpm,
@@ -277,6 +282,7 @@ export async function POST(req: NextRequest) {
         studentId,
         type: 'COMPREHENSION',
         subject: 'Reading',
+        assessmentCategory,
         title: passageTitle,
         score: cScore,
         passageTitle,

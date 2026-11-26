@@ -1545,6 +1545,7 @@ function NewSessionTab({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [noiseCancellation, setNoiseCancellation] = useState(true);
+  const [assessmentCategory, setAssessmentCategory] = useState<"pre-test" | "post-test" | "quiz">("pre-test");
   const audioUrlRef = useRef<string | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1943,6 +1944,7 @@ function NewSessionTab({
       fd.append("passage", cleanPassage);
       fd.append("passageTitle", passageTitle || "Oral Reading Passage");
       fd.append("durationSec", String(Math.max(recTime, 1)));
+      fd.append("assessmentCategory", assessmentCategory);
       if (simulate) fd.append("simulate", "1");
       if (!audioBlob && !simulate) {
         fd.append("miscues", JSON.stringify(miscues));
@@ -2217,6 +2219,7 @@ function NewSessionTab({
     const assessmentPayload = {
       studentId,
       type: "READING_FLUENCY",
+      assessmentCategory,
       title: passageTitle || "Oral Reading Passage",
       passageTitle: passageTitle || "Oral Reading Passage",
       score: liveMetrics.accuracy,
@@ -2341,7 +2344,28 @@ function NewSessionTab({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5"
+                role="group"
+                aria-label="Assessment Phase"
+              >
+                {(["pre-test", "post-test"] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    disabled={isRecording}
+                    onClick={() => setAssessmentCategory(cat)}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      assessmentCategory === cat
+                        ? "bg-red-800 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    } ${isRecording ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {cat === "pre-test" ? "Pre-Test" : "Post-Test"}
+                  </button>
+                ))}
+              </div>
               {calibratedItems.length > 0 && (
                 <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5">
                   <button

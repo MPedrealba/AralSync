@@ -38,6 +38,7 @@ export async function PATCH(
       comprehension,
       comprehensionScore,
       comprehensionLevel,
+      assessmentCategory,
     } = body || {};
 
     const updateFields: Record<string, any> = {};
@@ -72,6 +73,13 @@ export async function PATCH(
     }
     if (typeof comprehensionScore === 'number') updateFields.comprehensionScore = comprehensionScore;
     if (comprehensionLevel) updateFields.comprehensionLevel = comprehensionLevel;
+    if (typeof assessmentCategory === 'string' && assessmentCategory.trim()) {
+      const cat = assessmentCategory.trim();
+      if (!['pre-test', 'post-test', 'quiz', 'exam', 'gst'].includes(cat)) {
+        return fail('assessmentCategory must be pre-test, post-test, or quiz', 400);
+      }
+      updateFields.assessmentCategory = cat;
+    }
 
     if (Object.keys(updateFields).length === 0) {
       return fail('No valid fields to update', 400);
@@ -89,9 +97,14 @@ export async function PATCH(
       return fail('Assessment not found', 404);
     }
 
-    // If paired assessment exists and status changed, update it too
-    if (status && updated.pairedAssessmentId) {
-      await Assessment.findByIdAndUpdate(updated.pairedAssessmentId, { status });
+    // If paired assessment exists and status or category changed, update it too
+    if (updated.pairedAssessmentId && (status || updateFields.assessmentCategory)) {
+      const pairedUpdate: Record<string, any> = {};
+      if (status) pairedUpdate.status = status;
+      if (updateFields.assessmentCategory) {
+        pairedUpdate.assessmentCategory = updateFields.assessmentCategory;
+      }
+      await Assessment.findByIdAndUpdate(updated.pairedAssessmentId, pairedUpdate);
     }
 
     // ── Phase B: Approval side-effect on LearnerRecord ──
